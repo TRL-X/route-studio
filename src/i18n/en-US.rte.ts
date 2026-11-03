@@ -23,6 +23,7 @@ export const english = {
     'No available station ID at the finish for “{name}”; edit its route position.',
   'compiler.finishPlacement':
     'Set the finish station “{name}” at the last route point and mark it as a stage boundary.',
+  'compiler.invalidExportOptions': 'Select a supported export processing option.',
   'compiler.invalidStationKind': 'Invalid station kind or boundary flag.',
   'compiler.missingHeight': 'Fill in the missing height for elevation sample {number}.',
   'compiler.nodeLimit': 'Geometry or elevation exceeds one million nodes.',

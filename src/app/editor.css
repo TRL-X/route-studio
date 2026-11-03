@@ -809,10 +809,10 @@ input[type='checkbox'] {
   display: none;
 }
 @media (max-width: 1000px) {
-  .top-actions > .button:not(.validation-action) span {
+  .top-actions > .button span {
     display: none;
   }
-  .top-actions > .button:not(.validation-action) {
+  .top-actions > .button {
     padding: 0 7px;
   }
 }
@@ -987,33 +987,6 @@ input[type='checkbox'] {
   color: var(--error);
   font-size: 11px;
 }
-.top-actions .validation-action {
-  gap: 6px;
-  padding: 2px 9px;
-  color: #f3f7fc;
-  background: #2c4056;
-  border-color: #5b6f83;
-}
-.top-actions .validation-action:hover {
-  background: #374e66;
-}
-.top-actions .validation-action .validation-label {
-  display: grid;
-  gap: 1px;
-  text-align: left;
-  line-height: 1.15;
-}
-.validation-label small {
-  font-size: 11px;
-  font-weight: 450;
-  color: #d9e4ef;
-}
-.validation-action[data-state='needsRepair'] svg {
-  color: #ffb2ac;
-}
-.validation-action[data-state='nearestOnly'] svg {
-  color: #f5ca78;
-}
 .field-issue {
   margin: 8px 0;
   padding: 9px 10px;
@@ -1027,8 +1000,202 @@ input[type='checkbox'] {
   display: block;
   margin-bottom: 3px;
 }
-@media (max-width: 720px) {
-  .validation-label b {
-    display: none;
+.export-dialog {
+  width: min(540px, calc(100vw - 24px));
+  max-height: min(90dvh, 800px);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 12px 38px #17263836;
+  font-size: 13px;
+}
+.export-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.export-dialog::backdrop {
+  background: #1a2b405e;
+}
+.export-dialog > header,
+.export-dialog footer,
+.export-preview header,
+.curve-legend,
+.plot-axis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.export-dialog > header,
+.export-dialog footer {
+  flex: none;
+  background: var(--surface);
+  padding: 14px 20px;
+}
+.export-dialog > header {
+  border-bottom: 1px solid var(--line);
+}
+.export-dialog h2 {
+  font-size: 19px;
+}
+.export-dialog h3 {
+  font-size: 14px;
+}
+.export-dialog small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.export-dialog footer {
+  border-top: 1px solid var(--line);
+}
+.export-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 16px 20px;
+}
+.export-body summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.export-field,
+.export-options label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.export-name {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding-right: 10px;
+}
+.export-name input,
+.export-options select {
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+  padding: 7px;
+  background: white;
+}
+.export-name input {
+  border: 0;
+  flex: 1;
+}
+.export-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+.export-options select {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.export-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.export-preview th,
+.export-preview td {
+  padding: 7px 3px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-weight: 400;
+}
+.export-preview th:first-child {
+  text-align: left;
+}
+.export-preview thead {
+  font-size: 12px;
+  color: var(--muted);
+}
+.export-preview header {
+  flex-wrap: wrap;
+}
+.export-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--route);
+  font-weight: 600;
+}
+.export-state[data-error='true'] {
+  color: var(--error);
+}
+.shared-records summary {
+  color: var(--route);
+}
+.shared-records li {
+  font-variant-numeric: tabular-nums;
+  margin: 3px 0;
+}
+.export-plot {
+  margin-top: 8px;
+}
+.export-plot svg {
+  display: block;
+  width: 100%;
+  height: 100px;
+  background: var(--surface);
+}
+.export-plot path {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.project-line {
+  stroke: var(--muted);
+  stroke-dasharray: 4 3;
+}
+.output-line {
+  stroke: var(--route);
+}
+.curve-legend {
+  justify-content: flex-start;
+  font-size: 12px;
+  color: var(--muted);
+}
+.curve-legend span:before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  border-top: 2px dashed var(--muted);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.curve-legend span:last-child:before {
+  border-top: 2px solid var(--route);
+}
+@media (max-width: 540px) {
+  .export-dialog {
+    max-height: calc(100dvh - 12px);
   }
+  .export-dialog > header,
+  .export-dialog footer,
+  .export-body {
+    padding: 12px;
+  }
+}
+
+.mag-export summary small {
+  font-weight: 400;
+  margin-left: 6px;
+}
+.declination-fields {
+  margin-top: 8px;
+}
+.declination-fields .field {
+  margin: 7px 0;
+}
+.declination-fields .field input,
+.declination-fields .field select {
+  width: 100%;
 }

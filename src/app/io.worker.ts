@@ -1,11 +1,11 @@
 import { loadProject, parseRoutes, RouteFileError } from '../files';
-import { readRte, writeRte, RteError } from '../rte';
+import { readRte, prepareRte, RteError } from '../rte';
 import type { IORequest, IOResult } from './io';
 async function handle(request: IORequest): Promise<IOResult> {
   if (request.type === 'compile') {
     return {
       type: 'binary',
-      bytes: new Uint8Array(writeRte(request.doc, { resampleElevation: request.resampleElevation })),
+      ...prepareRte(request.doc, request.options),
     };
   }
   const ext = request.file.name.split('.').pop()?.toLowerCase();
@@ -28,7 +28,8 @@ async function handle(request: IORequest): Promise<IOResult> {
 }
 self.onmessage = async ({ data }: MessageEvent<IORequest>) => {
   try {
-    self.postMessage(await handle(data));
+    const result = await handle(data);
+    self.postMessage(result, { transfer: result.type === 'binary' ? [result.bytes.buffer] : [] });
   } catch (error) {
     const en = error instanceof Error ? error.message : 'File operation failed.';
     const zh = error && typeof error === 'object' && 'messageZh' in error ? String(error.messageZh) : en;
@@ -41,7 +42,6 @@ self.onmessage = async ({ data }: MessageEvent<IORequest>) => {
           ? (error.target ?? { type: 'route' })
           : undefined,
       fileCode: error instanceof RouteFileError ? error.code : undefined,
-      canResample: data.type === 'compile' && error instanceof RteError && error.canResample,
     } satisfies IOResult);
   }
 };

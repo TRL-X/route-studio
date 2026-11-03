@@ -4,7 +4,7 @@ import { saveProject } from '../../src/files/project';
 
 test('aligns the workbench headers and keeps file actions inside a narrow window', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Download RTE' }).waitFor();
+  await page.getByRole('button', { name: 'Export RTE…' }).waitFor();
   const headerEdges = await page
     .locator('.workspace .panel-heading, .map-tools')
     .evaluateAll((elements) => elements.map((el) => el.getBoundingClientRect().bottom));

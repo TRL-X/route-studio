@@ -8,18 +8,14 @@ import {
   Mountain,
   Redo2,
   Save,
-  ShieldAlert,
-  ShieldCheck,
   Undo2,
 } from 'lucide-react';
 import { strings, type Lang } from './strings';
 
 interface ToolbarProps {
-  validation: 'unchecked' | 'needsRepair' | 'exportReady' | 'nearestOnly';
   lang: Lang;
   onLanguage: (lang: Lang) => void;
   locked: boolean;
-  lookupPending: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onHistory: (action: 'undo' | 'redo') => void;
@@ -27,7 +23,7 @@ interface ToolbarProps {
   onExample: () => void;
   onOpen: (file: File) => void;
   onSave: () => void;
-  onCompile: (download: boolean) => void;
+  onExport: () => void;
 }
 
 function BrandMark() {
@@ -47,10 +43,8 @@ function BrandMark() {
 }
 export function EditorToolbar({
   lang,
-  validation,
   onLanguage,
   locked,
-  lookupPending,
   canUndo,
   canRedo,
   onHistory,
@@ -58,7 +52,7 @@ export function EditorToolbar({
   onExample,
   onOpen,
   onSave,
-  onCompile,
+  onExport,
 }: ToolbarProps) {
   const t = strings[lang];
   const [menu, setMenu] = useState(false);
@@ -194,27 +188,7 @@ export function EditorToolbar({
             <Save />
             <span>{t.save}</span>
           </button>
-          <button
-            className="button validation-action"
-            aria-label={t.inspect}
-            aria-describedby="rte-check-state"
-            title={lookupPending ? t.magPending : t.inspect + ' · ' + t[validation]}
-            disabled={lookupPending}
-            data-state={validation}
-            onClick={() => void onCompile(false)}
-          >
-            {validation === 'needsRepair' ? <ShieldAlert /> : <ShieldCheck />}
-            <span className="validation-label">
-              <b>{t.inspect}</b>
-              <small id="rte-check-state">{t[validation]}</small>
-            </span>
-          </button>
-          <button
-            className="primary"
-            disabled={lookupPending}
-            title={lookupPending ? t.magPending : undefined}
-            onClick={() => void onCompile(true)}
-          >
+          <button className="primary" onClick={onExport} aria-haspopup="dialog">
             <ArrowDownToLine />
             {t.export}
           </button>

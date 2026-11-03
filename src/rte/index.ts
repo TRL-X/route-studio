@@ -41,6 +41,16 @@ import {
 } from './records';
 import { readSections, writeSections } from './wire';
 
+import {
+  defaultExportOptions,
+  previewCurve,
+  sampleProfile,
+  simplifyGeometry,
+  validateExportOptions,
+  type ExportOptions,
+  type ProfilePoint,
+} from './processing';
+
 export { RteError, type RteTarget } from './check';
 
 const kinds = ['start', 'finish', 'cp', 'poi'] as const;
@@ -105,7 +115,7 @@ function defaultLabel(name: string) {
   return result;
 }
 
-function compile(doc: RouteDocument) {
+function compile(doc: RouteDocument, options = defaultExportOptions) {
   const { vertices, stations, elevation, rte } = doc;
   named(doc.name, 96, msg('field.routeName'), { type: 'route' });
   check(vertices.length >= 2, msg('compiler.verticesRequired'));
@@ -230,7 +240,7 @@ function compile(doc: RouteDocument) {
   // Quantization can collapse consecutive coordinates. Retain boundaries and both
   // endpoints; removing a redundant geometry node never changes the reference axis.
   const pinned = new Set([0, total, ...boundaryTargets.keys()]);
-  const geom: Geometry[] = [];
+  let geom: Geometry[] = [];
   for (const node of [...points.values()].sort((a, b) => a[2] - b[2])) {
     const previous = geom.at(-1);
     if (!previous || previous[0] !== node[0] || previous[1] !== node[1]) {
@@ -244,11 +254,13 @@ function compile(doc: RouteDocument) {
       geom[geom.length - 1] = node;
     }
   }
+  geom = simplifyGeometry(geom, pinned, options.toleranceM);
   let importedIndex = rte?.indexBlockSizes;
   if (geom.length !== vertices.length) importedIndex = undefined;
   // Keep source positions separate until the device distance bins are selected.
   const sourceHeights = new Map<number, number>();
   const positionsByBin = new Map<number, number>();
+  const shared = new Set<number>();
   let precisionIssue: RteError | undefined;
   const lastPosition = axis.at(-1)!;
   function rank(position: number, bin: number) {
@@ -265,19 +277,20 @@ function compile(doc: RouteDocument) {
     );
     const h = integer(quantize(sample.height * 10), INT_MIN, INT_MAX, msg('field.elevation'), target);
     check(
-      !sourceHeights.has(position) || sourceHeights.get(position) === h,
+      !sourceHeights.has(position) || quantize(sourceHeights.get(position)!) === h,
       msg('compiler.conflictingSample', { number: i + 1 }),
       target,
     );
-    sourceHeights.set(position, h);
+    sourceHeights.set(position, sample.height * 10);
 
     const current = positionsByBin.get(s);
     if (current === undefined) {
       positionsByBin.set(s, position);
       continue;
     }
-    if (!precisionIssue && sourceHeights.get(current) !== h) {
-      precisionIssue = new RteError(
+    if (quantize(sourceHeights.get(current)!) !== h) {
+      shared.add(s);
+      precisionIssue ??= new RteError(
         msg('compiler.precisionConflict', { number: i + 1, meters: s / 10 }),
         'invalid',
         target,
@@ -290,19 +303,26 @@ function compile(doc: RouteDocument) {
       positionsByBin.set(s, position);
     }
   }
-  const levels = new Map(
-    Array.from(positionsByBin, ([bin, position]) => [bin, sourceHeights.get(position)!]),
-  );
-  check(levels.has(0) && levels.has(total), msg('compiler.profileEndpoints'));
-  const source = [...levels].sort((a, b) => a[0] - b[0]);
-  let right = 1;
-  for (const event of events) {
-    const s = event.distance;
-    if (!event.boundary || levels.has(s)) continue;
-    while (source[right][0] < s) right++;
-    const [lo, h0] = source[right - 1];
-    const [hi, h1] = source[right];
-    levels.set(s, quantize(h0 + ((h1 - h0) * (s - lo)) / (hi - lo)));
+  const sourceProfile = [...sourceHeights].sort((a, b) => a[0] - b[0]);
+  check(positionsByBin.has(0) && positionsByBin.has(total), msg('compiler.profileEndpoints'));
+  let levels: Map<number, number>;
+  if (options.intervalM || options.smoothingM) {
+    const bins = new Set(boundaryTargets.keys());
+    if (!options.intervalM) for (const s of positionsByBin.keys()) bins.add(s);
+    levels = sampleProfile(sourceProfile, bins, total, options);
+  } else {
+    levels = new Map(
+      Array.from(positionsByBin, ([bin, position]) => [bin, quantize(sourceHeights.get(position)!)]),
+    );
+    const source = [...levels].sort((a, b) => a[0] - b[0]);
+    let right = 1;
+    for (const s of [...boundaryTargets.keys()].sort((a, b) => a - b)) {
+      if (levels.has(s)) continue;
+      while (source[right][0] < s) right++;
+      const [lo, h0] = source[right - 1];
+      const [hi, h1] = source[right];
+      levels.set(s, quantize(h0 + ((h1 - h0) * (s - lo)) / (hi - lo)));
+    }
   }
   const elev: Elevation[] = [];
   for (const [s, h] of [...levels].sort((a, b) => a[0] - b[0])) {
@@ -311,16 +331,23 @@ function compile(doc: RouteDocument) {
     elev.push([s, h, (prev?.[2] ?? 0) + Math.max(0, delta), (prev?.[3] ?? 0) + Math.max(0, -delta)]);
   }
   limit(geom.length <= MAX_NODES && elev.length <= MAX_NODES, msg('compiler.boundaryNodeLimit'));
+  let declination;
+  try {
+    declination = exportDeclination(doc);
+  } catch (error) {
+    if (error instanceof RteError) error.target = { type: 'declination' };
+    throw error;
+  }
   const meta: Metadata = {
     name: doc.name,
     total,
     reference: doc.elevationReference,
     events,
-    declination: exportDeclination(doc),
+    declination,
     stages: summarize(events, elev),
   };
   verifyRoute(meta, geom, elev);
-  return { geom, elev, meta, importedIndex, precisionIssue };
+  return { geom, elev, meta, importedIndex, precisionIssue, shared, sourceProfile };
 }
 
 export interface RteWriteOptions {
@@ -334,14 +361,42 @@ export function validateForRte(doc: RouteDocument, options: RteWriteOptions = {}
 }
 
 export function writeRte(doc: RouteDocument, options: RteWriteOptions = {}) {
-  const { geom, elev, meta, importedIndex, precisionIssue } = compile(doc);
-  const bytes = writeSections({
+  const route = compile(doc);
+  const bytes = encode(route);
+  if (route.precisionIssue && !options.resampleElevation) throw route.precisionIssue;
+  return bytes;
+}
+
+function encode({ geom, elev, meta, importedIndex }: ReturnType<typeof compile>) {
+  return writeSections({
     META: writeCbor(writeMetadata(meta)),
     GEOM: pack(geom, geomLayout),
     ELEV: pack(elev, elevLayout),
     GIDX: pack(indexBlocks(geom, importedIndex), indexLayout),
   });
-  // Only offer a retry after the complete resampled file passes all export checks.
-  if (precisionIssue && !options.resampleElevation) throw precisionIssue;
-  return bytes;
 }
+
+/** The preview and download share the exact same validated binary. */
+export function prepareRte(doc: RouteDocument, options: ExportOptions = defaultExportOptions) {
+  validateExportOptions(options);
+  const route = compile(doc, options);
+  const bytes = encode(route);
+  const { geom, elev, meta, shared, sourceProfile } = route;
+  return {
+    bytes,
+    preview: {
+      vertices: geom.length,
+      samples: elev.length,
+      totalM: meta.total / 10,
+      stages: meta.stages.length,
+      declinationCdeg: meta.declination?.declinationCdeg,
+      ascentM: elev.at(-1)![2] / 10,
+      shared: options.intervalM
+        ? []
+        : elev.filter(([s]) => shared.has(s)).map(([s, h]) => ({ meters: s / 10, height: h / 10 })),
+      sourceCurve: previewCurve(sourceProfile),
+      outputCurve: previewCurve(elev.map(([s, h]): ProfilePoint => [s, h])),
+    },
+  };
+}
+export type ExportPreview = ReturnType<typeof prepareRte>['preview'];

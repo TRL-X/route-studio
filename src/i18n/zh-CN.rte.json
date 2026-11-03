@@ -18,6 +18,7 @@
   "compiler.duplicateVertexId": "路线点标识重复。",
   "compiler.finishIdExhausted": "终点处没有可分配给「{name}」的站点编号，请调整其路线位置。",
   "compiler.finishPlacement": "请将终点「{name}」设在路线末尾并标记为赛段边界。",
+  "compiler.invalidExportOptions": "请选择受支持的导出处理选项。",
   "compiler.invalidStationKind": "站点类型或边界标志无效。",
   "compiler.missingHeight": "海拔样本 {number} 缺少有效高度。",
   "compiler.nodeLimit": "路线或海拔采样超过一百万个节点。",

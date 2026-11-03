@@ -26,19 +26,19 @@ import { exampleRoute } from '../domain/example';
 import { saveDraft, saveProject } from '../files';
 import { MapView } from '../views/MapView';
 import { ProfileView } from '../views/ProfileView';
+import { ExportDialog } from './ExportDialog';
+import { defaultExportOptions } from '../rte/processing';
 import { EditorToolbar } from './EditorToolbar';
 import { RouteOutline } from './RouteOutline';
 import { ProfilePanel } from './ProfilePanel';
 import { Inspector, type Selection, type Tool } from './Inspector';
-import { useDeclinationLookup } from './useDeclinationLookup';
 import { useHistory } from './history';
 import { runIO, type Choice, type IOResult } from './io';
 import { initialLanguage, strings, type Lang } from './strings';
 import './editor.css';
 
 type Localized = { en: string; zh: string };
-type Problem = Localized & { target?: Selection; retry?: 'check' | 'download' };
-type Validation = { doc: RouteDocument; issue?: Problem; nearestSamples?: boolean };
+type Problem = Localized & { target?: Selection };
 function sameTarget(a: Selection, b?: Selection) {
   if (a.type === 'route') return b?.type === 'route';
   if (a.type === 'sample') return b?.type === 'sample' && a.index === b.index;
@@ -99,11 +99,13 @@ export function Editor({
   const [example, setExample] = useState(!restored);
   const [source, setSource] = useState('');
   const [session, setSession] = useState(0);
-  const lookup = useDeclinationLookup(doc, session, dispatch);
   const [savedDoc, setSavedDoc] = useState(doc);
   const [notice, setNotice] = useState<Localized | null>(restored ? both('recovery') : null);
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [validation, setValidation] = useState<Validation | null>(null);
+  const [issue, setIssue] = useState<Problem | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportOptions, setExportOptions] = useState(defaultExportOptions);
+  const [exportName, setExportName] = useState<string | null>(null);
   const [hoveredSample, setHoveredSample] = useState<number | null>(null);
   const [mapProbeDistance, setMapProbeDistance] = useState<number | null>(null);
   const [panel, setPanel] = useState<'outline' | 'inspector' | null>(null);
@@ -117,12 +119,10 @@ export function Editor({
   const ioLock = useRef(false);
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const dirty = doc !== savedDoc;
-  const checked = validation?.doc === doc ? validation : null;
-  const issue = checked?.issue;
   const change = (next: RouteDocument) => {
     if (next === doc) return;
     autosave.current = true;
-    setValidation(null);
+    setIssue(null);
     setHoveredSample(null);
     setProblem(null);
     setNotice(null);
@@ -185,7 +185,7 @@ export function Editor({
       setPanel(null);
     }
     setTool('select');
-    setValidation(null);
+    setIssue(null);
     setHoveredSample(null);
     setProblem(null);
     setNotice(null);
@@ -216,8 +216,11 @@ export function Editor({
     };
   }, [doc]);
   function replace(next: Replacement) {
+    setExportOptions(defaultExportOptions);
+    setExportName(null);
+    setExportOpen(false);
     setExample(!!next.sample);
-    setValidation(null);
+    setIssue(null);
     setHoveredSample(null);
     setMapProbeDistance(null);
     setSession((v) => v + 1);
@@ -261,35 +264,6 @@ export function Editor({
       setProblem(both('saveFailed'));
     }
   }
-  async function compile(write: boolean, resampleElevation = false) {
-    if (ioLock.current) return;
-    ioLock.current = true;
-    setBusy(true);
-    setProblem(null);
-    setNotice(null);
-    try {
-      const result = await runIO({ type: 'compile', doc, resampleElevation });
-      if (result.type === 'error') {
-        const issue: Problem = {
-          ...fileError(result),
-          target: result.target ?? { type: 'route' },
-          retry: result.canResample ? (write ? 'download' : 'check') : undefined,
-        };
-        setValidation({ doc, issue });
-        setProblem(issue);
-      } else if (result.type === 'binary') {
-        setValidation({ doc, nearestSamples: resampleElevation });
-        if (write) download(result.bytes, filename(doc.name) + '.rte', 'application/octet-stream');
-        setNotice(both(write ? 'done' : resampleElevation ? 'validNearest' : 'valid'));
-      }
-    } catch {
-      setValidation(null);
-      setProblem(both('checkFailed'));
-    } finally {
-      setBusy(false);
-      ioLock.current = false;
-    }
-  }
   function addStation() {
     if (doc.vertices.length < 2) {
       setNotice(both('noVertices'));
@@ -324,7 +298,8 @@ export function Editor({
   }
   useEffect(() => {
     const dismiss = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || (event.target instanceof Element && event.target.closest('dialog')))
+        return;
       setPending(null);
       setChoices(null);
       setPanel(null);
@@ -348,15 +323,14 @@ export function Editor({
       onDrop={(e) => {
         e.preventDefault();
         const f = e.dataTransfer.files[0];
-        if (f && !busy && !pending && !choices) void openFile(f);
+        if (f && !busy && !pending && !choices && !exportOpen) void openFile(f);
       }}
     >
       <div className="shell" inert={busy || !!pending || !!choices}>
         <EditorToolbar
           lang={lang}
           onLanguage={setLang}
-          locked={busy || !!pending || !!choices}
-          lookupPending={lookup.pending}
+          locked={busy || !!pending || !!choices || exportOpen}
           canUndo={history.past.length > 0}
           canRedo={history.future.length > 0}
           onHistory={historyAction}
@@ -364,16 +338,10 @@ export function Editor({
           onExample={() => requestReplace({ doc: exampleRoute(), source: '', sample: true })}
           onOpen={openFile}
           onSave={save}
-          onCompile={compile}
-          validation={
-            checked
-              ? issue
-                ? 'needsRepair'
-                : checked.nearestSamples
-                  ? 'nearestOnly'
-                  : 'exportReady'
-              : 'unchecked'
-          }
+          onExport={() => {
+            setProblem(null);
+            setExportOpen(true);
+          }}
         />
         <div className="document-bar">
           <h1 title={doc.name || t.untitled}>{doc.name || t.untitled}</h1>
@@ -520,8 +488,6 @@ export function Editor({
             </ProfilePanel>
           </main>
           <Inspector
-            lang={lang}
-            lookup={lookup}
             doc={doc}
             t={t}
             selected={selected}
@@ -545,33 +511,11 @@ export function Editor({
           <span className="coord-system">WGS 84</span>
         </footer>
         {problem && (
-          <div className="problem" data-severity={problem.retry ? 'warning' : 'error'} role="alert">
+          <div className="problem" data-severity="error" role="alert">
             <ShieldCheck size={20} />
             <div>
-              <strong>{problem.target ? t.validation : t.file}</strong>
+              <strong>{t.file}</strong>
               <p>{problem[lang]}</p>
-              {problem.retry && (
-                <>
-                  <p>{t.resampleInfo}</p>
-                  <button
-                    className="primary"
-                    onClick={() => void compile(problem.retry === 'download', true)}
-                  >
-                    {problem.retry === 'download' ? t.resampleDownload : t.resampleCheck}
-                  </button>
-                </>
-              )}
-              {problem.target && (
-                <button
-                  className="sub-action"
-                  onClick={() => {
-                    select(problem.target!, true);
-                    setProblem(null);
-                  }}
-                >
-                  {t.showIssue}
-                </button>
-              )}
             </div>
             <button className="icon" aria-label={t.close} onClick={() => setProblem(null)}>
               <X />
@@ -579,6 +523,30 @@ export function Editor({
           </div>
         )}
       </div>
+      {exportOpen && (
+        <ExportDialog
+          doc={doc}
+          lang={lang}
+          dispatch={dispatch}
+          change={change}
+          projectGain={gain}
+          options={exportOptions}
+          onOptions={setExportOptions}
+          name={exportName ?? filename(doc.name)}
+          onName={setExportName}
+          onClose={() => setExportOpen(false)}
+          onDownload={(bytes, name) => {
+            download(bytes, filename(name) + '.rte', 'application/octet-stream');
+            setExportOpen(false);
+            setNotice(both('done'));
+          }}
+          onLocate={(error) => {
+            setExportOpen(false);
+            setIssue(error);
+            select(error.target ?? { type: 'route' }, true);
+          }}
+        />
+      )}
       {busy && (
         <div className="overlay">
           <div className="processing" role="status">
