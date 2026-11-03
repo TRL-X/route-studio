@@ -1,0 +1,43 @@
+appId: org.trlx.route-studio
+productName: Route Studio
+asar: true
+npmRebuild: false
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - src/i18n/*.desktop.json
+  - build/icons/icon.png
+  - LICENSE
+  - package.json
+  - '!node_modules/**/*'
+artifactName: Route-Studio-${version}-${os}-${arch}.${ext}
+mac:
+  category: public.app-category.utilities
+  icon: build/icons/icon.icns
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - dmg
+    - zip
+  extendInfo:
+    NSBluetoothAlwaysUsageDescription: Route Studio uses Bluetooth to upload route files to your device.
+    NSBluetoothPeripheralUsageDescription: Route Studio uses Bluetooth to upload route files to your device.
+win:
+  icon: build/icons/icon.ico
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+linux:
+  icon: build/icons/icon.png
+  category: Utility
+  maintainer: TRL-X
+  target:
+    - AppImage
+    - deb

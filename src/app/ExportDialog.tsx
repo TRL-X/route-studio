@@ -64,6 +64,8 @@ export function ExportDialog({
   onClose,
   onLocate,
   onDownload,
+  saving,
+  saveError,
 }: ExportControls & {
   doc: RouteDocument;
   projectGain: number | null;
@@ -121,6 +123,8 @@ export function ExportDialog({
       onName={onName}
       onClose={onClose}
       onDownload={onDownload}
+      saving={saving}
+      saveError={saveError}
       bytes={ready?.bytes}
       extraAction={<DeviceUpload bytes={ready?.bytes} t={t} />}
     >

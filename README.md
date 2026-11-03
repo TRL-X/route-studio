@@ -13,6 +13,62 @@ npm run dev
 
 Open the local URL printed in the terminal. The editor opens with an editable example unless there is a draft to recover. To build for deployment, run `npm run build` and serve the contents of `dist/` from a static web host. Use `npm run preview` to check the production build locally.
 
+## Desktop application
+
+The Electron application shares the React editor, import/export worker, and route algorithms with the website. It bundles its frontend locally and does not require a running web server after installation. Online maps, terrain and magnetic declination still need internet access. Local editing, file conversion and the coordinate grid work offline.
+
+```sh
+npm ci
+npx install-electron --no
+npm run desktop:dev
+```
+
+The development command compiles the main process and preload, starts Vite on a loopback address, and opens Electron. React changes use Vite hot reload. Restart the command after changing `electron/` files. The website keeps its existing `npm run dev`, `npm run build`, and `npm run preview` commands.
+
+Create installers on the target operating system:
+
+```sh
+npm run desktop:pack                       # Current platform and architecture
+npm run desktop:pack -- --mac --arm64       # macOS Apple Silicon: DMG and ZIP
+npm run desktop:pack -- --mac --x64         # macOS Intel: DMG and ZIP
+npm run desktop:pack -- --win --x64         # Windows: NSIS installer
+npm run desktop:pack -- --linux --x64       # Linux: AppImage and Debian package
+```
+
+Outputs go to `release/`. Use `npm run desktop:pack:dir` for an unpacked application. App icons are checked in; `node scripts/generate-icons.mjs` regenerates the PNG, ICO and ICNS versions of the geometric brand mark without extra dependencies. The source SVG is in `build/icon.svg`.
+
+Desktop **Open** uses a native file picker. **Save project** and format exports use native save dialogs; cancelling leaves the document or export preview open. Native file reads and writes are limited to 64 MiB. A close or quit request warns when the document has changes that have not been saved as a project. Recovery drafts use Electron's local IndexedDB profile, separately from browser drafts. Exporting a device file does not mark a project as saved.
+
+Bluetooth upload uses the existing Web Bluetooth/MCUmgr implementation with a desktop device chooser. Windows and Linux pairing requests can confirm a PIN or request PIN entry; macOS handles pairing through the operating system. Allow Bluetooth access when macOS prompts. Linux requires a working BlueZ adapter and desktop session; Chromium's experimental web platform feature switch is enabled on Linux for Web Bluetooth. Availability and transfers still need acceptance testing with physical devices on each platform.
+
+The renderer runs with context isolation, sandboxing and Node integration disabled. Production assets are served from a restricted `app://route-studio/` protocol with a Content Security Policy. Only the application main frame can invoke the file bridge, and renderer code cannot supply filesystem paths. Ordinary HTTP/HTTPS links open in the system browser.
+
+### Website and Vercel
+
+`vercel.json` explicitly keeps the Vite framework, `npm run build`, and `dist/` output. Its install command skips the Electron binary download. Desktop main/preload bundles and installers go to `dist-electron/` and `release/`, outside the web deployment output. Continue configuring `VITE_MAP_STYLE_URL` through the Vercel project's environment settings and rebuild when it changes.
+
+### Desktop verification and releases
+
+```sh
+npm run desktop:build
+npm run desktop:typecheck
+npm run test:desktop
+```
+
+Desktop Playwright tests cover the secure renderer, import/export worker, native file dialogs with Unicode paths, cancelled and failed saves, the unsaved-close prompt, Bluetooth device discovery/cancellation, and draft recovery after restarting. Dialog responses and discovery events are simulated; tests do not use a physical Bluetooth device. Every test uses a temporary profile. To test an unpacked application, set `DESKTOP_EXECUTABLE` to the full executable path before running `npm run test:desktop`. On Linux CI, use `xvfb-run --auto-servernum npm run test:desktop` after installing Chromium's OS dependencies. Desktop traces are written to `desktop-test-results/`, separately from web traces.
+
+The **Desktop packages** workflow checks the website, builds macOS ARM64 and x64, Windows x64, and Linux x64 installers on their native runners, then runs the desktop tests against the packaged executables. Pull requests and manual runs upload downloadable workflow artifacts. Pushing a tag matching the package version, such as `v0.1.0`, also collects all successful builds in a GitHub Release **draft**. Publishing the release remains a separate maintainer action.
+
+For signed tag builds, configure these repository secrets:
+
+| Platform           | Secrets                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| macOS signing      | `MAC_CSC_LINK` (base64 P12), `MAC_CSC_KEY_PASSWORD`                                   |
+| macOS notarization | `APPLE_API_KEY` (base64 App Store Connect P8), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` |
+| Windows signing    | `WIN_CSC_LINK` (base64 PFX), `WIN_CSC_KEY_PASSWORD`                                   |
+
+Without certificates, the workflow produces unsigned test packages. Check signing and notarization before publishing for external distribution. Automatic updates and file associations are not enabled in this first desktop implementation; install new releases manually. The stable application ID is `org.trlx.route-studio`; keep it unchanged to preserve the desktop profile across releases.
+
 ## Prepare a route
 
 1. Choose **Open**, drop a file onto the editor, or start drawing with **File → New route**. If a FIT activity contains several GPS sessions, a GPX contains multiple tracks or segments, or a KML contains several lines, select the course you want to edit. A GPX waypoint or KML point named for the start or finish within 100 m of a matching endpoint supplies that station's name and landmark coordinates. On a closed course, a shared start/finish marker can supply both stations. Other points become checkpoints with **Stage boundary** enabled. You can edit their settings in the station inspector.

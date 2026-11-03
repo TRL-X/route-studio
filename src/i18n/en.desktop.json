@@ -1,0 +1,17 @@
+{
+  "open": "Open route or project",
+  "save": "Save file",
+  "routeFiles": "Route and project files",
+  "closeTitle": "Close without saving a project?",
+  "closeDetail": "Save a project file first to keep a separate copy of your edits. A local recovery draft may be available next time.",
+  "cancel": "Cancel",
+  "discard": "Close without saving",
+  "selectDevice": "Choose a Bluetooth device",
+  "scanning": "Searching for compatible devices… Keep the device nearby and in pairing mode.",
+  "unnamedDevice": "Unnamed device",
+  "connect": "Connect",
+  "pair": "Pair Bluetooth device",
+  "confirmPair": "Allow pairing with device {device}?",
+  "confirmPin": "Confirm that this PIN matches the one shown on the device: {pin}",
+  "providePin": "Enter the PIN shown on the device."
+}

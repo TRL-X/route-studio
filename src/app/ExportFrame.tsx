@@ -9,6 +9,8 @@ export interface ExportControls {
   onName: (name: string) => void;
   onClose: () => void;
   onDownload: (bytes: Uint8Array<ArrayBuffer>, name: string) => void;
+  saving?: boolean;
+  saveError?: string | null;
 }
 
 export function ExportFrame({
@@ -21,6 +23,8 @@ export function ExportFrame({
   bytes,
   children,
   extraAction,
+  saving,
+  saveError,
 }: ExportControls & {
   format: ExportFormat;
   bytes?: Uint8Array<ArrayBuffer>;
@@ -46,7 +50,7 @@ export function ExportFrame({
       aria-labelledby="export-title"
       onCancel={(e) => {
         e.preventDefault();
-        onClose();
+        if (!saving) onClose();
       }}
     >
       <header>
@@ -54,7 +58,7 @@ export function ExportFrame({
           <small>Route Studio</small>
           <h2 id="export-title">{t.exportFormatTitle.replace('{format}', format.toUpperCase())}</h2>
         </div>
-        <button className="icon" aria-label={t.close} onClick={onClose}>
+        <button className="icon" aria-label={t.close} onClick={onClose} disabled={saving}>
           <X />
         </button>
       </header>
@@ -78,6 +82,7 @@ export function ExportFrame({
           </small>
         )}
         {children}
+        {saveError && <p role="alert">{saveError}</p>}
       </div>
       <footer>
         <small>
@@ -88,7 +93,7 @@ export function ExportFrame({
         </small>
         <button
           className="button"
-          disabled={!bytes || invalidName}
+          disabled={!bytes || invalidName || saving}
           onClick={() => {
             if (bytes) onDownload(bytes, baseName);
           }}
