@@ -33,7 +33,7 @@ Select a station or sample to keep its position marked while you inspect nearby 
 | `Ctrl/⌘ + Shift + Z` | Redo                                                    |
 | `Esc`                | Close a menu or dialog and return to the selection tool |
 
-Route editing and file conversion run in the browser. The map defaults to a local coordinate grid. Enabling the online basemap makes MapLibre request map resources for the current view from OpenFreeMap. To use a different provider, set `VITE_MAP_STYLE_URL` in `.env.local` to the URL of a MapLibre style, then restart the dev server or rebuild.
+Route editing and file conversion run in the browser. The online basemap is enabled by default, so MapLibre requests map resources for the current view from OpenFreeMap. You can turn it off to use a local coordinate grid; the map also falls back to the grid if the basemap is unavailable. To use a different provider, set `VITE_MAP_STYLE_URL` in `.env.local` to the URL of a MapLibre style, then restart the dev server or rebuild.
 
 ## Code and format support
 
