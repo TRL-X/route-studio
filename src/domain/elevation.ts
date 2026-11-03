@@ -11,14 +11,14 @@ interface Level {
   height?: number;
   ambiguous: boolean;
   missing: number[];
+  endpointId?: string;
 }
 
-/** Interpolate a draft on the same continuous horizontal distance axis used by the editor. */
-export function interpolateMissingHeights(document: RouteDocument, maxSpan = Infinity): InterpolationResult {
+/** Fill short gaps by route distance, extending the nearest observation at either endpoint. */
+export function interpolateMissingHeights(document: RouteDocument, maxSpan = 1_000): InterpolationResult {
   const { vertices, elevation } = document;
-  const missing = elevation.reduce((count, sample) => count + Number(sample.height === null), 0);
-  const unchanged = { document, filled: 0, remaining: missing };
-  if (!missing || missing === elevation.length || !vertices.length) return unchanged;
+  let missing = elevation.reduce((count, sample) => count + Number(sample.height === null), 0);
+  if (missing === elevation.length || !vertices.length) return { document, filled: 0, remaining: missing };
 
   const axis = distances(vertices);
   const indices = new Map(vertices.map((v, i) => [v.id, i]));
@@ -40,35 +40,51 @@ export function interpolateMissingHeights(document: RouteDocument, maxSpan = Inf
     else if (level.height !== sample.height) level.ambiguous = true;
   }
 
+  // Sparse profiles can omit the endpoint sample entirely. Append it only if it can be filled.
+  for (const i of [0, vertices.length - 1]) {
+    if (!levels.has(axis[i])) {
+      levels.set(axis[i], { distance: axis[i], ambiguous: false, missing: [], endpointId: vertices[i].id });
+      missing++;
+    }
+  }
+  if (!missing) return { document, filled: 0, remaining: 0 };
+
   const updated = elevation.slice();
   let filled = 0;
   function fill(level: Level, height: number) {
     for (const i of level.missing) updated[i] = { ...elevation[i], height };
     filled += level.missing.length;
+    if (level.endpointId !== undefined) {
+      updated.push({ anchor: { vertexId: level.endpointId, fraction: 0 }, height });
+      filled++;
+    }
   }
 
-  let previous: Level | undefined;
-  const gap: Level[] = [];
-  for (const level of [...levels.values()].sort((a, b) => a.distance - b.distance)) {
-    if (level.ambiguous) {
-      // An ambiguous observation cannot serve as either end of an interpolation.
-      previous = undefined;
-      gap.length = 0;
-    } else if (level.height === undefined) {
-      if (previous) gap.push(level);
-    } else {
-      if (previous && level.distance - previous.distance <= maxSpan) {
-        for (const interior of gap) {
-          const t = (interior.distance - previous.distance) / (level.distance - previous.distance);
-          fill(interior, (1 - t) * previous.height! + t * level.height);
-        }
+  const ordered = [...levels.values()].sort((a, b) => a.distance - b.distance);
+  for (let i = 0; i < ordered.length;) {
+    const level = ordered[i];
+    if (level.height !== undefined) {
+      if (!level.ambiguous) fill(level, level.height);
+      i++;
+      continue;
+    }
+    const first = i;
+    while (i < ordered.length && ordered[i].height === undefined) i++;
+    const left = ordered[first - 1],
+      right = ordered[i];
+    const start = left?.distance ?? 0;
+    const span = (right?.distance ?? axis[axis.length - 1]) - start;
+    if (left?.ambiguous || right?.ambiguous || span > maxSpan) continue;
+    for (let j = first; j < i; j++) {
+      if (left && right) {
+        const t = (ordered[j].distance - start) / span;
+        fill(ordered[j], (1 - t) * left.height! + t * right.height!);
+      } else {
+        fill(ordered[j], (left ?? right).height!);
       }
-      fill(level, level.height);
-      previous = level;
-      gap.length = 0;
     }
   }
   return filled
     ? { document: { ...document, elevation: updated }, filled, remaining: missing - filled }
-    : unchanged;
+    : { document, filled: 0, remaining: missing };
 }

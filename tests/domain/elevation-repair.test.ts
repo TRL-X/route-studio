@@ -10,29 +10,49 @@ function route(heights: (number | null)[], longitude = heights.map((_, i) => i *
   };
 }
 
-test('quick fill resolves short gaps only and returns the long and trailing gaps in route order', () => {
-  const doc = route([null, 0, null, 20, null, 70, null], [0, 0.0005, 0.001, 0.0015, 0.004, 0.009, 0.011]);
+test('quick fill extends the endpoints and interpolates a 556 m gap, leaving a 1.6 km gap for review', () => {
+  const doc = route([null, 0, null, 20, null, 70, null], [0, 0.0005, 0.003, 0.0055, 0.012, 0.0195, 0.0215]);
   doc.elevation.reverse();
   const original = structuredClone(doc);
   const result = fillShortElevationGaps(doc);
   const axis = distances(doc.vertices);
-  expect(result.filled).toBe(1);
+  expect(result.filled).toBe(3);
   expect(result.document.elevation.map((s) => s.height)).toEqual([
-    null,
+    70,
     70,
     null,
     20,
     expect.closeTo(10),
     0,
-    null,
+    0,
   ]);
-  expect(result.remaining.map((s) => [s.startM, s.endM])).toEqual([
-    [axis[0], axis[1]],
-    [axis[3], axis[5]],
-    [axis[5], axis[6]],
-  ]);
+  expect(result.remaining.map((s) => [s.startM, s.endM])).toEqual([[axis[3], axis[5]]]);
   expect(doc).toEqual(original);
   expect(fillShortElevationGaps(result.document).document).toBe(result.document);
+});
+
+test('long endpoint gaps remain wholly missing even if some samples are close to the only known height', () => {
+  const doc = route([null, null, 12, null, null], [0, 0.009, 0.01, 0.011, 0.02]);
+  const result = fillShortElevationGaps(doc);
+  expect(result.document).toBe(doc);
+  expect(result.filled).toBe(0);
+  expect(result.remaining).toHaveLength(2);
+});
+
+test('the same 1,000 m limit applies at either end and between observations', () => {
+  const metersPerDegree = distances(route([], [0, 1]).vertices)[1];
+  for (const length of [999, 1001]) {
+    const step = length / metersPerDegree;
+    const doc = route([null, 0, null, 20, null], [0, step, 1.5 * step, 2 * step, 3 * step]);
+    const result = fillShortElevationGaps(doc);
+    if (length > 1000) {
+      expect(result.document).toBe(doc);
+      expect(result.remaining).toHaveLength(3);
+    } else {
+      expect(result.document.elevation.map((s) => s.height)).toEqual([0, 0, expect.closeTo(10), 20, 20]);
+      expect(result.remaining).toEqual([]);
+    }
+  }
 });
 
 test.each([0, 1, 2] as const)(

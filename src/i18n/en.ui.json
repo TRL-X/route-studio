@@ -116,7 +116,7 @@
   "busy": "Processing…",
   "missingCount": "Missing samples",
   "interpolateGaps": "Fill elevation gaps",
-  "interpolationHint": "Interpolate gaps up to 200 m. Fetch terrain if gaps remain.",
+  "interpolationHint": "Fill gaps up to 1,000 m. At either end, use the nearest known height.",
   "interpolationResult": "Filled {filled} · {remaining} remaining",
   "fetchElevations": "Get elevations online",
   "elevationsReplaced": "Replaced all route elevations.",
