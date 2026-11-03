@@ -81,8 +81,7 @@ export function anchorPoint(
     lon: lon > 180 ? lon - 360 : lon < -180 ? lon + 360 : lon,
   };
 }
-export function anchorDistance(doc: RouteDocument, anchor: Anchor) {
-  const axis = distances(doc.vertices);
+export function anchorDistance(doc: RouteDocument, anchor: Anchor, axis = distances(doc.vertices)) {
   const i = doc.vertices.findIndex((v) => v.id === anchor.vertexId);
   return axis[i] + ((axis[i + 1] ?? axis[i]) - axis[i]) * anchor.fraction;
 }

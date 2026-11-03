@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { File, Layers, Plus, Route, Search } from 'lucide-react';
 import type { RouteDocument } from '../domain/model';
 import { orderedStations } from '../domain/projection';
@@ -27,27 +27,45 @@ export function RouteOutline({
   onAddStation,
 }: OutlineProps) {
   const [filter, setFilter] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
+  const selectedRow = useRef<HTMLButtonElement>(null);
   const ordered = useMemo(() => orderedStations(doc, axis), [axis, doc.vertices, doc.stations]);
   const query = filter.toLowerCase();
   const stationList = ordered.filter(({ station }) => station.name.toLowerCase().includes(query));
-  const lengthKm = (axis.at(-1) ?? 0) / 1000;
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const row = selectedRow.current;
+    if (!list || !row) return;
+    const reveal = () => {
+      const viewport = list.getBoundingClientRect();
+      if (!viewport.height) return;
+      const bounds = row.getBoundingClientRect();
+      if (bounds.top < viewport.top) list.scrollTop += bounds.top - viewport.top;
+      else if (bounds.bottom > viewport.bottom) list.scrollTop += bounds.bottom - viewport.bottom;
+    };
+    reveal();
+    // Also reveal the selection when the narrow-window outline drawer opens.
+    const observer = new ResizeObserver(reveal);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [selected, ordered, filter]);
   return (
     <aside className="sidebar">
       <div className="panel-heading">
         <Layers size={14} />
-        {t.workspace}
+        {t.outline}
       </div>
       <button
-        className={'route-card' + (selected.type === 'route' ? ' active' : '')}
+        className="route-item"
+        aria-pressed={selected.type === 'route'}
         onClick={() => onSelect({ type: 'route' })}
       >
-        <span className="document-tag">
-          <Route size={14} />
-          {example ? t.exampleTag : t.project}
-        </span>
-        <strong>{doc.name || t.untitled}</strong>
+        <Route size={16} />
         <span>
-          {lengthKm.toFixed(2)} km <i>·</i> {doc.vertices.length} {t.vertices}
+          <strong>{example ? t.exampleTag : t.details}</strong>
+          <small>
+            {doc.vertices.length} {t.vertices}
+          </small>
         </span>
       </button>
       <div className="station-heading">
@@ -72,20 +90,23 @@ export function RouteOutline({
           placeholder={t.filter}
         />
       </label>
-      <div className="station-list">
+      <div className="station-list" ref={listRef}>
         {stationList.map(({ station, meters }) => (
           <button
             key={station.id}
-            className={
-              'station-row' + (selected.type === 'station' && selected.id === station.id ? ' chosen' : '')
-            }
+            ref={selected.type === 'station' && selected.id === station.id ? selectedRow : undefined}
+            className="station-row"
+            aria-pressed={selected.type === 'station' && selected.id === station.id}
             onClick={() => onSelect({ type: 'station', id: station.id })}
           >
-            <span className={'station-symbol ' + station.kind} />
+            <span className={'station-symbol ' + station.kind} aria-hidden="true" />
             <span>
-              <strong>{station.name || t[station.kind]}</strong>
+              <strong title={station.name || t[station.kind]}>{station.name || t[station.kind]}</strong>
               <small>
-                {t[station.kind]} <i>·</i> {meters === null ? t.noAnchor : (meters / 1000).toFixed(2) + ' km'}
+                <span className="station-kind" title={t[station.kind]}>
+                  {t[station.kind]}
+                </span>
+                <span>{meters === null ? t.noAnchor : (meters / 1000).toFixed(2) + ' km'}</span>
               </small>
             </span>
           </button>

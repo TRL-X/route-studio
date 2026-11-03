@@ -84,7 +84,10 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
   await open(page, 'incomplete.gpx', Buffer.from(gpx.replace('<ele>20</ele>', '')));
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('North ridge');
-  await page.getByRole('button', { name: 'Download RTE', exact: true }).click();
+  const check = page.getByRole('button', { name: 'Check RTE', exact: true });
+  await expect(check).toHaveAccessibleDescription('Not checked');
+  await check.click();
+  await expect(check).toHaveAccessibleDescription('Needs attention');
   await expect(page.getByText(/missing height for elevation sample 2/i).first()).toBeVisible();
   const project = await download(page, 'Save project');
   expect(loadProject(project.bytes.toString('utf8')).elevation[1].height).toBeNull();
@@ -93,8 +96,12 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
     name: 'Elevation (m)',
     exact: true,
   });
+  await expect(height).toHaveAccessibleDescription(/missing height for elevation sample 2/i);
   await height.fill('22');
   await height.press('Enter');
+  await expect(check).toHaveAccessibleDescription('Not checked');
+  await check.click();
+  await expect(check).toHaveAccessibleDescription('Ready to export');
   const device = await download(page, 'Download RTE');
   expect(readRte(device.bytes).elevation[1].height).toBe(22);
 });
@@ -135,6 +142,9 @@ test('fills elevation gaps in one edit and asks before resampling device-distanc
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await page.getByRole('button', { name: 'Download RTE', exact: true }).click();
   const exported = readRte((await download(page, 'Download with nearest samples')).bytes);
+  await expect(page.getByRole('button', { name: 'Check RTE', exact: true })).toHaveAccessibleDescription(
+    'Nearest samples only',
+  );
   expect(exported.elevation.map((s) => s.height)).toEqual([0, 5, 10, 30]);
   const project = loadProject((await download(page, 'Save project')).bytes.toString('utf8'));
   expect(project.elevation.map((s) => s.height)).toEqual([0, expect.closeTo(5), 10, 15, 30]);

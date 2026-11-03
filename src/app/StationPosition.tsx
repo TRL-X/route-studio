@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react';
-import { Check, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import {
   anchorAtDistance,
   anchorPoint,
@@ -10,6 +10,7 @@ import {
 } from '../domain/model';
 import { orderedStations, stationPassages } from '../domain/projection';
 import type { Copy } from './strings';
+import { StationPassOptions } from './StationPassOptions';
 
 interface Props {
   doc: RouteDocument;
@@ -55,13 +56,6 @@ export function StationPosition({ doc, station, t, onMove, onPick }: Props) {
       return;
     }
     move(anchorAtDistance(doc, km * 1000, axis));
-  }
-  const otherStations = positions.filter((row) => row.station.id !== station.id && row.meters !== null);
-  function neighbors(distance: number) {
-    const next = otherStations.findIndex((row) => row.meters! > distance);
-    const before = otherStations[(next < 0 ? otherStations.length : next) - 1]?.station;
-    const after = otherStations[next]?.station;
-    return [before, after].flatMap((s) => (s ? [s.name || t[s.kind]] : [])).join(' → ');
   }
   return (
     <>
@@ -111,28 +105,15 @@ export function StationPosition({ doc, station, t, onMove, onPick }: Props) {
             {t.pickRoutePosition}
           </button>
           {(candidates.length > 1 || (!station.anchor && candidates.length > 0)) && (
-            <div className="station-passes" role="group" aria-label={t.nearbyPasses}>
-              <strong>{t.nearbyPasses}</strong>
-              <span className="hint">{t.nearbyPassHelp}</span>
-              {candidates.map((candidate) => {
-                const active = meters != null && Math.abs(meters - candidate.distance) < 0.05;
-                const context = neighbors(candidate.distance);
-                return (
-                  <button
-                    key={candidate.distance}
-                    type="button"
-                    className="station-pass"
-                    data-pick-pass
-                    aria-pressed={active}
-                    onClick={() => move(candidate.anchor)}
-                  >
-                    <b>{(candidate.distance / 1000).toFixed(3)} km</b>
-                    {active && <Check size={13} />}
-                    {context && <small>{context}</small>}
-                  </button>
-                );
-              })}
-            </div>
+            <StationPassOptions
+              candidates={candidates}
+              positions={positions}
+              stationId={station.id}
+              meters={meters}
+              title={t.nearbyPasses}
+              t={t}
+              onPick={move}
+            />
           )}
         </>
       ) : (

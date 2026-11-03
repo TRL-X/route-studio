@@ -2,22 +2,29 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Map as LibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { anchorPoint, lonDelta, nearestAnchor } from '../domain/model';
-import type { Anchor, RouteDocument } from '../domain/model';
+import { anchorPoint, lonDelta } from '../domain/model';
+import type { Anchor, RouteDocument, Station } from '../domain/model';
+import { orderedStations, stationPassages, type StationPassage } from '../domain/projection';
+import type { Tool } from '../app/Inspector';
+import { StationPassOptions } from '../app/StationPassOptions';
 import { strings, type Lang } from '../app/strings';
 import './views.css';
 
 type Point = { lat: number; lon: number };
 type XY = { x: number; y: number };
 type Camera = XY & { zoom: number };
-type Tool = 'select' | 'add' | 'anchor' | 'location';
 interface MapViewProps {
   doc: RouteDocument;
   lang: Lang;
   tool: Tool;
+  axis: number[];
+  revealSelection: number;
   selectedVertexId: string | null;
   selectedStationId: string | null;
   focusAnchor?: Anchor | null;
+  profileHoverAnchor?: Anchor | null;
+  onProbeDistance?: (meters: number | null) => void;
+  onCancelTool: () => void;
   onSelectVertex: (id: string) => void;
   onSelectStation: (id: string) => void;
   onMoveVertex: (id: string, point: Point) => void;
@@ -30,6 +37,64 @@ const radians = Math.PI / 180;
 const scaleAt = (zoom: number) => 512 * 2 ** zoom;
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(n, high));
 const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
+const snapRadius = 12; // CSS pixels, independent of zoom and display pixel density.
+type Snap = XY & { anchor: Anchor; meters: number };
+type MapStation = {
+  station: Station;
+  anchor: XY | null;
+  location: XY | null;
+  marker: XY;
+  name: string;
+  chosen: boolean;
+  label?: XY & { side: 'start' | 'end' };
+};
+
+function snapToRoute(cursor: XY, screen: (XY & { id: string })[], axis: number[]): Snap | null {
+  let hit: Snap | null = null;
+  let best = snapRadius ** 2;
+  for (let i = 1; i < screen.length; i++) {
+    const a = screen[i - 1],
+      b = screen[i];
+    if (
+      cursor.x < Math.min(a.x, b.x) - snapRadius ||
+      cursor.x > Math.max(a.x, b.x) + snapRadius ||
+      cursor.y < Math.min(a.y, b.y) - snapRadius ||
+      cursor.y > Math.max(a.y, b.y) + snapRadius
+    )
+      continue;
+    const dx = b.x - a.x,
+      dy = b.y - a.y,
+      length2 = dx * dx + dy * dy;
+    const fraction = length2 ? clamp(((cursor.x - a.x) * dx + (cursor.y - a.y) * dy) / length2, 0, 1) : 0;
+    const x = a.x + fraction * dx,
+      y = a.y + fraction * dy;
+    const d2 = (x - cursor.x) ** 2 + (y - cursor.y) ** 2;
+    if (d2 > best || (hit && d2 === best)) continue;
+    best = d2;
+    hit = {
+      x,
+      y,
+      anchor: fraction === 1 ? { vertexId: b.id, fraction: 0 } : { vertexId: a.id, fraction },
+      meters: axis[i - 1] + (axis[i] - axis[i - 1]) * fraction,
+    };
+  }
+  return hit;
+}
+
+function StationSymbol({ kind, x, y }: XY & { kind: Station['kind'] }) {
+  if (kind === 'start') return <circle className="rv-station-pin" cx={x} cy={y} r={5} />;
+  if (kind === 'poi') return <path className="rv-station-pin" d={`M${x} ${y - 6}l5.6 10h-11.2z`} />;
+  return (
+    <rect
+      className="rv-station-pin"
+      x={x - 4.3}
+      y={y - 4.3}
+      width={8.6}
+      height={8.6}
+      transform={kind === 'cp' ? `rotate(45 ${x} ${y})` : undefined}
+    />
+  );
+}
 function project(point: Point): XY {
   const φ = clamp(point.lat, -85.051129, 85.051129) * radians;
   return { x: (point.lon + 180) / 360, y: (1 - Math.asinh(Math.tan(φ)) / Math.PI) / 2 };
@@ -128,7 +193,17 @@ export function MapView(props: MapViewProps) {
   const [manualCamera, setCamera] = useState<Camera | null>(null);
   const [showBase, setShowBase] = useState(false);
   const [baseFailed, setBaseFailed] = useState(false);
-  const [hover, setHover] = useState<Point | null>(null);
+  const [hover, setHover] = useState<(XY & { onRoute: boolean }) | null>(null);
+  const [mapProbe, setMapProbe] = useState<(XY & { meters: number }) | null>(null);
+  const [passes, setPasses] = useState<StationPassage[] | null>(null);
+  const passPanel = useRef<HTMLDivElement>(null);
+  useEffect(() => setPasses(null), [tool, doc.vertices, selectedStationId]);
+  useEffect(() => setMapProbe(null), [tool, doc.vertices, manualCamera, size]);
+  const probeDistance = tool === 'select' ? (mapProbe?.meters ?? null) : null;
+  useEffect(() => props.onProbeDistance?.(probeDistance), [props.onProbeDistance, probeDistance]);
+  useEffect(() => {
+    if (passes) passPanel.current?.querySelector('button')?.focus();
+  }, [passes]);
   const [preview, setPreview] = useState<{ id: string; p: XY } | null>(null);
   const drag = useRef<{
     start: XY;
@@ -161,6 +236,7 @@ export function MapView(props: MapViewProps) {
     });
   }, [doc.vertices]);
   const vertexIndices = useMemo(() => new Map(doc.vertices.map((v, i) => [v.id, i])), [doc.vertices]);
+  const [textMeasure] = useState(() => document.createElement('canvas').getContext('2d'));
   const fit = useMemo(() => fitted(world, size.width, size.height), [world, size]);
   const camera = manualCamera ?? fit;
   const scale = scaleAt(camera.zoom);
@@ -177,6 +253,44 @@ export function MapView(props: MapViewProps) {
     x: camera.x + (p.x - size.width / 2) / scale,
     y: camera.y + (p.y - size.height / 2) / scale,
   });
+  const mapStations = useMemo(() => {
+    const markers: MapStation[] = [];
+    doc.stations.forEach((station, i) => {
+      const anchor = station.anchor ? screenPoint(anchorPoint(doc, station.anchor, vertexIndices)) : null;
+      const location = station.location ? screenPoint(station.location) : null;
+      const marker = anchor ?? location;
+      if (!marker) return;
+      const chosen = station.id === selectedStationId;
+      const name = (chosen && station.name) || station.shortLabel || station.name || String(i + 1);
+      markers.push({ station, anchor, location, marker, name, chosen });
+    });
+    // Reserve the selected label first and paint its symbol last so it remains visible on a shared pass.
+    markers.sort((a, b) => Number(a.chosen) - Number(b.chosen));
+    const occupied: { left: number; right: number; top: number; bottom: number }[] = [];
+    if (textMeasure) textMeasure.font = '600 12px system-ui, sans-serif';
+    for (let i = markers.length - 1; i >= 0; i--) {
+      const item = markers[i];
+      const width = (textMeasure?.measureText(item.name).width ?? item.name.length * 12) + 4;
+      for (const offsetY of [-8, 18]) {
+        for (const side of ['start', 'end'] as const) {
+          const x = item.marker.x + (side === 'start' ? 10 : -10),
+            y = item.marker.y + offsetY;
+          const left = side === 'start' ? x : x - width,
+            right = left + width,
+            top = y - 12,
+            bottom = y + 3;
+          if (left < 2 || right > size.width - 2 || top < 2 || bottom > size.height - 2) continue;
+          if (occupied.some((b) => b.left < right && b.right > left && b.top < bottom && b.bottom > top))
+            continue;
+          item.label = { x, y, side };
+          occupied.push({ left, right, top, bottom });
+          break;
+        }
+        if (item.label) break;
+      }
+    }
+    return markers;
+  }, [doc.stations, vertexIndices, selectedStationId, camera, size, textMeasure]);
   const here = (ev: ReactPointerEvent<SVGSVGElement>): XY => {
     const rect = ev.currentTarget.getBoundingClientRect();
     return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
@@ -239,10 +353,40 @@ export function MapView(props: MapViewProps) {
     }
     return { routePath, handles };
   }, [screen, size]);
-  const activeVertex = screen.find((p) => p.id === selectedVertexId);
+  const activeVertex = selectedVertexId ? screen[vertexIndices.get(selectedVertexId)!] : undefined;
   const focusPoint = props.focusAnchor
     ? screenPoint(anchorPoint(doc, props.focusAnchor, vertexIndices))
     : null;
+  const hoverPoint = props.profileHoverAnchor
+    ? screenPoint(anchorPoint(doc, props.profileHoverAnchor, vertexIndices))
+    : null;
+  const snapping = tool === 'newStation' || tool === 'stationAnchor' || tool === 'insert';
+  const snap = useMemo(
+    () => (snapping && hover?.onRoute && !passes ? snapToRoute(hover, screen, props.axis) : null),
+    [snapping, hover, passes, screen, props.axis],
+  );
+  const selectedStation = selectedStationId
+    ? doc.stations.find((s) => s.id === selectedStationId)
+    : undefined;
+  const selectedPosition = selectedStation?.anchor
+    ? anchorPoint(doc, selectedStation.anchor, vertexIndices)
+    : (selectedStation?.location ??
+      (selectedVertexId ? doc.vertices[vertexIndices.get(selectedVertexId)!] : undefined) ??
+      (props.focusAnchor && anchorPoint(doc, props.focusAnchor, vertexIndices)));
+  const selectionKey = selectedPosition
+    ? [props.revealSelection, selectedPosition.lon, selectedPosition.lat].join('/')
+    : '';
+  const previousSelection = useRef('');
+  useLayoutEffect(() => {
+    if (selectionKey === previousSelection.current) return;
+    previousSelection.current = selectionKey;
+    if (!selectedPosition || tool !== 'select') return;
+    const target = project(selectedPosition);
+    target.x += Math.round(camera.x - target.x);
+    const p = toScreen(target);
+    if (p.x < 8 || p.x > size.width - 8 || p.y < 8 || p.y > size.height - 8)
+      setCamera({ ...target, zoom: camera.zoom });
+  });
   function hitVertex(p: XY) {
     let bestId: string | undefined;
     let best = 8 ** 2;
@@ -260,6 +404,7 @@ export function MapView(props: MapViewProps) {
     ev.preventDefault();
     ev.currentTarget.focus();
     const start = here(ev);
+    setMapProbe(null);
     const pan = ev.button === 1;
     const station =
       !pan && tool === 'select'
@@ -273,8 +418,22 @@ export function MapView(props: MapViewProps) {
   }
   function pointerMove(ev: ReactPointerEvent<SVGSVGElement>) {
     const p = here(ev);
-    setHover(unproject(toWorld(p)));
+    const target = ev.target as Element;
+    const stationId = target.closest('[data-station]')?.getAttribute('data-station');
+    const onRoute = !!stationId || target.matches('.rv-route-hit, .rv-active-vertex');
+    setHover({ ...p, onRoute });
     const d = drag.current;
+    if (!d && tool === 'select' && onRoute) {
+      const station = stationId ? doc.stations.find((s) => s.id === stationId) : undefined;
+      if (station?.anchor) {
+        const { vertexId, fraction } = station.anchor;
+        const i = vertexIndices.get(vertexId)!;
+        const meters = props.axis[i] + ((props.axis[i + 1] ?? props.axis[i]) - props.axis[i]) * fraction;
+        setMapProbe({ ...screenPoint(anchorPoint(doc, station.anchor, vertexIndices)), meters });
+      } else {
+        setMapProbe(snapToRoute(p, screen, props.axis));
+      }
+    } else setMapProbe(null);
     if (!d) return;
     const dx = p.x - d.start.x,
       dy = p.y - d.start.y;
@@ -295,7 +454,8 @@ export function MapView(props: MapViewProps) {
     if (ev.currentTarget.hasPointerCapture(ev.pointerId))
       ev.currentTarget.releasePointerCapture(ev.pointerId);
     if (!d || d.pan) return;
-    const point = unproject(toWorld(here(ev)));
+    const cursor = here(ev);
+    const point = unproject(toWorld(cursor));
     if (d.moved) {
       if (d.vertex) {
         setCamera(d.camera);
@@ -304,12 +464,30 @@ export function MapView(props: MapViewProps) {
       }
       return;
     }
-    if (tool === 'add') {
+    if (tool === 'append') {
       setCamera(camera);
       props.onAddVertex(point);
-    } else if (tool === 'location') props.onPickLocation(point);
-    else if (tool === 'anchor' && doc.vertices.length) props.onPickAnchor(nearestAnchor(doc, point));
-    else if (d.station) props.onSelectStation(d.station);
+    } else if (tool === 'stationLocation') props.onPickLocation(point);
+    else if (snapping) {
+      const hit = snapToRoute(cursor, screen, props.axis);
+      setPasses(null);
+      if (!hit) return;
+      if (tool !== 'insert') {
+        const candidates = stationPassages(
+          doc,
+          anchorPoint(doc, hit.anchor, vertexIndices),
+          props.axis,
+        ).filter(({ anchor }) => {
+          const p = screenPoint(anchorPoint(doc, anchor, vertexIndices));
+          return Math.hypot(p.x - cursor.x, p.y - cursor.y) <= snapRadius;
+        });
+        if (candidates.length > 1) {
+          setPasses(candidates);
+          return;
+        }
+      }
+      props.onPickAnchor(hit.anchor);
+    } else if (d.station) props.onSelectStation(d.station);
     else if (d.vertex) props.onSelectVertex(d.vertex);
   }
 
@@ -321,36 +499,50 @@ export function MapView(props: MapViewProps) {
     lat1 = unproject(toWorld({ x: 0, y: 0 })).lat;
   const grid = [];
   const format = (n: number, step: number) => n.toFixed(Math.max(0, Math.ceil(-Math.log10(step))));
+  let lastLabelEnd = 0;
   for (
     let lon = Math.ceil(lon0 / stepX) * stepX;
     lon <= lon0 + (size.width * 360) / scale + 1e-10;
     lon += stepX
   ) {
     const x = toScreen({ x: (lon + 180) / 360, y: 0 }).x;
+    const label = format(wrap(lon), stepX) + '°';
+    const labelWidth = label.length * 8; // Allow for each glyph of the 12px monospace grid font.
+    const alignEnd = x + 5 + labelWidth > size.width - 4;
+    const labelX = alignEnd ? x - 5 : x + 5;
+    const left = alignEnd ? labelX - labelWidth : labelX;
+    const fits = left >= lastLabelEnd + 4;
+    if (fits) lastLabelEnd = left + labelWidth;
     grid.push(
       <g key={'x' + lon}>
         <path d={'M' + x + ' 0v' + size.height} />
-        <text x={x + 5} y="14">
-          {format(wrap(lon), stepX)}°
-        </text>
+        {fits && (
+          <text x={labelX} y="14" textAnchor={alignEnd ? 'end' : 'start'}>
+            {label}
+          </text>
+        )}
       </g>,
     );
   }
   for (let lat = Math.ceil(lat0 / stepY) * stepY; lat <= lat1 + 1e-10; lat += stepY) {
     const y = toScreen(project({ lat, lon: 0 })).y;
+    // The left edge is shared with the basemap button above and the scale below.
+    const fits = y >= 70 && y <= size.height - 30;
     grid.push(
       <g key={'y' + lat}>
         <path d={'M0 ' + y + 'h' + size.width} />
-        <text x="7" y={y - 4}>
-          {format(lat, stepY)}°
-        </text>
+        {fits && (
+          <text x="7" y={y - 4}>
+            {format(lat, stepY)}°
+          </text>
+        )}
       </g>,
     );
   }
 
   const metresPerPixel = (40075016.69 * Math.cos(center.lat * radians)) / scale;
   const scaleMetres = niceStep(40 * metresPerPixel);
-  const displayPos = hover ?? center;
+  const displayPos = hover ? unproject(toWorld(hover)) : center;
   return (
     <div className={'rv-map' + (showBase ? ' rv-has-base' : '')} ref={container}>
       {showBase && (
@@ -372,7 +564,10 @@ export function MapView(props: MapViewProps) {
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={() => {
+          setHover(null);
+          setMapProbe(null);
+        }}
         onLostPointerCapture={() => {
           drag.current = null;
           setPreview(null);
@@ -396,23 +591,19 @@ export function MapView(props: MapViewProps) {
         {!showBase && <g className="rv-graticule">{grid}</g>}
         <path className="rv-route-halo" d={routePath} />
         <path className="rv-route" d={routePath} />
+        <path className="rv-route-hit" d={routePath} strokeWidth={snapRadius * 2} />
         {handles.map((p) => (
           <circle className="rv-vertex" key={p.id} cx={p.x} cy={p.y} r={2.4} />
         ))}
-        {doc.stations.map((station, i) => {
-          const anchor = station.anchor ? screenPoint(anchorPoint(doc, station.anchor, vertexIndices)) : null;
-          const location = station.location ? screenPoint(station.location) : null;
-          const marker = anchor ?? location;
-          if (!marker) return null;
-          const chosen = station.id === selectedStationId;
-          const label = station.shortLabel || station.name || String(i + 1);
+        {mapStations.map(({ station, anchor, location, marker, chosen, name, label }) => {
           return (
             <g
               key={station.id}
               data-station={station.id}
+              data-kind={station.kind}
               className={'rv-station' + (chosen ? ' rv-station-active' : '')}
             >
-              <title>{station.name || label}</title>
+              <title>{station.name || name}</title>
               {location && anchor && Math.hypot(anchor.x - location.x, anchor.y - location.y) > 8 && (
                 <>
                   <line
@@ -426,18 +617,13 @@ export function MapView(props: MapViewProps) {
                 </>
               )}
               <circle className="rv-station-hit" cx={marker.x} cy={marker.y} r={10} />
-              <rect
-                className="rv-station-pin"
-                x={marker.x - 4.5}
-                y={marker.y - 4.5}
-                width={9}
-                height={9}
-                rx={1.8}
-                transform={'rotate(45 ' + marker.x + ' ' + marker.y + ')'}
-              />
-              <text x={marker.x + 9} y={marker.y - 7}>
-                {label}
-              </text>
+              {chosen && <circle className="rv-selection-ring" cx={marker.x} cy={marker.y} r={9} />}
+              <StationSymbol kind={station.kind} {...marker} />
+              {label && (
+                <text x={label.x} y={label.y} textAnchor={label.side}>
+                  {name}
+                </text>
+              )}
             </g>
           );
         })}
@@ -445,7 +631,56 @@ export function MapView(props: MapViewProps) {
           <circle className="rv-active-vertex" cx={activeVertex.x} cy={activeVertex.y} r={5} />
         )}
         {focusPoint && <circle className="rv-anchor-focus" cx={focusPoint.x} cy={focusPoint.y} r={7} />}
+        {hoverPoint && <circle className="rv-anchor-hover" cx={hoverPoint.x} cy={hoverPoint.y} r={11} />}
+        {tool === 'select' && mapProbe && (
+          <circle className="rv-anchor-hover" cx={mapProbe.x} cy={mapProbe.y} r={11} />
+        )}
+        {snap && (
+          <g className="rv-snap-preview">
+            <circle cx={snap.x} cy={snap.y} r={6} />
+            <text
+              x={snap.x + (snap.x > size.width - 90 ? -10 : 10)}
+              y={snap.y < 26 ? snap.y + 20 : snap.y - 11}
+              textAnchor={snap.x > size.width - 90 ? 'end' : 'start'}
+            >
+              {(snap.meters / 1000).toFixed(3)} km
+            </text>
+          </g>
+        )}
       </svg>
+      {tool !== 'select' && (
+        <div className="rv-mode">
+          <div>
+            <b>
+              {
+                {
+                  append: t.append,
+                  insert: t.insert,
+                  newStation: t.addStation,
+                  stationAnchor: t.pickRoutePosition,
+                  stationLocation: t.location,
+                }[tool]
+              }
+            </b>
+            <span>{snapping ? t.snapHint : tool === 'append' ? t.drawing : t.locating}</span>
+          </div>
+          <button type="button" onClick={props.onCancelTool} aria-label={t.cancel}>
+            Esc
+          </button>
+        </div>
+      )}
+      {snapping && passes && (
+        <div className="rv-pass-panel" ref={passPanel}>
+          <StationPassOptions
+            candidates={passes}
+            positions={orderedStations(doc, props.axis)}
+            stationId={tool === 'stationAnchor' ? (selectedStationId ?? undefined) : undefined}
+            title={t.choosePass}
+            t={t}
+            onPick={props.onPickAnchor}
+          />
+        </div>
+      )}
       <div className="rv-zoom" aria-label={t.mapView}>
         <button type="button" aria-label={t.zoomIn} title={t.zoomIn} onClick={() => zoomBy(1)}>
           +
