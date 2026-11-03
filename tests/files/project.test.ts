@@ -20,6 +20,28 @@ describe('versioned route projects', () => {
     expect(loadProject(saveProject(doc))).toEqual(doc);
     expect(loadProject(saveProject(emptyRoute()))).toEqual(emptyRoute());
   });
+  it.each([
+    { mode: 'unexpected' },
+    { mode: 'manual', degrees: '0' },
+    { mode: 'auto', source: 'BGS WMM2025', date: '2026-11-03', result: {} },
+    {
+      mode: 'auto',
+      source: 'BGS WMM2025',
+      date: '2026-11-03',
+      result: {
+        declinationCdeg: 0,
+        referenceLatE7: 0,
+        referenceLonE7: 0,
+        referenceDate: '2026-11-01',
+      },
+    },
+  ])('rejects invalid saved declination settings', (settings) => {
+    const file = JSON.parse(saveProject(doc));
+    file.document.declination = settings;
+    expect(() => loadProject(JSON.stringify(file))).toThrowError(
+      expect.objectContaining({ code: 'invalid-project' }),
+    );
+  });
   it('distinguishes unsupported project versions from malformed data', () => {
     const file = JSON.parse(saveProject(doc));
     expect(() => loadProject(JSON.stringify({ ...file, version: 2 }))).toThrowError(

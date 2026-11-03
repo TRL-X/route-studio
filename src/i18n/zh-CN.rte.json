@@ -34,6 +34,8 @@
   "context.invalidContext": "RTE 导入信息格式错误。",
   "context.invalidIndex": "几何索引格式错误。",
   "context.vertexLimit": "路线点数超过读取上限。",
+  "declination.manualFields": "请输入 −180° 到 180° 之间的磁偏角和有效的参考坐标。",
+  "declination.lookupRequired": "当前地点和日期没有磁偏角查询结果。请重新查询、手动编辑或选择省略。",
   "declination.dateFormat": "磁偏角日期应为 YYYY-MM-DD。",
   "declination.dateOutsideInterval": "磁偏角参考日期超出有效期。",
   "declination.invalidDate": "磁偏角日期无效。",

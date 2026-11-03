@@ -19,6 +19,7 @@ interface ToolbarProps {
   lang: Lang;
   onLanguage: (lang: Lang) => void;
   locked: boolean;
+  lookupPending: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onHistory: (action: 'undo' | 'redo') => void;
@@ -49,6 +50,7 @@ export function EditorToolbar({
   validation,
   onLanguage,
   locked,
+  lookupPending,
   canUndo,
   canRedo,
   onHistory,
@@ -196,7 +198,8 @@ export function EditorToolbar({
             className="button validation-action"
             aria-label={t.inspect}
             aria-describedby="rte-check-state"
-            title={t.inspect + ' · ' + t[validation]}
+            title={lookupPending ? t.magPending : t.inspect + ' · ' + t[validation]}
+            disabled={lookupPending}
             data-state={validation}
             onClick={() => void onCompile(false)}
           >
@@ -206,7 +209,12 @@ export function EditorToolbar({
               <small id="rte-check-state">{t[validation]}</small>
             </span>
           </button>
-          <button className="primary" onClick={() => void onCompile(true)}>
+          <button
+            className="primary"
+            disabled={lookupPending}
+            title={lookupPending ? t.magPending : undefined}
+            onClick={() => void onCompile(true)}
+          >
             <ArrowDownToLine />
             {t.export}
           </button>

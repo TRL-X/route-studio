@@ -1,5 +1,6 @@
-import type { RouteDocument } from '../domain/model';
-import { validateRteContext } from '../rte/context';
+import { supportedLookupDate } from '../domain/declination';
+import { magneticSource, type RouteDocument } from '../domain/model';
+import { validateRteContext, validateDeclination } from '../rte/context';
 import { RouteFileError } from './errors';
 
 const format = 'route-studio';
@@ -77,6 +78,31 @@ function validateDocument(value: unknown): asserts value is RouteDocument {
     );
     check(typeof station.boundary === 'boolean' && (station.anchor === null || anchor(station.anchor)));
     check(station.location === undefined || position(station.location));
+  }
+  const settings = value.declination;
+  if (settings !== undefined) {
+    check(record(settings));
+    if (settings.mode === 'auto') {
+      check(settings.source === magneticSource && typeof settings.date === 'string');
+      if (settings.result !== undefined) {
+        try {
+          validateDeclination(settings.result);
+        } catch {
+          throw new RouteFileError('invalid-project');
+        }
+        check(
+          supportedLookupDate(settings.date) &&
+            settings.result.referenceDate === settings.date &&
+            settings.result.validFrom === undefined &&
+            settings.result.validUntil === undefined,
+        );
+      }
+    } else if (settings.mode === 'manual') {
+      check([settings.degrees, settings.lat, settings.lon].every((n) => n === null || finite(n)));
+      check(
+        [settings.date, settings.validFrom, settings.validUntil].every((date) => typeof date === 'string'),
+      );
+    } else check(settings.mode === 'omit');
   }
   if (value.rte !== undefined) {
     try {

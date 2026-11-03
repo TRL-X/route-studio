@@ -1,15 +1,20 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { Check, ChevronLeft, ChevronRight, MapPin, Trash2 } from 'lucide-react';
 import { anchorDistance, type Point, type RouteDocument, type Sample, type Station } from '../domain/model';
 import { deleteVertex, moveVertex, updateStation } from '../domain/edit';
-import type { Copy } from './strings';
+import type { Copy, Lang } from './strings';
+import { Field } from './Field';
+import { DeclinationFields } from './DeclinationFields';
+import type { LookupState } from './useDeclinationLookup';
 import { StationPosition } from './StationPosition';
 
 export type Selection =
   { type: 'route' } | { type: 'vertex' | 'station'; id: string } | { type: 'sample'; index: number };
 export type Tool = 'select' | 'append' | 'insert' | 'newStation' | 'stationAnchor' | 'stationLocation';
 interface Props {
+  lang: Lang;
   issue?: string;
+  lookup: LookupState;
   doc: RouteDocument;
   t: Copy;
   selected: Selection;
@@ -17,60 +22,6 @@ interface Props {
   change: (doc: RouteDocument) => void;
   setTool: (tool: Tool) => void;
   status: (text: string) => void;
-}
-function Field({
-  label,
-  value,
-  save,
-  number,
-  min,
-  max,
-  optional = false,
-  onInvalid,
-  describedBy,
-}: {
-  label: string;
-  value: string | number | null;
-  save: (value: string) => void;
-  number?: boolean;
-  min?: number;
-  max?: number;
-  optional?: boolean;
-  onInvalid?: () => void;
-  describedBy?: string;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        type={number ? 'number' : 'text'}
-        step={number ? 'any' : undefined}
-        aria-describedby={describedBy}
-        min={min}
-        max={max}
-        value={draft ?? value ?? ''}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-          if (e.key === 'Escape') {
-            setDraft(null);
-            e.currentTarget.value = String(value ?? '');
-            e.currentTarget.blur();
-          }
-        }}
-        onBlur={(e) => {
-          const raw = e.target.value;
-          if (!e.currentTarget.validity.valid || (number && !optional && raw === '')) {
-            onInvalid?.();
-          } else if (raw !== String(value ?? '')) {
-            save(raw);
-          }
-          setDraft(null);
-        }}
-      />
-    </label>
-  );
 }
 function Stepper({
   label,
@@ -112,7 +63,7 @@ function Stepper({
     </div>
   );
 }
-export function Inspector({ doc, t, selected, choose, change, setTool, status, issue }: Props) {
+export function Inspector({ doc, t, selected, choose, change, setTool, status, issue, lookup, lang }: Props) {
   const v = selected.type === 'vertex' ? doc.vertices.find((v) => v.id === selected.id) : undefined;
   const station = selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
   const sample = selected.type === 'sample' ? doc.elevation[selected.index] : undefined;
@@ -367,6 +318,7 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
               </button>
             )}
             <p className="hint">{t.sampleHelp}</p>
+            <DeclinationFields lang={lang} doc={doc} t={t} change={change} lookup={lookup} />
           </>
         )}
       </div>
