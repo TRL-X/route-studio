@@ -1,5 +1,5 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import { distances, newId, type Anchor, type RouteDocument } from '../domain/model';
+import { automaticDeclination, distances, newId, type Anchor, type RouteDocument } from '../domain/model';
 import { stationPassages, type StationPassage } from '../domain/projection';
 import { RouteFileError } from './errors';
 
@@ -233,6 +233,7 @@ function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: bool
   }));
   const doc: RouteDocument = {
     name: line.name,
+    declination: automaticDeclination(),
     vertices,
     elevation,
     stations: [],
@@ -297,6 +298,7 @@ export function parseRoutes(xml: string, filename: string): RouteChoice[] {
       const line = { ...source, points: mergeStationaryPoints(source.points) };
       return {
         name: line.name,
+        declination: automaticDeclination(),
         pointCount: line.points.length,
         hasUnconfirmedHeights: line.heights === 'unconfirmed' && line.points.some((p) => p.height !== null),
         open: (useUnconfirmedHeights = false) => openLine(line, result.landmarks, useUnconfirmedHeights),

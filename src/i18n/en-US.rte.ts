@@ -41,6 +41,10 @@ export const english = {
   'context.invalidContext': 'Invalid saved RTE context.',
   'context.invalidIndex': 'Invalid geometry index.',
   'context.vertexLimit': 'Vertex count exceeds the reader limit.',
+  'declination.manualFields':
+    'Enter a magnetic declination from −180° to 180° and valid reference coordinates.',
+  'declination.lookupRequired':
+    'No magnetic declination result for this location and date. Retry the lookup, enter a manual value, or select Omit.',
   'declination.dateFormat': 'Use YYYY-MM-DD for magnetic reference dates.',
   'declination.dateOutsideInterval': 'Magnetic reference date lies outside the validity interval.',
   'declination.invalidDate': 'Invalid Gregorian magnetic reference date.',

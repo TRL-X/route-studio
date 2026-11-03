@@ -1,3 +1,4 @@
+import { exportDeclination } from '../domain/declination';
 import { msg, type RteText } from './messages';
 import type { RteTarget } from './check';
 import {
@@ -315,7 +316,7 @@ function compile(doc: RouteDocument) {
     total,
     reference: doc.elevationReference,
     events,
-    declination: rte?.magneticDeclination,
+    declination: exportDeclination(doc),
     stages: summarize(events, elev),
   };
   verifyRoute(meta, geom, elev);

@@ -156,5 +156,26 @@
     "invalid-project": "Invalid Route Studio project.",
     "project-version": "Unsupported project file version.",
     "draft-storage": "Local recovery storage is unavailable."
-  }
+  },
+  "magTitle": "Magnetic declination",
+  "magMode": "Declination mode",
+  "magAuto": "Automatic lookup",
+  "magManual": "Manual entry",
+  "magOmit": "Omit",
+  "magDegrees": "Magnetic declination (°)",
+  "magLat": "Reference latitude (°)",
+  "magLon": "Reference longitude (°)",
+  "magDate": "Reference date (UTC)",
+  "magFrom": "Valid from (optional)",
+  "magUntil": "Valid until (optional)",
+  "magLookupHelp": "Queries BGS WMM2025 with the route midpoint and date, assuming zero ellipsoid height.",
+  "magMidpoint": "Route midpoint",
+  "magRetry": "Repeat lookup",
+  "magSign": "East is positive and west is negative. Enter both validity dates or leave both empty.",
+  "magPending": "Looking up magnetic declination…",
+  "magNoRoute": "Add a route segment to determine the reference location.",
+  "magDateRange": "WMM2025 lookup requires a date from 2025-01-01 through 2029-12-31.",
+  "magTimeout": "BGS timed out. Retry, enter a manual value, or select Omit.",
+  "magUnavailable": "BGS is unavailable. Retry, enter a manual value, or select Omit.",
+  "magInvalidResponse": "BGS returned an invalid or mismatched result. Retry, enter a manual value, or select Omit."
 }

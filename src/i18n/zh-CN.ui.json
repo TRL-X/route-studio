@@ -156,5 +156,26 @@
     "invalid-project": "Route Studio 项目无效。",
     "project-version": "不支持此项目版本。",
     "draft-storage": "本地草稿存储不可用。"
-  }
+  },
+  "magTitle": "磁偏角",
+  "magMode": "磁偏角模式",
+  "magAuto": "自动查询",
+  "magManual": "手动编辑",
+  "magOmit": "省略",
+  "magDegrees": "磁偏角（°）",
+  "magLat": "参考纬度（°）",
+  "magLon": "参考经度（°）",
+  "magDate": "参考日期（UTC）",
+  "magFrom": "有效期起始日期（可选）",
+  "magUntil": "有效期结束日期（可选）",
+  "magLookupHelp": "将路线里程中点的坐标和参考日期发送给 BGS WMM2025 查询，假定椭球高为零。",
+  "magMidpoint": "路线里程中点",
+  "magRetry": "重新查询",
+  "magSign": "东偏为正，西偏为负。有效期起止日期须同时填写，也可都留空。",
+  "magPending": "正在查询磁偏角…",
+  "magNoRoute": "请添加有效路线段以确定参考位置。",
+  "magDateRange": "WMM2025 支持查询 2025-01-01 至 2029-12-31 之间的日期。",
+  "magTimeout": "BGS 查询超时。请重试、手动编辑或选择省略。",
+  "magUnavailable": "无法连接 BGS。请重试、手动编辑或选择省略。",
+  "magInvalidResponse": "BGS 返回的数据无效或与查询条件不符。请重试、手动编辑或选择省略。"
 }

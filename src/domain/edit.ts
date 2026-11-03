@@ -1,3 +1,4 @@
+import { midpointReference, sameReference } from './declination';
 import {
   anchorPoint,
   distanceMeters,
@@ -9,11 +10,21 @@ import {
 } from './model';
 
 function geometryChanged(doc: RouteDocument): RouteDocument {
-  if (!doc.rte) return doc;
-  const rte = { ...doc.rte };
-  delete rte.distanceDm;
-  delete rte.indexBlockSizes;
-  return { ...doc, rte };
+  if (doc.rte) {
+    const rte = { ...doc.rte };
+    delete rte.distanceDm;
+    delete rte.indexBlockSizes;
+    doc = { ...doc, rte };
+  }
+  const settings = doc.declination;
+  if (
+    settings?.mode === 'auto' &&
+    settings.result &&
+    !sameReference(settings.result, midpointReference(doc, settings.date))
+  ) {
+    return { ...doc, declination: { ...settings, result: undefined } };
+  }
+  return doc;
 }
 
 export function moveVertex(doc: RouteDocument, id: string, point: Point) {

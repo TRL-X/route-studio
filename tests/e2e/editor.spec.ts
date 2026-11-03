@@ -1,8 +1,20 @@
-import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { strings } from '../../src/app/strings';
 import { loadProject } from '../../src/files/project';
 import { readRte } from '../../src/rte';
+
+import { open, download } from './files';
+import { bgsRequests, answerBgs } from './bgs';
+
+test.beforeEach(async ({ page }) => {
+  await page.route(bgsRequests, (route) => answerBgs(route));
+});
+
+async function setSurveyDate(page: Page) {
+  const date = page.getByLabel('Reference date (UTC)');
+  await date.fill('2026-11-03');
+  await date.press('Enter');
+}
 
 const gpx = `<gpx version="1.1">
   <wpt lat="30.011" lon="105.01"><name>Water</name></wpt>
@@ -11,22 +23,6 @@ const gpx = `<gpx version="1.1">
     <trkpt lat="30.01" lon="105.01"><ele>20</ele></trkpt>
     <trkpt lat="30.02" lon="105.02"><ele>15</ele></trkpt>
   </trkseg></trk></gpx>`;
-
-async function open(page: Page, name: string, bytes: Buffer) {
-  const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
-  await (await chooser).setFiles({ name, buffer: bytes, mimeType: 'application/octet-stream' });
-}
-
-async function download(page: Page, button: string) {
-  const started = page.waitForEvent('download');
-  await page.getByRole('button', { name: button, exact: true }).click();
-  const file = await started;
-  return {
-    name: file.suggestedFilename(),
-    bytes: await readFile((await file.path())!),
-  };
-}
 
 test('desktop editor switches languages and retains the preference', async ({ page }) => {
   await page.goto('/');
@@ -41,6 +37,7 @@ test('desktop editor switches languages and retains the preference', async ({ pa
 test('imports, edits, undoes, recovers a draft and downloads project and device files', async ({ page }) => {
   await page.goto('/');
   await open(page, 'ridge.gpx', Buffer.from(gpx));
+  await setSurveyDate(page);
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('North ridge');
   await name.fill('Ridge checkpoint');
@@ -84,6 +81,7 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
   await open(page, 'incomplete.gpx', Buffer.from(gpx.replace('<ele>20</ele>', '')));
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('North ridge');
+  await setSurveyDate(page);
   const check = page.getByRole('button', { name: 'Check RTE', exact: true });
   await expect(check).toHaveAccessibleDescription('Not checked');
   await check.click();
@@ -118,6 +116,7 @@ test('opens a selected KML line with explicit height confirmation', async ({ pag
   await dialog.getByRole('checkbox', { name: 'Use the altitude values in this KML' }).check();
   await dialog.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Long loop', exact: true })).toBeVisible();
+  await setSurveyDate(page);
   const device = await download(page, 'Download RTE');
   expect(readRte(device.bytes).elevation.map((sample) => sample.height)).toEqual([200, 230]);
 });
@@ -134,6 +133,7 @@ test('fills elevation gaps in one edit and asks before resampling device-distanc
     '<trkpt lat="0" lon="0.002"><ele>30</ele></trkpt></trkseg></trk></gpx>';
   await page.goto('/');
   await open(page, 'close.gpx', Buffer.from(source));
+  await setSurveyDate(page);
   const fill = page.getByRole('button', { name: 'Fill elevation gaps (1)' });
   await fill.click();
   await expect(page.getByRole('status')).toContainText('Estimated heights: 1. Still missing: 0.');

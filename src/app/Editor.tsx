@@ -30,6 +30,7 @@ import { EditorToolbar } from './EditorToolbar';
 import { RouteOutline } from './RouteOutline';
 import { ProfilePanel } from './ProfilePanel';
 import { Inspector, type Selection, type Tool } from './Inspector';
+import { useDeclinationLookup } from './useDeclinationLookup';
 import { useHistory } from './history';
 import { runIO, type Choice, type IOResult } from './io';
 import { initialLanguage, strings, type Lang } from './strings';
@@ -98,6 +99,7 @@ export function Editor({
   const [example, setExample] = useState(!restored);
   const [source, setSource] = useState('');
   const [session, setSession] = useState(0);
+  const lookup = useDeclinationLookup(doc, session, dispatch);
   const [savedDoc, setSavedDoc] = useState(doc);
   const [notice, setNotice] = useState<Localized | null>(restored ? both('recovery') : null);
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -354,6 +356,7 @@ export function Editor({
           lang={lang}
           onLanguage={setLang}
           locked={busy || !!pending || !!choices}
+          lookupPending={lookup.pending}
           canUndo={history.past.length > 0}
           canRedo={history.future.length > 0}
           onHistory={historyAction}
@@ -517,6 +520,8 @@ export function Editor({
             </ProfilePanel>
           </main>
           <Inspector
+            lang={lang}
+            lookup={lookup}
             doc={doc}
             t={t}
             selected={selected}

@@ -1,4 +1,26 @@
-import type { RteContext } from '../rte/context';
+import type { MagneticDeclination, RteContext } from '../rte/context';
+
+export const magneticSource = 'BGS WMM2025' as const;
+export interface AutomaticDeclination {
+  mode: 'auto';
+  source: typeof magneticSource;
+  date: string;
+  result?: MagneticDeclination;
+}
+export interface ManualDeclination {
+  mode: 'manual';
+  degrees: number | null;
+  lat: number | null;
+  lon: number | null;
+  date: string;
+  validFrom: string;
+  validUntil: string;
+}
+export type DeclinationSettings = AutomaticDeclination | ManualDeclination | { mode: 'omit' };
+
+export function automaticDeclination(date = new Date().toISOString().slice(0, 10)): AutomaticDeclination {
+  return { mode: 'auto', source: magneticSource, date };
+}
 
 export interface Point {
   lat: number;
@@ -32,6 +54,7 @@ export interface RouteDocument {
   stations: Station[];
   elevationReference: 0 | 1 | 2;
   rte?: RteContext;
+  declination?: DeclinationSettings;
 }
 
 export function newId(): string {
@@ -44,6 +67,7 @@ export function newId(): string {
 }
 export const emptyRoute = (): RouteDocument => ({
   name: '',
+  declination: automaticDeclination(),
   vertices: [],
   elevation: [],
   stations: [],
