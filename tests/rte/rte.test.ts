@@ -279,10 +279,12 @@ describe('RTE 1.0', () => {
 });
 
 describe('export processing', () => {
-  test('the default preview preserves reference vectors byte for byte', () => {
+  const unprocessed = { intervalM: 0, toleranceM: 0, smoothingM: 0 } as const;
+
+  test('disabling processing preserves reference vectors byte for byte', () => {
     for (const id of ['a', 'b', 'c']) {
       const original = vector(id);
-      expect(prepareRte(readRte(original)).bytes).toEqual(original);
+      expect(prepareRte(readRte(original), unprocessed).bytes).toEqual(original);
     }
   });
 
@@ -309,7 +311,7 @@ describe('export processing', () => {
       { anchor: { vertexId: doc.vertices.at(-1)!.id, fraction: 0 }, height: 12 },
     ];
     const before = structuredClone(doc);
-    const source = prepareRte(doc);
+    const source = prepareRte(doc, unprocessed);
     expect(source.preview.shared).toEqual([{ meters: 7.3, height: 10 }]);
     const processed = prepareRte(doc, { intervalM: 10, toleranceM: 2, smoothingM: 0 });
     const sections = readSections(processed.bytes);

@@ -18,7 +18,7 @@ export function validateExportOptions(options: ExportOptions) {
   }
 }
 
-export const defaultExportOptions: ExportOptions = { intervalM: 0, toleranceM: 0, smoothingM: 0 };
+export const defaultExportOptions: ExportOptions = { intervalM: 10, toleranceM: 2, smoothingM: 10 };
 
 // Continuous source distances and heights in dm. Only the final device nodes are rounded.
 export type ProfilePoint = [distance: number, height: number];
