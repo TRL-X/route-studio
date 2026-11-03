@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, MapPin, Trash2 } from 'lucide-react';
 import { anchorDistance, type Point, type RouteDocument, type Sample, type Station } from '../domain/model';
 import { deleteVertex, moveVertex, updateStation } from '../domain/edit';
@@ -7,8 +7,9 @@ import { StationPosition } from './StationPosition';
 
 export type Selection =
   { type: 'route' } | { type: 'vertex' | 'station'; id: string } | { type: 'sample'; index: number };
-export type Tool = 'select' | 'append' | 'insert' | 'stationAnchor' | 'stationLocation';
+export type Tool = 'select' | 'append' | 'insert' | 'newStation' | 'stationAnchor' | 'stationLocation';
 interface Props {
+  issue?: string;
   doc: RouteDocument;
   t: Copy;
   selected: Selection;
@@ -26,6 +27,7 @@ function Field({
   max,
   optional = false,
   onInvalid,
+  describedBy,
 }: {
   label: string;
   value: string | number | null;
@@ -35,6 +37,7 @@ function Field({
   max?: number;
   optional?: boolean;
   onInvalid?: () => void;
+  describedBy?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
@@ -43,6 +46,7 @@ function Field({
       <input
         type={number ? 'number' : 'text'}
         step={number ? 'any' : undefined}
+        aria-describedby={describedBy}
         min={min}
         max={max}
         value={draft ?? value ?? ''}
@@ -79,36 +83,36 @@ function Stepper({
   index: number;
   select: (i: number) => void;
 }) {
+  const inputId = useId();
   return (
     <div className="index-stepper">
+      <label htmlFor={inputId}>{label}</label>
       <button aria-label={label + ' −1'} disabled={!index} onClick={() => select(index - 1)}>
         <ChevronLeft size={14} />
       </button>
-      <label>
-        <span>{label}</span>
-        <input
-          type="number"
-          min={1}
-          max={count}
-          key={index}
-          defaultValue={index + 1}
-          onBlur={(e) => {
-            const i = e.target.valueAsNumber - 1;
-            if (Number.isInteger(i) && i >= 0 && i < count) select(i);
-            else e.target.value = String(index + 1);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
-        />
-      </label>
+      <input
+        id={inputId}
+        type="number"
+        min={1}
+        max={count}
+        key={index}
+        defaultValue={index + 1}
+        onBlur={(e) => {
+          const i = e.target.valueAsNumber - 1;
+          if (Number.isInteger(i) && i >= 0 && i < count) select(i);
+          else e.target.value = String(index + 1);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+      />
       <button aria-label={label + ' +1'} disabled={index === count - 1} onClick={() => select(index + 1)}>
         <ChevronRight size={14} />
       </button>
     </div>
   );
 }
-export function Inspector({ doc, t, selected, choose, change, setTool, status }: Props) {
+export function Inspector({ doc, t, selected, choose, change, setTool, status, issue }: Props) {
   const v = selected.type === 'vertex' ? doc.vertices.find((v) => v.id === selected.id) : undefined;
   const station = selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
   const sample = selected.type === 'sample' ? doc.elevation[selected.index] : undefined;
@@ -158,6 +162,12 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
     );
   }
   const title = v ? t.vertex : station ? t.station : sample ? t.sample : t.details;
+  const diagnostic = issue && (
+    <div className="field-issue" id="inspector-diagnostic" role="note">
+      <strong>{t.validation}</strong>
+      <p>{issue}</p>
+    </div>
+  );
   return (
     <aside className="inspector">
       <div className="panel-heading">{t.inspector}</div>
@@ -167,6 +177,7 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
       >
         <div className="eyebrow">{t.attributes}</div>
         <h2>{title}</h2>
+        {!sample && diagnostic}
         {v ? (
           <>
             <Stepper
@@ -176,20 +187,22 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
               select={(i) => choose({ type: 'vertex', id: doc.vertices[i].id })}
             />
             {coords(v, (p) => change(moveVertex(doc, v.id, p)))}
-            <button className="sub-action" onClick={addSample}>
-              {t.elevation}
-            </button>
-            <button
-              className="danger"
-              disabled={doc.vertices.length <= 2}
-              onClick={() => {
-                change(deleteVertex(doc, v.id));
-                choose({ type: 'route' });
-              }}
-            >
-              <Trash2 />
-              {t.delete}
-            </button>
+            <div className="inspector-actions">
+              <button className="sub-action" onClick={addSample}>
+                {t.elevation}
+              </button>
+              <button
+                className="danger"
+                disabled={doc.vertices.length <= 2}
+                onClick={() => {
+                  change(deleteVertex(doc, v.id));
+                  choose({ type: 'route' });
+                }}
+              >
+                <Trash2 />
+                {t.delete}
+              </button>
+            </div>
           </>
         ) : station ? (
           <>
@@ -248,27 +261,29 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
             ) : (
               <p className="hint">{t.same}</p>
             )}
-            <button className="sub-action" onClick={() => setTool('stationLocation')}>
-              <MapPin />
-              {t.pick}
-            </button>
-            {station.location && (
-              <button className="sub-action" onClick={() => patchStation({ location: undefined })}>
-                {t.reset}
+            <div className="inspector-actions">
+              <button className="sub-action" onClick={() => setTool('stationLocation')}>
+                <MapPin />
+                {t.pick}
               </button>
-            )}
-            {station.kind !== 'start' && station.kind !== 'finish' && (
-              <button
-                className="danger"
-                onClick={() => {
-                  change({ ...doc, stations: doc.stations.filter((s) => s.id !== station.id) });
-                  choose({ type: 'route' });
-                }}
-              >
-                <Trash2 />
-                {t.delete}
-              </button>
-            )}
+              {station.location && (
+                <button className="sub-action" onClick={() => patchStation({ location: undefined })}>
+                  {t.reset}
+                </button>
+              )}
+              {station.kind !== 'start' && station.kind !== 'finish' && (
+                <button
+                  className="danger"
+                  onClick={() => {
+                    change({ ...doc, stations: doc.stations.filter((s) => s.id !== station.id) });
+                    choose({ type: 'route' });
+                  }}
+                >
+                  <Trash2 />
+                  {t.delete}
+                </button>
+              )}
+            </div>
           </>
         ) : sample && selected.type === 'sample' ? (
           <>
@@ -283,6 +298,7 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
             </p>
             <Field
               label={t.height}
+              describedBy={issue ? 'inspector-diagnostic' : undefined}
               value={sample.height}
               number
               optional
@@ -296,19 +312,22 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
                 })
               }
             />
-            <button className="sub-action" onClick={missing}>
-              {t.nextMissing}
-            </button>
-            <button
-              className="danger"
-              onClick={() => {
-                change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
-                choose({ type: 'route' });
-              }}
-            >
-              <Trash2 />
-              {t.delete}
-            </button>
+            {diagnostic}
+            <div className="inspector-actions">
+              <button className="sub-action" onClick={missing}>
+                {t.nextMissing}
+              </button>
+              <button
+                className="danger"
+                onClick={() => {
+                  change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
+                  choose({ type: 'route' });
+                }}
+              >
+                <Trash2 />
+                {t.delete}
+              </button>
+            </div>
           </>
         ) : (
           <>

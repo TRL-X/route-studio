@@ -8,12 +8,14 @@ import {
   Mountain,
   Redo2,
   Save,
+  ShieldAlert,
   ShieldCheck,
   Undo2,
 } from 'lucide-react';
 import { strings, type Lang } from './strings';
 
 interface ToolbarProps {
+  validation: 'unchecked' | 'needsRepair' | 'exportReady' | 'nearestOnly';
   lang: Lang;
   onLanguage: (lang: Lang) => void;
   locked: boolean;
@@ -30,11 +32,11 @@ interface ToolbarProps {
 function BrandMark() {
   return (
     <svg viewBox="0 0 34 34" width="33" height="33" aria-hidden="true">
-      <rect width="34" height="34" rx="7" fill="#214d40" />
+      <rect width="34" height="34" rx="7" fill="#16745a" />
       <path
         d="m5 24 9-16 7 12 4-6 6 10M14 8l.5 10 6 2"
         fill="none"
-        stroke="#def2b7"
+        stroke="#ffffff"
         strokeWidth="2.1"
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -44,6 +46,7 @@ function BrandMark() {
 }
 export function EditorToolbar({
   lang,
+  validation,
   onLanguage,
   locked,
   canUndo,
@@ -141,10 +144,6 @@ export function EditorToolbar({
                 <Save />
                 {t.save}
               </button>
-              <button onClick={() => void onCompile(false)}>
-                <ShieldCheck />
-                {t.inspect}
-              </button>
             </div>
           )}
         </div>
@@ -192,6 +191,20 @@ export function EditorToolbar({
           >
             <Save />
             <span>{t.save}</span>
+          </button>
+          <button
+            className="button validation-action"
+            aria-label={t.inspect}
+            aria-describedby="rte-check-state"
+            title={t.inspect + ' · ' + t[validation]}
+            data-state={validation}
+            onClick={() => void onCompile(false)}
+          >
+            {validation === 'needsRepair' ? <ShieldAlert /> : <ShieldCheck />}
+            <span className="validation-label">
+              <b>{t.inspect}</b>
+              <small id="rte-check-state">{t[validation]}</small>
+            </span>
           </button>
           <button className="primary" onClick={() => void onCompile(true)}>
             <ArrowDownToLine />

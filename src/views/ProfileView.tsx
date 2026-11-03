@@ -8,8 +8,11 @@ interface ProfileViewProps {
   doc: RouteDocument;
   lang: Lang;
   selectedSampleIndex: number | null;
+  hoveredSampleIndex: number | null;
+  mapProbeDistance: number | null;
   focusAnchor?: Anchor | null;
   onSelectSample: (index: number) => void;
+  onHoverSample: (index: number | null) => void;
 }
 
 const margin = { left: 48, right: 25, top: 18, bottom: 25 };
@@ -18,14 +21,16 @@ export function ProfileView({
   doc,
   lang,
   selectedSampleIndex,
+  hoveredSampleIndex,
+  mapProbeDistance,
   focusAnchor,
   onSelectSample,
+  onHoverSample,
 }: ProfileViewProps) {
   const t = strings[lang];
   const fillId = useId();
   const host = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 800, height: 150 });
-  const [hover, setHover] = useState<number | null>(null);
   useLayoutEffect(() => {
     if (!host.current) return;
     const element = host.current;
@@ -106,10 +111,8 @@ export function ProfileView({
     return { line: chunks.join(''), area: areas.join(''), dots };
   }, [samples, route.total, bottom, w, h, low, high]);
 
-  function nearest(event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>) {
+  function nearestSample(d: number) {
     if (!samples.length) return null;
-    const d =
-      ((event.clientX - event.currentTarget.getBoundingClientRect().left - margin.left) / w) * route.total;
     let lo = 0,
       hi = samples.length - 1;
     while (lo < hi) {
@@ -119,8 +122,26 @@ export function ProfileView({
     }
     return lo && Math.abs(samples[lo - 1].distance - d) < Math.abs(samples[lo].distance - d) ? lo - 1 : lo;
   }
+  function pointerSample(event: React.PointerEvent<SVGSVGElement> | React.MouseEvent<SVGSVGElement>) {
+    const px = event.clientX - event.currentTarget.getBoundingClientRect().left - margin.left;
+    return nearestSample((px / w) * route.total);
+  }
+  function readingAt(distance: number) {
+    const i = nearestSample(distance);
+    const sample = i === null ? undefined : samples[i];
+    // Show a measured height only at a matching sample; other positions have a distance readout.
+    return {
+      distance,
+      height: sample && Math.abs(sample.distance - distance) <= 0.05 ? sample.height : undefined,
+    };
+  }
 
-  const focused = hover === null ? samples.find((s) => s.id === selectedSampleIndex) : samples[hover];
+  const selected =
+    selectedSampleIndex === null ? undefined : samples.find((s) => s.id === selectedSampleIndex);
+  const hovered = hoveredSampleIndex === null ? undefined : samples.find((s) => s.id === hoveredSampleIndex);
+  const locked = selected ?? (focusAnchor && readingAt(route.at(focusAnchor)));
+  const probe = hovered ?? (mapProbeDistance === null ? null : readingAt(mapProbeDistance));
+  const readout = probe ?? locked;
   const formatDistance = (d: number) =>
     route.total < 1000 ? Math.round(d) + ' m' : Number((d / 1000).toFixed(2)) + ' km';
   const xTicks = Math.max(1, Math.min(6, Math.floor(w / 100)));
@@ -131,17 +152,20 @@ export function ProfileView({
         role="group"
         aria-label={t.profile}
         tabIndex={0}
-        onPointerMove={(ev) => setHover(nearest(ev))}
-        onPointerLeave={() => setHover(null)}
+        onPointerMove={(ev) => {
+          const hit = pointerSample(ev);
+          onHoverSample(hit === null ? null : samples[hit].id);
+        }}
+        onPointerLeave={() => onHoverSample(null)}
         onClick={(ev) => {
-          const hit = nearest(ev);
+          const hit = pointerSample(ev);
           if (hit !== null) onSelectSample(samples[hit].id);
         }}
         onKeyDown={(ev) => {
           if (!samples.length || (ev.key !== 'ArrowRight' && ev.key !== 'ArrowLeft')) return;
           const i = samples.findIndex((s) => s.id === selectedSampleIndex);
           const next = Math.max(0, Math.min(samples.length - 1, i + (ev.key === 'ArrowRight' ? 1 : -1)));
-          setHover(null);
+          onHoverSample(null);
           onSelectSample(samples[next].id);
           ev.preventDefault();
           ev.stopPropagation();
@@ -149,8 +173,8 @@ export function ProfileView({
       >
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
-            <stop offset="0" stopColor="#489880" stopOpacity=".35" />
-            <stop offset="1" stopColor="#89bc9b" stopOpacity=".14" />
+            <stop offset="0" stopColor="#16745a" stopOpacity=".21" />
+            <stop offset="1" stopColor="#16745a" stopOpacity=".06" />
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((t) => (
@@ -172,7 +196,11 @@ export function ProfileView({
                 y1={margin.top}
                 y2={bottom}
               />
-              <text textAnchor="middle" x={x((route.total * i) / xTicks)} y={bottom + 16}>
+              <text
+                textAnchor={i === xTicks ? 'end' : i === 0 ? 'start' : 'middle'}
+                x={x((route.total * i) / xTicks)}
+                y={bottom + 16}
+              >
                 {formatDistance((route.total * i) / xTicks)}
               </text>
             </g>
@@ -192,22 +220,24 @@ export function ProfileView({
               </path>
             );
           })}
-        {focused && (
+        {locked && (
           <g className="rv-profile-cursor">
-            <line x1={x(focused.distance)} x2={x(focused.distance)} y1={margin.top} y2={bottom} />
-            {focused.height !== null && <circle cx={x(focused.distance)} cy={y(focused.height)} r={3.5} />}
+            <line x1={x(locked.distance)} x2={x(locked.distance)} y1={margin.top} y2={bottom} />
+            {locked.height != null && <circle cx={x(locked.distance)} cy={y(locked.height)} r={4} />}
           </g>
         )}
-        {!focused && focusAnchor && (
-          <g className="rv-profile-cursor">
-            <line x1={x(route.at(focusAnchor))} x2={x(route.at(focusAnchor))} y1={margin.top} y2={bottom} />
+        {probe && probe.distance !== locked?.distance && (
+          <g className="rv-profile-probe">
+            <line x1={x(probe.distance)} x2={x(probe.distance)} y1={margin.top} y2={bottom} />
+            {probe.height != null && <circle cx={x(probe.distance)} cy={y(probe.height)} r={3.5} />}
           </g>
         )}
       </svg>
-      {focused && (
+      {readout && (
         <span className="rv-readout">
-          {formatDistance(focused.distance)} ·{' '}
-          {focused.height === null ? t.missingHeight : focused.height.toFixed(1) + ' m'}
+          {formatDistance(readout.distance)}
+          {readout.height !== undefined &&
+            ' · ' + (readout.height === null ? t.missingHeight : readout.height.toFixed(1) + ' m')}
         </span>
       )}
       {!known && <div className="rv-no-profile">{t.noElevationData}</div>}

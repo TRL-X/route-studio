@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   Check,
-  ChevronsUp,
   Layers,
   Map as MapIcon,
   MousePointer2,
@@ -14,7 +13,14 @@ import {
 } from 'lucide-react';
 import { appendVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
 import { interpolateMissingHeights } from '../domain/elevation';
-import { distances, emptyRoute, newId, type Anchor, type RouteDocument } from '../domain/model';
+import {
+  anchorDistance,
+  distances,
+  emptyRoute,
+  newId,
+  type Anchor,
+  type RouteDocument,
+} from '../domain/model';
 import { ascent } from '../domain/summary';
 import { exampleRoute } from '../domain/example';
 import { saveDraft, saveProject } from '../files';
@@ -22,6 +28,7 @@ import { MapView } from '../views/MapView';
 import { ProfileView } from '../views/ProfileView';
 import { EditorToolbar } from './EditorToolbar';
 import { RouteOutline } from './RouteOutline';
+import { ProfilePanel } from './ProfilePanel';
 import { Inspector, type Selection, type Tool } from './Inspector';
 import { useHistory } from './history';
 import { runIO, type Choice, type IOResult } from './io';
@@ -30,6 +37,12 @@ import './editor.css';
 
 type Localized = { en: string; zh: string };
 type Problem = Localized & { target?: Selection; retry?: 'check' | 'download' };
+type Validation = { doc: RouteDocument; issue?: Problem; nearestSamples?: boolean };
+function sameTarget(a: Selection, b?: Selection) {
+  if (a.type === 'route') return b?.type === 'route';
+  if (a.type === 'sample') return b?.type === 'sample' && a.index === b.index;
+  return a.type === b?.type && a.id === b.id;
+}
 const both = (key: keyof Omit<(typeof strings)['en'], 'fileErrors'>): Localized => ({
   en: strings.en[key],
   zh: strings.zh[key],
@@ -80,6 +93,7 @@ export function Editor({
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
   const [selected, choose] = useState<Selection>({ type: 'route' });
+  const [revealSelection, setRevealSelection] = useState(0);
   const [tool, setTool] = useState<Tool>('select');
   const [example, setExample] = useState(!restored);
   const [source, setSource] = useState('');
@@ -87,6 +101,9 @@ export function Editor({
   const [savedDoc, setSavedDoc] = useState(doc);
   const [notice, setNotice] = useState<Localized | null>(restored ? both('recovery') : null);
   const [problem, setProblem] = useState<Problem | null>(null);
+  const [validation, setValidation] = useState<Validation | null>(null);
+  const [hoveredSample, setHoveredSample] = useState<number | null>(null);
+  const [mapProbeDistance, setMapProbeDistance] = useState<number | null>(null);
   const [panel, setPanel] = useState<'outline' | 'inspector' | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Replacement | null>(null);
@@ -98,9 +115,13 @@ export function Editor({
   const ioLock = useRef(false);
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const dirty = doc !== savedDoc;
+  const checked = validation?.doc === doc ? validation : null;
+  const issue = checked?.issue;
   const change = (next: RouteDocument) => {
     if (next === doc) return;
     autosave.current = true;
+    setValidation(null);
+    setHoveredSample(null);
     setProblem(null);
     setNotice(null);
     dispatch({ type: 'edit', doc: next });
@@ -127,21 +148,43 @@ export function Editor({
   }
   const activeStation =
     selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
-  const focus =
-    selected.type === 'station'
-      ? activeStation?.anchor
-      : selected.type === 'vertex'
-        ? { vertexId: selected.id, fraction: 0 }
-        : selected.type === 'sample'
-          ? doc.elevation[selected.index]?.anchor
-          : null;
-  const select = (s: Selection) => {
+  const focus = useMemo(
+    () =>
+      selected.type === 'station'
+        ? activeStation?.anchor
+        : selected.type === 'vertex'
+          ? { vertexId: selected.id, fraction: 0 }
+          : selected.type === 'sample'
+            ? doc.elevation[selected.index]?.anchor
+            : null,
+    [selected, activeStation, doc.elevation],
+  );
+  const focusedMeters = useMemo(() => (focus ? anchorDistance(doc, focus, axis) : null), [axis, focus]);
+  let selectionTitle = t.details;
+  if (activeStation) selectionTitle = activeStation.name || t[activeStation.kind];
+  if (selected.type === 'sample') selectionTitle = t.sample + ' ' + (selected.index + 1);
+  if (selected.type === 'vertex') selectionTitle = t.vertex;
+  const select = (s: Selection, inspect = false) => {
     choose(s);
+    setNotice(null);
+    setRevealSelection((n) => n + 1);
     setTool('select');
-    setPanel('inspector');
+    setPanel(inspect ? 'inspector' : null);
   };
   function historyAction(type: 'undo' | 'redo') {
+    const next = type === 'undo' ? history.past.at(-1) : history.future[0];
+    if (!next) return;
+    if (
+      (selected.type === 'station' && !next.stations.some((s) => s.id === selected.id)) ||
+      (selected.type === 'vertex' && !next.vertices.some((v) => v.id === selected.id)) ||
+      (selected.type === 'sample' && !next.elevation[selected.index])
+    ) {
+      choose({ type: 'route' });
+      setPanel(null);
+    }
     setTool('select');
+    setValidation(null);
+    setHoveredSample(null);
     setProblem(null);
     setNotice(null);
     dispatch({ type });
@@ -172,6 +215,9 @@ export function Editor({
   }, [doc]);
   function replace(next: Replacement) {
     setExample(!!next.sample);
+    setValidation(null);
+    setHoveredSample(null);
+    setMapProbeDistance(null);
     setSession((v) => v + 1);
     setSource(next.source);
     autosave.current = true;
@@ -218,20 +264,25 @@ export function Editor({
     ioLock.current = true;
     setBusy(true);
     setProblem(null);
+    setNotice(null);
     try {
       const result = await runIO({ type: 'compile', doc, resampleElevation });
-      if (result.type === 'error')
-        setProblem({
+      if (result.type === 'error') {
+        const issue: Problem = {
           ...fileError(result),
-          target: result.target,
+          target: result.target ?? { type: 'route' },
           retry: result.canResample ? (write ? 'download' : 'check') : undefined,
-        });
-      else if (result.type === 'binary') {
+        };
+        setValidation({ doc, issue });
+        setProblem(issue);
+      } else if (result.type === 'binary') {
+        setValidation({ doc, nearestSamples: resampleElevation });
         if (write) download(result.bytes, filename(doc.name) + '.rte', 'application/octet-stream');
-        setNotice(both(write ? 'done' : 'valid'));
+        setNotice(both(write ? 'done' : resampleElevation ? 'validNearest' : 'valid'));
       }
     } catch {
-      setProblem(both('readFailed'));
+      setValidation(null);
+      setProblem(both('checkFailed'));
     } finally {
       setBusy(false);
       ioLock.current = false;
@@ -242,15 +293,9 @@ export function Editor({
       setNotice(both('noVertices'));
       return;
     }
-    const id = newId();
-    change({
-      ...doc,
-      stations: [...doc.stations, { id, name: t.newStation, kind: 'cp', boundary: false, anchor: null }],
-    });
-    choose({ type: 'station', id });
     setPanel(null);
-    setTool('stationAnchor');
-    setNotice(both('stationAdded'));
+    setTool('newStation');
+    setNotice(null);
   }
   function pickAnchor(a: Anchor) {
     if (tool === 'insert') {
@@ -262,6 +307,14 @@ export function Editor({
       const i = doc.vertices.findIndex((vertex) => vertex.id === a.vertexId);
       change(next);
       select({ type: 'vertex', id: next.vertices[i + 1].id });
+    } else if (tool === 'newStation') {
+      const id = newId();
+      change({
+        ...doc,
+        stations: [...doc.stations, { id, name: t.newStation, kind: 'cp', boundary: false, anchor: a }],
+      });
+      select({ type: 'station', id });
+      setNotice(both('stationAdded'));
     } else if (tool === 'stationAnchor' && activeStation) {
       change(updateStation(doc, activeStation.id, { anchor: a }));
       select({ type: 'station', id: activeStation.id });
@@ -282,6 +335,7 @@ export function Editor({
     select: t.editing,
     append: t.drawing,
     insert: t.inserting,
+    newStation: t.placing,
     stationAnchor: t.placing,
     stationLocation: t.locating,
   }[tool];
@@ -308,7 +362,33 @@ export function Editor({
           onOpen={openFile}
           onSave={save}
           onCompile={compile}
+          validation={
+            checked
+              ? issue
+                ? 'needsRepair'
+                : checked.nearestSamples
+                  ? 'nearestOnly'
+                  : 'exportReady'
+              : 'unchecked'
+          }
         />
+        <div className="document-bar">
+          <h1 title={doc.name || t.untitled}>{doc.name || t.untitled}</h1>
+          <div className="course-totals">
+            <div>
+              <span>{t.total}</span>
+              <b>
+                {length.toFixed(2)} <small>km</small>
+              </b>
+            </div>
+            <div>
+              <span>{t.gain}</span>
+              <b>
+                {gainText} <small>m</small>
+              </b>
+            </div>
+          </div>
+        </div>
         <div className="workspace" data-panel={panel ?? ''}>
           <RouteOutline
             key={session}
@@ -328,35 +408,21 @@ export function Editor({
                 onClick={() => setPanel(panel === 'outline' ? null : 'outline')}
               >
                 <Layers size={14} />
-                {t.workspace}
+                {t.outline}
               </button>
+              <span className="selection-summary">
+                {selectionTitle}
+                {focusedMeters != null &&
+                  Number.isFinite(focusedMeters) &&
+                  ' · ' + (focusedMeters / 1000).toFixed(2) + ' km'}
+              </span>
               <button
                 aria-pressed={panel === 'inspector'}
                 onClick={() => setPanel(panel === 'inspector' ? null : 'inspector')}
               >
                 <PanelsTopLeft size={14} />
-                {t.inspector}
+                {panel === 'inspector' ? t.close : t.editSelection}
               </button>
-            </div>
-            <div className="canvas-head">
-              <div>
-                <span className="eyebrow">{t.editor}</span>
-                <h1>{doc.name || t.untitled}</h1>
-              </div>
-              <div className="course-totals">
-                <div>
-                  <span>{t.total}</span>
-                  <b>
-                    {length.toFixed(2)} <small>km</small>
-                  </b>
-                </div>
-                <div>
-                  <span>{t.gain}</span>
-                  <b>
-                    {gainText} <small>m</small>
-                  </b>
-                </div>
-              </div>
             </div>
             <section className="map-area">
               <div className="map-tools">
@@ -378,7 +444,10 @@ export function Editor({
                       aria-pressed={tool === k}
                       title={label}
                       disabled={k === 'insert' && doc.vertices.length < 2}
-                      onClick={() => setTool(k)}
+                      onClick={() => {
+                        setNotice(null);
+                        setTool(k);
+                      }}
                     >
                       <Icon size={14} />
                       {label}
@@ -391,18 +460,15 @@ export function Editor({
                   key={session}
                   doc={doc}
                   lang={lang}
-                  tool={
-                    tool === 'append'
-                      ? 'add'
-                      : tool === 'insert' || tool === 'stationAnchor'
-                        ? 'anchor'
-                        : tool === 'stationLocation'
-                          ? 'location'
-                          : 'select'
-                  }
+                  tool={tool}
+                  axis={axis}
+                  revealSelection={revealSelection}
+                  onCancelTool={() => setTool('select')}
                   selectedVertexId={selected.type === 'vertex' ? selected.id : null}
                   selectedStationId={activeStation?.id ?? null}
                   focusAnchor={selected.type === 'sample' ? focus : null}
+                  profileHoverAnchor={hoveredSample === null ? null : doc.elevation[hoveredSample]?.anchor}
+                  onProbeDistance={setMapProbeDistance}
                   onSelectVertex={(id) => select({ type: 'vertex', id })}
                   onSelectStation={(id) => select({ type: 'station', id })}
                   onMoveVertex={(id, p) => change(moveVertex(doc, id, p))}
@@ -432,42 +498,30 @@ export function Editor({
                 )}
               </div>
             </section>
-            <section className="profile-area">
-              <div className="profile-head">
-                <span className="pane-title">
-                  <Activity size={15} />
-                  {t.profile}
-                </span>
-                {missingHeights > 0 && (
-                  <button
-                    className="sub-action gap-fill"
-                    title={t.interpolationHint}
-                    onClick={fillElevationGaps}
-                  >
-                    {t.interpolateGaps} ({missingHeights})
-                  </button>
-                )}
-                <span>
-                  <ChevronsUp size={13} />
-                  {gainText} m
-                </span>
-              </div>
-              <div className="profile-frame">
-                <ProfileView
-                  doc={doc}
-                  lang={lang}
-                  selectedSampleIndex={selected.type === 'sample' ? selected.index : null}
-                  focusAnchor={focus}
-                  onSelectSample={(index) => select({ type: 'sample', index })}
-                />
-              </div>
-            </section>
+            <ProfilePanel
+              t={t}
+              count={doc.elevation.length}
+              missing={missingHeights}
+              onFill={fillElevationGaps}
+            >
+              <ProfileView
+                doc={doc}
+                lang={lang}
+                selectedSampleIndex={selected.type === 'sample' ? selected.index : null}
+                focusAnchor={focus}
+                onSelectSample={(index) => select({ type: 'sample', index })}
+                onHoverSample={setHoveredSample}
+                hoveredSampleIndex={hoveredSample}
+                mapProbeDistance={mapProbeDistance}
+              />
+            </ProfilePanel>
           </main>
           <Inspector
             doc={doc}
             t={t}
             selected={selected}
-            choose={select}
+            choose={(s) => select(s, true)}
+            issue={sameTarget(selected, issue?.target) ? issue?.[lang] : undefined}
             change={change}
             setTool={(mode) => {
               setPanel(null);
@@ -486,7 +540,7 @@ export function Editor({
           <span className="coord-system">WGS 84</span>
         </footer>
         {problem && (
-          <div className="problem" role="alert">
+          <div className="problem" data-severity={problem.retry ? 'warning' : 'error'} role="alert">
             <ShieldCheck size={20} />
             <div>
               <strong>{problem.target ? t.validation : t.file}</strong>
@@ -506,7 +560,7 @@ export function Editor({
                 <button
                   className="sub-action"
                   onClick={() => {
-                    select(problem.target!);
+                    select(problem.target!, true);
                     setProblem(null);
                   }}
                 >
