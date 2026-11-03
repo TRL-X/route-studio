@@ -21,8 +21,12 @@ describe('GPX', () => {
     const doc = choices[0].open();
     expect(choices[0].pointCount).toBe(2);
     expect(doc.elevation.map((s) => s.height)).toEqual([-12, 0]);
-    expect(doc.stations.map((s) => s.kind)).toEqual(['start', 'poi', 'finish']);
-    expect(doc.stations[1].location).toEqual({ lat: 20.1, lon: 111 });
+    expect(doc.stations.map((s) => s.kind)).toEqual(['start', 'cp', 'finish']);
+    expect(doc.stations[1]).toMatchObject({
+      name: 'Water',
+      boundary: true,
+      location: { lat: 20.1, lon: 111 },
+    });
     expect(doc.stations[1].anchor?.vertexId).toBe(doc.vertices[0].id);
     expect(doc.stations[1].anchor?.fraction).toBeCloseTo(0.5);
     expect(choices[1].open().elevation.map((s) => s.height)).toEqual([null, null]);
@@ -35,6 +39,13 @@ describe('KML', () => {
     </Placemark></Folder></Document></kml>`;
   const line = (mode = '') => `<LineString>${mode && `<altitudeMode>${mode}</altitudeMode>`}
     <coordinates>2,1,-1.5 2,2,0</coordinates></LineString>`;
+
+  it('imports unnamed points as numbered checkpoints with stage boundaries', () => {
+    const xml = `<kml><Document><Placemark>${line()}</Placemark>
+      <Placemark><Point><coordinates>2,1.2</coordinates></Point></Placemark></Document></kml>`;
+    const doc = parseRoutes(xml, 'race.kml')[0].open();
+    expect(doc.stations[1]).toMatchObject({ name: 'CP 1', kind: 'cp', boundary: true });
+  });
 
   it('uses KML absolute heights, asks for ambiguous ones and excludes explicit ground offsets', () => {
     const choices = parseRoutes(
