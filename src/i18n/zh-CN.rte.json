@@ -21,6 +21,7 @@
   "compiler.invalidStationKind": "站点类型或边界标志无效。",
   "compiler.missingHeight": "海拔样本 {number} 缺少有效高度。",
   "compiler.nodeLimit": "路线或海拔采样超过一百万个节点。",
+  "compiler.precisionConflict": "海拔样本 {number} 的导出里程为 {meters} m，与另一高度不同的样本重合。",
   "compiler.profileEndpoints": "请补全覆盖起点至终点的海拔剖面。",
   "compiler.profileRequired": "请补全海拔剖面，包括起点和终点。",
   "compiler.sameBoundaryDistance": "站点「{name}」与另一赛段边界里程重合。",

@@ -1,5 +1,6 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import { newId, nearestAnchor, type RouteDocument } from '../domain/model';
+import { distances, newId, type Anchor, type RouteDocument } from '../domain/model';
+import { stationPassages, type StationPassage } from '../domain/projection';
 import { RouteFileError } from './errors';
 
 export interface RouteChoice {
@@ -161,6 +162,63 @@ function readKml(root: XmlElement, fallback: string) {
   return { lines, landmarks };
 }
 
+interface NumberedMark {
+  index: number;
+  number: number;
+  passes: StationPassage[];
+}
+
+// XML order does not define route order. Use an explicit series such as CP1,
+// CP2, CP3 only when single-pass landmarks establish its direction on this route.
+function matchSeries(marks: NumberedMark[], anchors: (Anchor | null)[]) {
+  if (marks.length < 3 || new Set(marks.map((m) => m.number)).size !== marks.length) return;
+  const ordered = marks.sort((a, b) => a.number - b.number);
+  const fixed = ordered.filter((mark) => mark.passes.length === 1);
+  if (fixed.length < 2) return;
+  const direction = fixed.at(-1)!.passes[0].distance - fixed[0].passes[0].distance;
+  if (direction === 0) return;
+  if (direction < 0) ordered.reverse();
+
+  // Earliest feasible visit for every prefix, latest for every suffix.
+  // Their intersection gives exactly the visits consistent with the whole series.
+  const earliest: number[] = [];
+  let previous = -Infinity;
+  for (const mark of ordered) {
+    const first = mark.passes.find((pass) => pass.distance >= previous);
+    if (!first) return; // Numbering is inconsistent with the course.
+    previous = first.distance;
+    earliest.push(previous);
+  }
+  let next = Infinity;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const { passes, index } = ordered[i];
+    const allowed = passes.filter(
+      (pass) => pass.distance >= (earliest[i - 1] ?? -Infinity) && pass.distance <= next,
+    );
+    anchors[index] = allowed.length === 1 ? allowed[0].anchor : null;
+    next = allowed.at(-1)!.distance;
+  }
+}
+
+function matchLandmarks(doc: RouteDocument, landmarks: Landmark[]): (Anchor | null)[] {
+  const axis = distances(doc.vertices);
+  const groups = new Map<string, NumberedMark[]>();
+  const anchors: (Anchor | null)[] = landmarks.map((landmark, index) => {
+    const passes = stationPassages(doc, landmark.location, axis);
+    const match = /^([a-z]+)[ -]?(\d{1,6})(?=$|[^a-z0-9])/i.exec(landmark.name);
+    if (match) {
+      const prefix = match[1].toUpperCase();
+      const series = groups.get(prefix) ?? [];
+      series.push({ index, number: Number(match[2]), passes });
+      groups.set(prefix, series);
+    }
+    // Keep the nearest pass for ordinary landmarks. Users can review alternatives.
+    return passes.reduce((best, pass) => (pass.offset < best.offset ? pass : best)).anchor;
+  });
+  for (const marks of groups.values()) matchSeries(marks, anchors);
+  return anchors;
+}
+
 function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: boolean): RouteDocument {
   const keepHeights =
     line.heights !== 'unavailable' && (line.heights !== 'unconfirmed' || useUnconfirmedHeights);
@@ -189,6 +247,7 @@ function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: bool
     boundary: true,
     anchor: { vertexId: first.id, fraction: 0 },
   });
+  const anchors = matchLandmarks(doc, landmarks);
   for (const [index, mark] of landmarks.entries()) {
     doc.stations.push({
       id: newId(),
@@ -196,7 +255,7 @@ function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: bool
       kind: 'poi',
       boundary: false,
       location: mark.location,
-      anchor: nearestAnchor(doc, mark.location),
+      anchor: anchors[index],
     });
   }
   doc.stations.push({

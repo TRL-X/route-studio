@@ -6,12 +6,13 @@ export interface Choice {
   hasUnconfirmedHeights: boolean;
 }
 export type IORequest =
-  { type: 'read'; file: File; choice?: number; accept?: boolean } | { type: 'compile'; doc: RouteDocument };
+  | { type: 'read'; file: File; choice?: number; accept?: boolean }
+  | { type: 'compile'; doc: RouteDocument; resampleElevation?: boolean };
 export type IOResult =
   | { type: 'document'; doc: RouteDocument }
   | { type: 'choices'; choices: Choice[] }
   | { type: 'binary'; bytes: Uint8Array<ArrayBuffer> }
-  | { type: 'error'; en: string; zh: string; fileCode?: string; target?: RteTarget };
+  | { type: 'error'; en: string; zh: string; fileCode?: string; target?: RteTarget; canResample?: boolean };
 export function runIO(request: IORequest): Promise<IOResult> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./io.worker.ts', import.meta.url), { type: 'module' });

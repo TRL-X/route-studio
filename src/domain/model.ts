@@ -97,6 +97,27 @@ export function anchorAtDistance(doc: RouteDocument, meters: number, axis = dist
   const span = axis[lo + 1] - axis[lo];
   return { vertexId: doc.vertices[lo].id, fraction: span > 0 ? Math.max(0, (meters - axis[lo]) / span) : 0 };
 }
+/** Project onto a segment in the tangent plane at the query point. */
+export function projectSegment(a: Point, b: Point, point: Point, scale = Math.cos(point.lat * rad)) {
+  const spanLon = lonDelta(a.lon, b.lon);
+  const pointerLon = lonDelta(a.lon, point.lon);
+  const dx = spanLon * scale;
+  const dy = b.lat - a.lat;
+  const py = point.lat - a.lat;
+  const length2 = dx * dx + dy * dy;
+  function project(offset: number) {
+    const px = offset * scale;
+    const fraction = length2 ? Math.min(1, Math.max(0, (px * dx + py * dy) / length2)) : 0;
+    return { fraction, distance2: (px - fraction * dx) ** 2 + (py - fraction * dy) ** 2 };
+  }
+
+  const sameWorld = project(pointerLon);
+  if (Math.abs(pointerLon - spanLon) <= 180) return sameWorld;
+  // The far endpoint can approach the query point in the adjacent world copy.
+  const adjacent = project(pointerLon + (pointerLon < 0 ? 360 : -360));
+  return adjacent.distance2 < sameWorld.distance2 ? adjacent : sameWorld;
+}
+
 export function nearestAnchor(doc: RouteDocument, point: Point): Anchor {
   let anchor = { vertexId: doc.vertices[0].id, fraction: 0 };
   let best = Infinity;
@@ -104,26 +125,10 @@ export function nearestAnchor(doc: RouteDocument, point: Point): Anchor {
   for (let i = 1; i < doc.vertices.length; i++) {
     const a = doc.vertices[i - 1],
       b = doc.vertices[i];
-    const spanLon = lonDelta(a.lon, b.lon);
-    const pointerLon = lonDelta(a.lon, point.lon);
-    const dx = spanLon * scale,
-      dy = b.lat - a.lat;
-    const py = point.lat - a.lat;
-    const length2 = dx * dx + dy * dy;
-    // A segment can approach the pointer in the adjacent world copy even
-    // when its start lies closer to this copy. Check both in that case.
-    const offsets =
-      Math.abs(pointerLon - spanLon) > 180
-        ? [pointerLon, pointerLon + (pointerLon < 0 ? 360 : -360)]
-        : [pointerLon];
-    for (const offset of offsets) {
-      const px = offset * scale;
-      const f = length2 ? Math.min(1, Math.max(0, (px * dx + py * dy) / length2)) : 0;
-      const d = (px - f * dx) ** 2 + (py - f * dy) ** 2;
-      if (d < best) {
-        best = d;
-        anchor = f === 1 ? { vertexId: b.id, fraction: 0 } : { vertexId: a.id, fraction: f };
-      }
+    const { fraction, distance2 } = projectSegment(a, b, point, scale);
+    if (distance2 < best) {
+      best = distance2;
+      anchor = fraction === 1 ? { vertexId: b.id, fraction: 0 } : { vertexId: a.id, fraction };
     }
   }
   return anchor;

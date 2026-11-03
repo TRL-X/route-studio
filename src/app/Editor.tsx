@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { appendVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
+import { interpolateMissingHeights } from '../domain/elevation';
 import { distances, emptyRoute, newId, type Anchor, type RouteDocument } from '../domain/model';
 import { ascent } from '../domain/summary';
 import { exampleRoute } from '../domain/example';
@@ -28,7 +29,7 @@ import { initialLanguage, strings, type Lang } from './strings';
 import './editor.css';
 
 type Localized = { en: string; zh: string };
-type Problem = Localized & { target?: Selection };
+type Problem = Localized & { target?: Selection; retry?: 'check' | 'download' };
 const both = (key: keyof Omit<(typeof strings)['en'], 'fileErrors'>): Localized => ({
   en: strings.en[key],
   zh: strings.zh[key],
@@ -108,6 +109,22 @@ export function Editor({
   const length = (axis.at(-1) ?? 0) / 1000;
   const gain = useMemo(() => ascent(doc), [doc.vertices, doc.elevation]);
   const gainText = gain === null ? '—' : gain.toFixed(0);
+  const missingHeights = useMemo(
+    () => doc.elevation.filter((s) => s.height === null).length,
+    [doc.elevation],
+  );
+  function fillElevationGaps() {
+    const { document, filled, remaining } = interpolateMissingHeights(doc);
+    if (filled) change(document);
+    const message = (lang: Lang) => {
+      const copy = strings[lang];
+      const summary = copy.interpolationResult
+        .replace('{filled}', String(filled))
+        .replace('{remaining}', String(remaining));
+      return remaining ? summary + ' ' + copy.interpolationLimit : summary;
+    };
+    setNotice({ en: message('en'), zh: message('zh') });
+  }
   const activeStation =
     selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
   const focus =
@@ -196,14 +213,19 @@ export function Editor({
       setProblem(both('saveFailed'));
     }
   }
-  async function compile(write: boolean) {
+  async function compile(write: boolean, resampleElevation = false) {
     if (ioLock.current) return;
     ioLock.current = true;
     setBusy(true);
     setProblem(null);
     try {
-      const result = await runIO({ type: 'compile', doc });
-      if (result.type === 'error') setProblem({ ...fileError(result), target: result.target });
+      const result = await runIO({ type: 'compile', doc, resampleElevation });
+      if (result.type === 'error')
+        setProblem({
+          ...fileError(result),
+          target: result.target,
+          retry: result.canResample ? (write ? 'download' : 'check') : undefined,
+        });
       else if (result.type === 'binary') {
         if (write) download(result.bytes, filename(doc.name) + '.rte', 'application/octet-stream');
         setNotice(both(write ? 'done' : 'valid'));
@@ -242,7 +264,7 @@ export function Editor({
       select({ type: 'vertex', id: next.vertices[i + 1].id });
     } else if (tool === 'stationAnchor' && activeStation) {
       change(updateStation(doc, activeStation.id, { anchor: a }));
-      setTool('select');
+      select({ type: 'station', id: activeStation.id });
     }
   }
   useEffect(() => {
@@ -393,7 +415,7 @@ export function Editor({
                   onPickLocation={(p) => {
                     if (activeStation) {
                       change(updateStation(doc, activeStation.id, { location: p }));
-                      setTool('select');
+                      select({ type: 'station', id: activeStation.id });
                     }
                   }}
                 />
@@ -416,6 +438,15 @@ export function Editor({
                   <Activity size={15} />
                   {t.profile}
                 </span>
+                {missingHeights > 0 && (
+                  <button
+                    className="sub-action gap-fill"
+                    title={t.interpolationHint}
+                    onClick={fillElevationGaps}
+                  >
+                    {t.interpolateGaps} ({missingHeights})
+                  </button>
+                )}
                 <span>
                   <ChevronsUp size={13} />
                   {gainText} m
@@ -440,6 +471,7 @@ export function Editor({
             change={change}
             setTool={(mode) => {
               setPanel(null);
+              setNotice(null);
               setTool(mode);
             }}
             status={status}
@@ -459,6 +491,17 @@ export function Editor({
             <div>
               <strong>{problem.target ? t.validation : t.file}</strong>
               <p>{problem[lang]}</p>
+              {problem.retry && (
+                <>
+                  <p>{t.resampleInfo}</p>
+                  <button
+                    className="primary"
+                    onClick={() => void compile(problem.retry === 'download', true)}
+                  >
+                    {problem.retry === 'download' ? t.resampleDownload : t.resampleCheck}
+                  </button>
+                </>
+              )}
               {problem.target && (
                 <button
                   className="sub-action"

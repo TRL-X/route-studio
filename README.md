@@ -16,10 +16,10 @@ Open the local URL printed in the terminal. The editor opens with an editable ex
 ## Prepare a route
 
 1. Choose **Open**, drop a file onto the editor, or start drawing with **File → New route**. If a GPX contains multiple tracks or segments, or a KML contains several lines, select the course you want to edit.
-2. Use **Append point** or **Insert point** to change the geometry. Drag a point with **Select**, or edit its coordinates in the inspector. When adding a station, pick where the route passes it. You can set the landmark's actual coordinates separately, for example when an aid station sits off the trail.
-3. Select a sample in the elevation profile to edit its height. Use **Next missing height** to find gaps. When a KML supplies heights without an altitude mode, choose whether to use them. Conflicting heights recorded consecutively at the same coordinates leave a gap for you to resolve.
+2. Use **Append point** or **Insert point** to change the geometry. Drag a point with **Select**, or edit its coordinates in the inspector. Select a station in the sidebar to adjust where the route passes it. On a loop or out-and-back, **Nearby route passes** lists possible distances and neighboring stations. Choose a pass or enter a **Route distance (km)**. Both operations keep the landmark's actual coordinates.
+3. Select **Fill elevation gaps** above the elevation profile to estimate missing heights by distance between known samples. The edit can be undone in one step. Use **Next missing height** to inspect any remaining gaps. Missing endpoints need a known height, and a track without elevations needs source measurements before interpolation can fill it. When a KML supplies heights without an altitude mode, choose whether to use them on import.
 4. Choose **Save project** to download a `.routeproj` file. Projects preserve unfinished edits, including missing heights. The editor also saves a recovery draft in the browser's IndexedDB. Use the project file for backups or to continue on another computer.
-5. Choose **Download RTE** to validate and export the device file. If a value needs attention, the error explains the problem. Use **Show in inspector** when available to jump to the affected item.
+5. Choose **Download RTE** to validate and export the device file. Use **Show in inspector** to jump to an affected item. If distinct elevation samples round to the same 0.1 m device position and disagree, **Download with nearest samples** picks one height per position for that export. The editable project retains every sample.
 
 | Shortcut             | Action                                                  |
 | -------------------- | ------------------------------------------------------- |

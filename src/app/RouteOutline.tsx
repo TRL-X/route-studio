@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { File, Layers, Plus, Route, Search } from 'lucide-react';
 import type { RouteDocument } from '../domain/model';
+import { orderedStations } from '../domain/projection';
 import type { Selection } from './Inspector';
 import type { Copy } from './strings';
 
@@ -26,20 +27,7 @@ export function RouteOutline({
   onAddStation,
 }: OutlineProps) {
   const [filter, setFilter] = useState('');
-  const indices = useMemo(() => new Map(doc.vertices.map((v, i) => [v.id, i])), [doc.vertices]);
-  const ordered = useMemo(
-    () =>
-      doc.stations
-        .map((station) => {
-          const anchor = station.anchor;
-          if (!anchor) return { station, meters: null };
-          const i = indices.get(anchor.vertexId)!;
-          const meters = axis[i] + ((axis[i + 1] ?? axis[i]) - axis[i]) * anchor.fraction;
-          return { station, meters };
-        })
-        .sort((a, b) => (a.meters ?? Infinity) - (b.meters ?? Infinity)),
-    [axis, indices, doc.stations],
-  );
+  const ordered = useMemo(() => orderedStations(doc, axis), [axis, doc.vertices, doc.stations]);
   const query = filter.toLowerCase();
   const stationList = ordered.filter(({ station }) => station.name.toLowerCase().includes(query));
   const lengthKm = (axis.at(-1) ?? 0) / 1000;
@@ -97,7 +85,7 @@ export function RouteOutline({
             <span>
               <strong>{station.name || t[station.kind]}</strong>
               <small>
-                {t[station.kind]} <i>·</i> {meters === null ? '—' : (meters / 1000).toFixed(2) + ' km'}
+                {t[station.kind]} <i>·</i> {meters === null ? t.noAnchor : (meters / 1000).toFixed(2) + ' km'}
               </small>
             </span>
           </button>
