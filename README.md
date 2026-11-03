@@ -52,6 +52,12 @@ The implementation targets the **November 1, 2026 draft of TRL-X Route 1.0**. RT
 
 The desktop RTE reader accepts files up to 64 MiB with at most 256 sections. GEOM, ELEV, and GIDX each support up to one million records. META is limited to 8 MiB, 24 levels of CBOR nesting, and 250,000 CBOR items. A target device may impose lower limits.
 
+## Contribute with GitHub Flow
+
+1. Start each change on a short-lived branch from the latest `main`. Open a pull request targeting `main`.
+2. Ask another maintainer to review the change. Before merging, bring the branch up to date with `main`, resolve review conversations, and check that the latest changes have one approval and a passing `verify` job in **Check editor**.
+3. Use **Squash and merge**. The PR title becomes the commit title on `main`, and GitHub deletes the merged branch.
+
 ## Verify changes
 
 ```sh
