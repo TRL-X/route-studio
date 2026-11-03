@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseRoutes } from '../../src/files';
 import { anchorDistance, type RouteDocument } from '../../src/domain/model';
 import { stationPassages } from '../../src/domain/projection';
+import { readRte, writeRte } from '../../src/rte';
 
 // A course passes close to the landmark twice. The first visit is closer
 // geographically, but only the second comes between checkpoints 13 and 15.
@@ -21,11 +22,11 @@ const stops = [
 ] as const;
 
 type Mark = readonly [string, number[]];
-function gpx(marks: readonly Mark[]) {
+function gpx(marks: readonly Mark[], route = course) {
   const waypoints = marks
     .map(([name, [lon, lat]]) => `<wpt lon="${lon}" lat="${lat}"><name>${name}</name></wpt>`)
     .join('');
-  const points = course.map(([lon, lat]) => `<trkpt lon="${lon}" lat="${lat}"/>`).join('');
+  const points = route.map(([lon, lat]) => `<trkpt lon="${lon}" lat="${lat}"><ele>10</ele></trkpt>`).join('');
   return parseRoutes(`<gpx>${waypoints}<trk><trkseg>${points}</trkseg></trk></gpx>`, 'route.gpx')[0].open();
 }
 function station(doc: RouteDocument, name: string) {
@@ -34,6 +35,104 @@ function station(doc: RouteDocument, name: string) {
 function distance(doc: RouteDocument, name: string) {
   return anchorDistance(doc, station(doc, name).anchor!);
 }
+
+describe('imported endpoint landmarks', () => {
+  it('uses the closer end of an open route even when the landmark names describe the opposite direction', () => {
+    // The ends are less than 100 m apart, so each mark is in range of both.
+    const doc = gpx(
+      [
+        ['Finish hill', [0, 0.0001]],
+        ['Start plaza', [0.0007, 0]],
+      ],
+      [
+        [0, 0],
+        [0.0007, 0],
+      ],
+    );
+    const exported = readRte(writeRte({ ...doc, declination: { mode: 'omit' } }));
+    expect(exported.stations).toMatchObject([
+      {
+        kind: 'start',
+        name: 'Start · Finish hill',
+        boundary: true,
+        location: { lon: 0, lat: 0.0001 },
+        anchor: { vertexId: exported.vertices[0].id, fraction: 0 },
+      },
+      {
+        kind: 'finish',
+        name: 'Finish · Start plaza',
+        boundary: true,
+        location: { lon: 0.0007, lat: 0 },
+        anchor: { vertexId: exported.vertices.at(-1)!.id, fraction: 0 },
+      },
+    ]);
+  });
+
+  it('consumes only endpoint names within 100 m and keeps source numbering for unnamed checkpoints', () => {
+    const doc = gpx(
+      [
+        ['起點', [0.000899, 0]], // Just under 100 m from the start.
+        ['START gate', [0.0009, 0]], // Just over 100 m.
+        ['Starter', [0, 0]],
+        ['', [0.005, 0]],
+        ['终点', [0.01, 0]],
+      ],
+      [
+        [0, 0],
+        [0.01, 0],
+      ],
+    );
+    expect(doc.stations.map((s) => [s.kind, s.name])).toEqual([
+      ['start', '起點'],
+      ['cp', 'START gate'],
+      ['cp', 'Starter'],
+      ['cp', 'CP 4'],
+      ['finish', '终点'],
+    ]);
+  });
+
+  it('assigns start and finish names independently on a closed route', () => {
+    const doc = gpx(
+      [
+        ['起点东门', [0.0001, 0]],
+        ['起点', [0, 0]],
+        ['終點', [0, 0.0001]],
+      ],
+      [
+        [0, 0],
+        [0.01, 0],
+        [0, 0],
+      ],
+    );
+    expect(doc.stations).toMatchObject([
+      { kind: 'start', name: '起点东门', location: { lon: 0.0001, lat: 0 } },
+      { kind: 'finish', name: '終點', location: { lon: 0, lat: 0.0001 } },
+    ]);
+  });
+
+  it.each(['起终点', '起終點', 'Start / Finish'])(
+    'reuses a shared KML marker named %s for both visits',
+    (name) => {
+      const xml = `<kml><Document><Placemark><LineString><coordinates>180,0 179.99,0 -180,0</coordinates></LineString></Placemark>
+      <Placemark><name>${name}</name><Point><coordinates>180,0.0001</coordinates></Point></Placemark></Document></kml>`;
+      const doc = parseRoutes(xml, 'loop.kml')[0].open();
+      expect(doc.stations).toMatchObject([
+        {
+          kind: 'start',
+          name,
+          anchor: { vertexId: doc.vertices[0].id },
+          location: { lon: 180, lat: 0.0001 },
+        },
+        {
+          kind: 'finish',
+          name,
+          anchor: { vertexId: doc.vertices.at(-1)!.id },
+          location: { lon: 180, lat: 0.0001 },
+        },
+      ]);
+    },
+  );
+});
 
 describe('matching landmarks to route passages', () => {
   it('uses coherent numbered checkpoints, preserving landmark location and both endpoints', () => {
