@@ -1,0 +1,14 @@
+{
+  "title": "Get elevations online",
+  "originalDatum": "Current datum:",
+  "datumHint": "Different datums can shift the curves vertically.",
+  "currentLine": "Current elevation",
+  "replacementLine": "GLO-30",
+  "attention": "Review areas",
+  "replace": "Replace all elevations",
+  "retry": "Retry",
+  "reading": "Fetching elevations…",
+  "coverage": "Elevations available for all {total} positions.",
+  "missing": "{missing} positions lack data. The full route can’t be replaced.",
+  "sourceDetails": "Data source"
+}

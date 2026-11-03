@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { appendVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
-import { interpolateMissingHeights } from '../domain/elevation';
+import { fillShortElevationGaps } from '../domain/elevation-repair';
 import {
   anchorDistance,
   distances,
@@ -31,6 +31,7 @@ import { defaultExportOptions } from '../rte/processing';
 import { EditorToolbar } from './EditorToolbar';
 import { RouteOutline } from './RouteOutline';
 import { ProfilePanel } from './ProfilePanel';
+import { ElevationRepair } from './ElevationRepair';
 import { Inspector, type Selection, type Tool } from './Inspector';
 import { useHistory } from './history';
 import { runIO, type Choice, type IOResult } from './io';
@@ -112,6 +113,8 @@ export function Editor({
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Replacement | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
+  const [elevationPreview, setElevationPreview] = useState<{ summary?: Localized } | null>(null);
+  const locked = busy || !!pending || !!choices || exportOpen || !!elevationPreview;
   const [draftState, setDraftState] = useState<'auto' | 'saving' | 'saved' | 'saveFailed'>(
     recoveryError ? 'saveFailed' : 'auto',
   );
@@ -137,16 +140,23 @@ export function Editor({
     [doc.elevation],
   );
   function fillElevationGaps() {
-    const { document, filled, remaining } = interpolateMissingHeights(doc);
-    if (filled) change(document);
-    const message = (lang: Lang) => {
-      const copy = strings[lang];
-      const summary = copy.interpolationResult
-        .replace('{filled}', String(filled))
-        .replace('{remaining}', String(remaining));
-      return remaining ? summary + ' ' + copy.interpolationLimit : summary;
-    };
-    setNotice({ en: message('en'), zh: message('zh') });
+    if (missingHeights === doc.elevation.length) {
+      setElevationPreview({});
+      return;
+    }
+    try {
+      const { document, filled, remaining } = fillShortElevationGaps(doc);
+      if (filled) change(document);
+      const message = (language: Lang) =>
+        strings[language].interpolationResult
+          .replace('{filled}', String(filled))
+          .replace('{remaining}', String(remaining.length));
+      const summary = { en: message('en'), zh: message('zh') };
+      setNotice(summary);
+      if (remaining.length) setElevationPreview({ summary });
+    } catch {
+      setProblem(both('terrainLimit'));
+    }
   }
   const activeStation =
     selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
@@ -219,6 +229,7 @@ export function Editor({
     setExportOptions(defaultExportOptions);
     setExportName(null);
     setExportOpen(false);
+    setElevationPreview(null);
     setExample(!!next.sample);
     setIssue(null);
     setHoveredSample(null);
@@ -302,6 +313,7 @@ export function Editor({
         return;
       setPending(null);
       setChoices(null);
+      setElevationPreview(null);
       setPanel(null);
       setTool('select');
     };
@@ -323,14 +335,14 @@ export function Editor({
       onDrop={(e) => {
         e.preventDefault();
         const f = e.dataTransfer.files[0];
-        if (f && !busy && !pending && !choices && !exportOpen) void openFile(f);
+        if (f && !locked) void openFile(f);
       }}
     >
-      <div className="shell" inert={busy || !!pending || !!choices}>
+      <div className="shell" inert={locked}>
         <EditorToolbar
           lang={lang}
           onLanguage={setLang}
-          locked={busy || !!pending || !!choices || exportOpen}
+          locked={locked}
           canUndo={history.past.length > 0}
           canRedo={history.future.length > 0}
           onHistory={historyAction}
@@ -472,8 +484,15 @@ export function Editor({
             <ProfilePanel
               t={t}
               count={doc.elevation.length}
-              missing={missingHeights}
+              canFill={
+                !!doc.vertices.length &&
+                (missingHeights > 0 ||
+                  doc.elevation.length === 0 ||
+                  (doc.vertices.length > 1 && gain === null))
+              }
+              canFetch={doc.vertices.length > 0}
               onFill={fillElevationGaps}
+              onFetch={() => setElevationPreview({})}
             >
               <ProfileView
                 doc={doc}
@@ -545,6 +564,19 @@ export function Editor({
             setIssue(error);
             select(error.target ?? { type: 'route' }, true);
           }}
+        />
+      )}
+      {elevationPreview && (
+        <ElevationRepair
+          doc={doc}
+          lang={lang}
+          initialSummary={elevationPreview.summary?.[lang]}
+          onApply={(next) => {
+            change(next);
+            setNotice(both('elevationsReplaced'));
+            setElevationPreview(null);
+          }}
+          onClose={() => setElevationPreview(null)}
         />
       )}
       {busy && (
