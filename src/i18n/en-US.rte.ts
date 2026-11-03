@@ -26,6 +26,8 @@ export const english = {
   'compiler.invalidStationKind': 'Invalid station kind or boundary flag.',
   'compiler.missingHeight': 'Fill in the missing height for elevation sample {number}.',
   'compiler.nodeLimit': 'Geometry or elevation exceeds one million nodes.',
+  'compiler.precisionConflict':
+    'Elevation sample {number} rounds to {meters} m on export, where another sample has a different height.',
   'compiler.profileEndpoints': 'Complete the elevation profile at the start and finish.',
   'compiler.profileRequired': 'Add an elevation profile that includes the start and finish.',
   'compiler.sameBoundaryDistance': 'Station “{name}” shares a distance with another stage boundary.',

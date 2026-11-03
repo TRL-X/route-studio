@@ -8,7 +8,20 @@ import {
   type Point,
   type RouteDocument,
 } from '../domain/model';
-import { check, integer, INT_MAX, INT_MIN, LAT, limit, LON, MAX_NODES, named, quantize, UINT } from './check';
+import {
+  RteError,
+  check,
+  integer,
+  INT_MAX,
+  INT_MIN,
+  LAT,
+  limit,
+  LON,
+  MAX_NODES,
+  named,
+  quantize,
+  UINT,
+} from './check';
 import { readCbor, writeCbor } from './cbor';
 import { validateRteContext } from './context';
 import { readMetadata, writeMetadata, type Event, type Metadata } from './meta';
@@ -125,13 +138,18 @@ function compile(doc: RouteDocument) {
       target,
     );
     const right = Math.min(i + 1, vertices.length - 1);
-    const s = quantize(axis[i] + (axis[right] - axis[i]) * anchor.fraction);
+    const position =
+      anchor.fraction === 1 ? axis[right] : axis[i] + (axis[right] - axis[i]) * anchor.fraction;
     const a = vertices[i];
     const b = vertices[right];
     let lon = a.lon + lonDelta(a.lon, b.lon) * anchor.fraction;
     if (lon > 180) lon -= 360;
     if (lon < -180) lon += 360;
-    return { s, point: { lat: a.lat + (b.lat - a.lat) * anchor.fraction, lon } };
+    return {
+      s: quantize(position),
+      position,
+      point: { lat: a.lat + (b.lat - a.lat) * anchor.fraction, lon },
+    };
   }
 
   // Numeric string IDs come from decoded RTE files and survive renaming/reordering.
@@ -227,10 +245,18 @@ function compile(doc: RouteDocument) {
   }
   let importedIndex = rte?.indexBlockSizes;
   if (geom.length !== vertices.length) importedIndex = undefined;
-  const levels = new Map<number, number>();
+  // Keep source positions separate until the device distance bins are selected.
+  const sourceHeights = new Map<number, number>();
+  const positionsByBin = new Map<number, number>();
+  let precisionIssue: RteError | undefined;
+  const lastPosition = axis.at(-1)!;
+  function rank(position: number, bin: number) {
+    return position === 0 || position === lastPosition ? -1 : Math.abs(position - bin);
+  }
+
   for (const [i, sample] of elevation.entries()) {
     const target: RteTarget = { type: 'sample', index: i };
-    const { s } = at(sample.anchor, msg('field.indexedSample', { number: i + 1 }), target);
+    const { s, position } = at(sample.anchor, msg('field.indexedSample', { number: i + 1 }), target);
     check(
       sample.height !== null && Number.isFinite(sample.height),
       msg('compiler.missingHeight', { number: i + 1 }),
@@ -238,12 +264,34 @@ function compile(doc: RouteDocument) {
     );
     const h = integer(quantize(sample.height * 10), INT_MIN, INT_MAX, msg('field.elevation'), target);
     check(
-      !levels.has(s) || levels.get(s) === h,
+      !sourceHeights.has(position) || sourceHeights.get(position) === h,
       msg('compiler.conflictingSample', { number: i + 1 }),
       target,
     );
-    levels.set(s, h);
+    sourceHeights.set(position, h);
+
+    const current = positionsByBin.get(s);
+    if (current === undefined) {
+      positionsByBin.set(s, position);
+      continue;
+    }
+    if (!precisionIssue && sourceHeights.get(current) !== h) {
+      precisionIssue = new RteError(
+        msg('compiler.precisionConflict', { number: i + 1, meters: s / 10 }),
+        'invalid',
+        target,
+        true,
+      );
+    }
+    const candidateRank = rank(position, s);
+    const currentRank = rank(current, s);
+    if (candidateRank < currentRank || (candidateRank === currentRank && position < current)) {
+      positionsByBin.set(s, position);
+    }
   }
+  const levels = new Map(
+    Array.from(positionsByBin, ([bin, position]) => [bin, sourceHeights.get(position)!]),
+  );
   check(levels.has(0) && levels.has(total), msg('compiler.profileEndpoints'));
   const source = [...levels].sort((a, b) => a[0] - b[0]);
   let right = 1;
@@ -271,19 +319,28 @@ function compile(doc: RouteDocument) {
     stages: summarize(events, elev),
   };
   verifyRoute(meta, geom, elev);
-  return { geom, elev, meta, importedIndex };
+  return { geom, elev, meta, importedIndex, precisionIssue };
 }
 
-export function validateForRte(doc: RouteDocument): void {
-  compile(doc);
+export interface RteWriteOptions {
+  /** Allow distinct source samples to share one output node at device distance precision. */
+  resampleElevation?: boolean;
 }
 
-export function writeRte(doc: RouteDocument) {
-  const { geom, elev, meta, importedIndex } = compile(doc);
-  return writeSections({
+export function validateForRte(doc: RouteDocument, options: RteWriteOptions = {}): void {
+  const { precisionIssue } = compile(doc);
+  if (precisionIssue && !options.resampleElevation) throw precisionIssue;
+}
+
+export function writeRte(doc: RouteDocument, options: RteWriteOptions = {}) {
+  const { geom, elev, meta, importedIndex, precisionIssue } = compile(doc);
+  const bytes = writeSections({
     META: writeCbor(writeMetadata(meta)),
     GEOM: pack(geom, geomLayout),
     ELEV: pack(elev, elevLayout),
     GIDX: pack(indexBlocks(geom, importedIndex), indexLayout),
   });
+  // Only offer a retry after the complete resampled file passes all export checks.
+  if (precisionIssue && !options.resampleElevation) throw precisionIssue;
+  return bytes;
 }

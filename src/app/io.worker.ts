@@ -3,7 +3,10 @@ import { readRte, writeRte, RteError } from '../rte';
 import type { IORequest, IOResult } from './io';
 async function handle(request: IORequest): Promise<IOResult> {
   if (request.type === 'compile') {
-    return { type: 'binary', bytes: new Uint8Array(writeRte(request.doc)) };
+    return {
+      type: 'binary',
+      bytes: new Uint8Array(writeRte(request.doc, { resampleElevation: request.resampleElevation })),
+    };
   }
   const ext = request.file.name.split('.').pop()?.toLowerCase();
   if (ext === 'rte')
@@ -38,6 +41,7 @@ self.onmessage = async ({ data }: MessageEvent<IORequest>) => {
           ? (error.target ?? { type: 'route' })
           : undefined,
       fileCode: error instanceof RouteFileError ? error.code : undefined,
+      canResample: data.type === 'compile' && error instanceof RteError && error.canResample,
     } satisfies IOResult);
   }
 };

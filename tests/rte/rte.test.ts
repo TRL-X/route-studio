@@ -136,6 +136,71 @@ describe('RTE 1.0', () => {
     );
   });
 
+  test('strict export offers a precision retry and the optional export takes the nearest original sample', () => {
+    const doc = readRte(vector('b'));
+    doc.rte!.distanceDm = [0, 1024, 2048];
+    const first = doc.vertices[0].id;
+    doc.elevation[1] = { anchor: { vertexId: first, fraction: 0.5 + 1 / 4096 }, height: 125 };
+    doc.elevation.push({ anchor: { vertexId: first, fraction: 0.5 - 1 / 8192 }, height: 110 });
+    const before = structuredClone(doc);
+    expect(() => writeRte(doc)).toThrow(
+      expect.objectContaining({
+        canResample: true,
+        target: { type: 'sample', index: 4 },
+      }),
+    );
+    const output = readRte(writeRte(doc, { resampleElevation: true }));
+    expect(output.elevation.map((s) => s.height)).toEqual([100, 110, 90, 140]);
+    expect(doc).toEqual(before);
+    // For an exact tie the earlier position wins regardless of editor array order.
+    doc.elevation[4].anchor.fraction = 0.5 - 1 / 4096;
+    doc.elevation.reverse();
+    expect(readRte(writeRte(doc, { resampleElevation: true })).elevation[1].height).toBe(110);
+  });
+
+  test('resampling keeps the true endpoint height even when a nearby sample is nearer its device bin', () => {
+    const doc = readRte(vector('c'));
+    delete doc.rte;
+    doc.vertices = [
+      { id: 'origin', lat: 0, lon: 0 },
+      { id: 'end', lat: 0, lon: ((10.043 / 6371008.8) * 180) / Math.PI },
+    ];
+    const origin = { vertexId: 'origin', fraction: 0 };
+    const end = { vertexId: 'end', fraction: 0 };
+    doc.stations = [
+      { ...doc.stations[0], anchor: origin },
+      { ...doc.stations.at(-1)!, anchor: end },
+    ];
+    doc.elevation = [
+      { anchor: origin, height: 10 },
+      { anchor: { vertexId: 'origin', fraction: 10.001 / 10.043 }, height: 50 },
+      { anchor: end, height: 20 },
+    ];
+    expect(() => writeRte(doc)).toThrow(expect.objectContaining({ canResample: true }));
+    const output = readRte(writeRte(doc, { resampleElevation: true }));
+    expect(output.rte!.distanceDm).toEqual([0, 100]);
+    expect(output.elevation.map((s) => s.height)).toEqual([10, 20]);
+  });
+
+  test('even optional resampling rejects conflicting measurements at identical positions and missing data', () => {
+    const doc = readRte(vector('c'));
+    const near = { vertexId: doc.vertices[0].id, fraction: 0.50001 };
+    doc.elevation.push({ anchor: near, height: 119 });
+    doc.elevation.push({ anchor: near, height: 118 });
+    for (const resampleElevation of [false, true]) {
+      expect(() => writeRte(doc, { resampleElevation })).toThrow(
+        expect.objectContaining({
+          canResample: false,
+          target: { type: 'sample', index: 5 },
+        }),
+      );
+    }
+    doc.elevation[5].height = null;
+    expect(() => writeRte(doc)).toThrow(
+      expect.objectContaining({ canResample: false, target: { type: 'sample', index: 5 } }),
+    );
+  });
+
   test('maintains full unsigned 32-bit station IDs through field edits', () => {
     const doc = readRte(vector('a'));
     for (let i = 0; i < doc.stations.length; i++)

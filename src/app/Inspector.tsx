@@ -3,6 +3,7 @@ import { Check, ChevronLeft, ChevronRight, MapPin, Trash2 } from 'lucide-react';
 import { anchorDistance, type Point, type RouteDocument, type Sample, type Station } from '../domain/model';
 import { deleteVertex, moveVertex, updateStation } from '../domain/edit';
 import type { Copy } from './strings';
+import { StationPosition } from './StationPosition';
 
 export type Selection =
   { type: 'route' } | { type: 'vertex' | 'station'; id: string } | { type: 'sample'; index: number };
@@ -230,24 +231,17 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status }:
               />
               {t.boundary}
             </label>
-            <h3>{t.anchor}</h3>
-            <div className="coordinate-line">
-              <span>
-                {station.anchor
-                  ? (anchorDistance(doc, station.anchor) / 1000).toFixed(2) + ' km'
-                  : t.noAnchor}
-              </span>
-              {station.kind !== 'start' && station.kind !== 'finish' && (
-                <button
-                  className="icon"
-                  aria-label={t.anchor + ' · ' + t.pick}
-                  title={t.pick}
-                  onClick={() => setTool('stationAnchor')}
-                >
-                  <MapPin />
-                </button>
-              )}
-            </div>
+            <StationPosition
+              key={station.id + '/' + station.anchor?.vertexId + '/' + station.anchor?.fraction}
+              doc={doc}
+              station={station}
+              t={t}
+              onMove={(anchor) => {
+                patchStation({ anchor });
+                choose({ type: 'station', id: station.id });
+              }}
+              onPick={() => setTool('stationAnchor')}
+            />
             <h3>{t.location}</h3>
             {station.location ? (
               coords(station.location, (p) => patchStation({ location: p }))

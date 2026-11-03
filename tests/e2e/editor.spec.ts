@@ -115,6 +115,33 @@ test('opens a selected KML line with explicit height confirmation', async ({ pag
   expect(readRte(device.bytes).elevation.map((sample) => sample.height)).toEqual([200, 230]);
 });
 
+test('fills elevation gaps in one edit and asks before resampling device-distance collisions', async ({
+  page,
+}) => {
+  const source =
+    '<gpx><trk><name>Close samples</name><trkseg>' +
+    '<trkpt lat="0" lon="0"><ele>0</ele></trkpt>' +
+    '<trkpt lat="0" lon="0.0005"/>' +
+    '<trkpt lat="0" lon="0.001"><ele>10</ele></trkpt>' +
+    '<trkpt lat="0" lon="0.0010002"><ele>15</ele></trkpt>' +
+    '<trkpt lat="0" lon="0.002"><ele>30</ele></trkpt></trkseg></trk></gpx>';
+  await page.goto('/');
+  await open(page, 'close.gpx', Buffer.from(source));
+  const fill = page.getByRole('button', { name: 'Fill elevation gaps (1)' });
+  await fill.click();
+  await expect(page.getByRole('status')).toContainText('Estimated heights: 1. Still missing: 0.');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(fill).toBeVisible();
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await page.getByRole('button', { name: 'Download RTE', exact: true }).click();
+  const exported = readRte((await download(page, 'Download with nearest samples')).bytes);
+  expect(exported.elevation.map((s) => s.height)).toEqual([0, 5, 10, 30]);
+  const project = loadProject((await download(page, 'Save project')).bytes.toString('utf8'));
+  expect(project.elevation.map((s) => s.height)).toEqual([0, expect.closeTo(5), 10, 15, 30]);
+  await page.getByRole('button', { name: 'Download RTE', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Download with nearest samples' })).toBeVisible();
+});
+
 test('creates and recovers an empty editable project', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'File', exact: true }).click();

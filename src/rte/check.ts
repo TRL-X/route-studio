@@ -7,12 +7,14 @@ export class RteError extends Error {
   readonly messageZh: string;
   readonly code: 'invalid' | 'unsupported' | 'limit';
   readonly target?: RteTarget;
-  constructor(message: RteText, code: RteError['code'] = 'invalid', target?: RteTarget) {
+  readonly canResample: boolean;
+  constructor(message: RteText, code: RteError['code'] = 'invalid', target?: RteTarget, canResample = false) {
     super(formatMessage(message, 'en'));
     this.messageZh = formatMessage(message, 'zh');
     this.name = 'RteError';
     this.code = code;
     this.target = target;
+    this.canResample = canResample;
   }
 }
 
