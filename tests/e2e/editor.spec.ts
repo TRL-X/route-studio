@@ -3,7 +3,7 @@ import { strings } from '../../src/app/strings';
 import { loadProject } from '../../src/files/project';
 import { readRte } from '../../src/rte';
 
-import { open, download } from './files';
+import { open, download, openExport, openMagnetics } from './files';
 import { bgsRequests, answerBgs } from './bgs';
 
 test.beforeEach(async ({ page }) => {
@@ -11,9 +11,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function setSurveyDate(page: Page) {
+  await openMagnetics(page);
   const date = page.getByLabel('Reference date (UTC)');
   await date.fill('2026-11-03');
   await date.press('Enter');
+  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
 }
 
 const gpx = `<gpx version="1.1">
@@ -31,7 +33,7 @@ test('desktop editor switches languages and retains the preference', async ({ pa
   await page.reload();
   await expect(page.getByRole('button', { name: strings.zh.export, exact: true })).toBeVisible();
   await page.getByLabel(strings.zh.lang).selectOption('en');
-  await expect(page.getByRole('button', { name: 'Download RTE', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: strings.en.export, exact: true })).toBeVisible();
 });
 
 test('imports, edits, undoes, recovers a draft and downloads project and device files', async ({ page }) => {
@@ -81,14 +83,13 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
   await open(page, 'incomplete.gpx', Buffer.from(gpx.replace('<ele>20</ele>', '')));
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('North ridge');
-  await setSurveyDate(page);
-  const check = page.getByRole('button', { name: 'Check RTE', exact: true });
-  await expect(check).toHaveAccessibleDescription('Not checked');
-  await check.click();
-  await expect(check).toHaveAccessibleDescription('Needs attention');
-  await expect(page.getByText(/missing height for elevation sample 2/i).first()).toBeVisible();
   const project = await download(page, 'Save project');
   expect(loadProject(project.bytes.toString('utf8')).elevation[1].height).toBeNull();
+  await setSurveyDate(page);
+  await openExport(page);
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
+  await expect(dialog.getByText(/missing height for elevation sample 2/i)).toBeVisible();
   await page.getByRole('button', { name: 'Show in inspector', exact: true }).click();
   const height = page.getByRole('spinbutton', {
     name: 'Elevation (m)',
@@ -97,9 +98,8 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
   await expect(height).toHaveAccessibleDescription(/missing height for elevation sample 2/i);
   await height.fill('22');
   await height.press('Enter');
-  await expect(check).toHaveAccessibleDescription('Not checked');
-  await check.click();
-  await expect(check).toHaveAccessibleDescription('Ready to export');
+  await openExport(page);
+  await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeEnabled();
   const device = await download(page, 'Download RTE');
   expect(readRte(device.bytes).elevation[1].height).toBe(22);
 });
@@ -121,9 +121,7 @@ test('opens a selected KML line with explicit height confirmation', async ({ pag
   expect(readRte(device.bytes).elevation.map((sample) => sample.height)).toEqual([200, 230]);
 });
 
-test('fills elevation gaps in one edit and asks before resampling device-distance collisions', async ({
-  page,
-}) => {
+test('fills gaps in one edit and resolves device-distance collisions in the preview', async ({ page }) => {
   const source =
     '<gpx><trk><name>Close samples</name><trkseg>' +
     '<trkpt lat="0" lon="0"><ele>0</ele></trkpt>' +
@@ -140,16 +138,29 @@ test('fills elevation gaps in one edit and asks before resampling device-distanc
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(fill).toBeVisible();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
-  await page.getByRole('button', { name: 'Download RTE', exact: true }).click();
-  const exported = readRte((await download(page, 'Download with nearest samples')).bytes);
-  await expect(page.getByRole('button', { name: 'Check RTE', exact: true })).toHaveAccessibleDescription(
-    'Nearest samples only',
-  );
+  await page.getByRole('button', { name: strings.en.export, exact: true }).click();
+  await page.getByText('Resolved shared elevation positions: 1').click();
+  await expect(page.getByText('111.2 m → 10 m')).toBeVisible();
+  const exported = readRte((await download(page, 'Download RTE')).bytes);
   expect(exported.elevation.map((s) => s.height)).toEqual([0, 5, 10, 30]);
   const project = loadProject((await download(page, 'Save project')).bytes.toString('utf8'));
   expect(project.elevation.map((s) => s.height)).toEqual([0, expect.closeTo(5), 10, 15, 30]);
-  await page.getByRole('button', { name: 'Download RTE', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Download with nearest samples' })).toBeVisible();
+  await page.getByRole('button', { name: strings.en.export, exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByText('Route processing options').click();
+  await dialog.getByLabel('Elevation sample spacing').selectOption('10');
+  await dialog.getByLabel('Geometry tolerance').selectOption('2');
+  await dialog.getByLabel('Smoothing window').selectOption('30');
+  await dialog.getByText('Compare elevation profiles').click();
+  await expect(dialog.getByRole('img', { name: 'Compare elevation profiles' })).toBeVisible();
+  await dialog.getByLabel('File name').fill('ridge.rte');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: strings.en.export }).click();
+  await dialog.getByText('Route processing options').click();
+  await expect(dialog.getByLabel('Smoothing window')).toHaveValue('30');
+  const grid = await download(page, 'Download RTE');
+  expect(grid.name).toBe('ridge.rte');
+  expect(readRte(grid.bytes).elevation.length).toBe(24);
 });
 
 test('creates and recovers an empty editable project', async ({ page }) => {
@@ -207,4 +218,26 @@ test('places a checkpoint and its separate landmark, inserts a vertex and edits 
   expect(station?.anchor).toBeTruthy();
   expect(station?.location).toBeTruthy();
   expect(course.elevation[0].height).toBe(1028);
+});
+
+test('the export footer stays available on a narrow screen and only the chosen route keeps its settings', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.setViewportSize({ width: 360, height: 600 });
+  const dialog = await openMagnetics(page);
+  await dialog.getByText('Route processing options').click();
+  await dialog.getByLabel('Elevation sample spacing').selectOption('20');
+  await dialog.getByLabel('File name').fill('bad/name');
+  await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
+  await dialog.getByLabel('File name').fill('Trail');
+  await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeInViewport({ ratio: 1 });
+  await dialog.press('Escape');
+  await expect(dialog).toBeHidden();
+  await open(page, 'other.gpx', Buffer.from(gpx));
+  await expect(page.getByRole('heading', { name: 'North ridge' })).toBeVisible();
+  await openExport(page);
+  await dialog.getByText('Route processing options').click();
+  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveValue('0');
+  await expect(dialog.getByLabel('File name')).toHaveValue('North ridge');
 });

@@ -1,12 +1,15 @@
 import { formatMessage, msg, type RteText } from './messages';
 export type RteTarget =
-  { type: 'route' } | { type: 'sample'; index: number } | { type: 'station' | 'vertex'; id: string };
+  | { type: 'route' }
+  | { type: 'declination' }
+  | { type: 'sample'; index: number }
+  | { type: 'station' | 'vertex'; id: string };
 
 /** TRL-X-ROUTE-SPEC initial edition (2026-11-01), §§2, 7, 10. */
 export class RteError extends Error {
   readonly messageZh: string;
   readonly code: 'invalid' | 'unsupported' | 'limit';
-  readonly target?: RteTarget;
+  target?: RteTarget;
   readonly canResample: boolean;
   constructor(message: RteText, code: RteError['code'] = 'invalid', target?: RteTarget, canResample = false) {
     super(formatMessage(message, 'en'));

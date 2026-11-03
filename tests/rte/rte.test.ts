@@ -2,10 +2,19 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import chinese from '../../src/i18n/zh-CN.rte.json' with { type: 'json' };
 import { english } from '../../src/i18n/en-US.rte';
-import { readRte, writeRte, validateForRte, RteError } from '../../src/rte';
+import { simplifyGeometry } from '../../src/rte/processing';
+import { readRte, writeRte, prepareRte, validateForRte, RteError } from '../../src/rte';
 import { readSections, writeSections, fileCrc, viewOf } from '../../src/rte/wire';
 import { readCbor, writeCbor, type Value } from '../../src/rte/cbor';
-import { geomLayout, indexLayout, pack, unpack, indexBlocks, type Geometry } from '../../src/rte/records';
+import {
+  elevLayout,
+  geomLayout,
+  indexLayout,
+  pack,
+  unpack,
+  indexBlocks,
+  type Geometry,
+} from '../../src/rte/records';
 
 /** Normative Appendix B, TRL-X/route-specification @ 6918eb7aa438186589a516f8caccb03b960c6c0e. */
 const vector = (id: string) => new Uint8Array(readFileSync(new URL(`./vectors/${id}.rte`, import.meta.url)));
@@ -266,5 +275,83 @@ describe('RTE 1.0', () => {
     sections.ELEV = readSections(vector('c')).ELEV;
     viewOf(sections.GIDX).setInt32(28, 5, true);
     expect(() => readRte(writeSections(sections))).toThrow(/GIDX/);
+  });
+});
+
+describe('export processing', () => {
+  test('the default preview preserves reference vectors byte for byte', () => {
+    for (const id of ['a', 'b', 'c']) {
+      const original = vector(id);
+      expect(prepareRte(readRte(original)).bytes).toEqual(original);
+    }
+  });
+
+  test('samples off-grid boundaries from the continuous project profile and keeps geometry independent', () => {
+    const doc = readRte(vector('b'));
+    doc.rte!.distanceDm = [0, 100, 200];
+    doc.vertices.forEach((v, i) => {
+      v.lat = 0;
+      v.lon = i * 0.00009;
+    });
+    const first = doc.vertices[0].id;
+    doc.stations = doc.stations.filter((s) => s.kind === 'start' || s.kind === 'finish');
+    doc.stations.push({
+      ...doc.stations[0],
+      id: '11',
+      kind: 'cp',
+      anchor: { vertexId: first, fraction: 0.73 },
+      name: 'Off-grid CP',
+    });
+    doc.elevation = [
+      { anchor: { vertexId: first, fraction: 0 }, height: 0 },
+      { anchor: { vertexId: first, fraction: 0.729 }, height: 10 },
+      { anchor: { vertexId: first, fraction: 0.733 }, height: 2 },
+      { anchor: { vertexId: doc.vertices.at(-1)!.id, fraction: 0 }, height: 12 },
+    ];
+    const before = structuredClone(doc);
+    const source = prepareRte(doc);
+    expect(source.preview.shared).toEqual([{ meters: 7.3, height: 10 }]);
+    const processed = prepareRte(doc, { intervalM: 10, toleranceM: 2, smoothingM: 0 });
+    const sections = readSections(processed.bytes);
+    const heights = unpack(sections.ELEV, elevLayout);
+    expect(heights.map((row) => row[0])).toEqual([0, 73, 100, 200]);
+    expect(heights[1][1]).toBe(80);
+    expect(processed.preview).toMatchObject({
+      vertices: 3,
+      samples: heights.length,
+      stages: 2,
+      ascentM: heights.at(-1)![2] / 10,
+    });
+    expect(readRte(processed.bytes).rte!.distanceDm).toEqual([0, 73, 200]);
+    expect(doc).toEqual(before);
+  });
+
+  test('integrates a distance-weighted window and clips both ends', () => {
+    const doc = readRte(vector('c'));
+    doc.rte!.distanceDm = [0, 50, 200];
+    doc.stations = doc.stations.filter((s) => s.kind === 'start' || s.kind === 'finish');
+    doc.elevation = doc.vertices.map((v, i) => ({
+      anchor: { vertexId: v.id, fraction: 0 },
+      height: [0, 10, 0][i],
+    }));
+    const { bytes, preview } = prepareRte(doc, { intervalM: 10, smoothingM: 10, toleranceM: 0 });
+    expect(readRte(bytes).elevation.map((s) => s.height)).toEqual([5, 6.7, 1.7]);
+    expect(preview.ascentM).toBe(1.7);
+    doc.elevation[1].height = null;
+    expect(() => prepareRte(doc, { intervalM: 20, smoothingM: 30, toleranceM: 2 })).toThrow(
+      /missing height/i,
+    );
+  });
+
+  test('simplification preserves an out-and-back with coincident endpoints and antimeridian crossings', () => {
+    const geom: Geometry[] = [
+      [0, 1799999000, 0],
+      [0, -1800000000, 100],
+      [0, -1799999000, 200],
+      [0, -1800000000, 300],
+      [0, 1799999000, 400],
+    ];
+    expect(simplifyGeometry(geom, new Set([0, 400]), 2).map((n) => n[2])).toEqual([0, 200, 400]);
+    expect(simplifyGeometry(geom, new Set([0, 100, 400]), 2).map((n) => n[2])).toContain(100);
   });
 });

@@ -12,7 +12,6 @@ export interface LookupState {
 
 export function useDeclinationLookup(
   doc: RouteDocument,
-  session: number,
   dispatch: (action: { type: 'lookup'; settings: AutomaticDeclination; value: MagneticDeclination }) => void,
 ): LookupState {
   const settings = doc.declination?.mode === 'auto' ? doc.declination : undefined;
@@ -41,7 +40,7 @@ export function useDeclinationLookup(
       else dispatch({ type: 'lookup', settings, value: result.value });
     });
     return () => controller.abort();
-  }, [settings, lat, lon, ready, session, dispatch]);
+  }, [settings, lat, lon, ready, dispatch]);
 
   const error =
     failure?.settings === settings && sameReference(failure?.reference, reference)

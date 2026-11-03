@@ -53,8 +53,7 @@ export function DeclinationFields({
     }
   }
   return (
-    <section aria-label={t.magTitle}>
-      <h3>{t.magTitle}</h3>
+    <div className="declination-fields">
       <label className="field">
         <span>{t.magMode}</span>
         <select value={settings.mode} onChange={(e) => selectMode(e.target.value)}>
@@ -135,6 +134,6 @@ export function DeclinationFields({
           {manualError && <p className="field-issue">{manualError}</p>}
         </>
       )}
-    </section>
+    </div>
   );
 }
