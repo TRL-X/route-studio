@@ -191,7 +191,7 @@ export function MapView(props: MapViewProps) {
   const svg = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 800, height: 450 });
   const [manualCamera, setCamera] = useState<Camera | null>(null);
-  const [showBase, setShowBase] = useState(false);
+  const [showBase, setShowBase] = useState(true);
   const [baseFailed, setBaseFailed] = useState(false);
   const [hover, setHover] = useState<(XY & { onRoute: boolean }) | null>(null);
   const [mapProbe, setMapProbe] = useState<(XY & { meters: number }) | null>(null);
