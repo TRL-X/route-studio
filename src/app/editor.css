@@ -546,6 +546,8 @@ h1 {
 .profile-head {
   min-height: 35px;
   background: #fff;
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 .profile-head .sample-count {
   margin-right: auto;
@@ -558,6 +560,25 @@ h1 {
   color: var(--warning);
   border-color: #d2b88b;
   background: #fff9eb;
+}
+.profile-head .terrain-action {
+  margin: 0;
+}
+.terrain-dialog {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.terrain-dialog a {
+  color: var(--action);
+}
+.terrain-credit {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.terrain-error {
+  color: #842a32;
 }
 .inspect-content {
   padding: 19px var(--pane-inset);

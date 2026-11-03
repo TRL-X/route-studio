@@ -2,6 +2,11 @@ import { loadProject, parseRoutes, RouteFileError } from '../files';
 import { readRte, prepareRte, RteError } from '../rte';
 import type { IORequest, IOResult } from './io';
 async function handle(request: IORequest): Promise<IOResult> {
+  if (request.type === 'terrain') {
+    const { sampleCopernicus } = await import('../files/copernicus');
+    const values = await sampleCopernicus(request.points, new AbortController().signal);
+    return { type: 'heights', values };
+  }
   if (request.type === 'compile') {
     return {
       type: 'binary',

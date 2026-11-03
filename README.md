@@ -17,7 +17,7 @@ Open the local URL printed in the terminal. The editor opens with an editable ex
 
 1. Choose **Open**, drop a file onto the editor, or start drawing with **File → New route**. If a GPX contains multiple tracks or segments, or a KML contains several lines, select the course you want to edit. A GPX waypoint or KML point named for the start or finish within 100 m of a matching endpoint supplies that station's name and landmark coordinates. On a closed course, a shared start/finish marker can supply both stations. Other points become checkpoints with **Stage boundary** enabled. You can edit their settings in the station inspector.
 2. Use **Append point** or **Insert point** to change the geometry. Drag a point with **Select**, or edit its coordinates in the inspector. To add a station, choose **Add station**, move near the route to preview its distance, and click to place it. Press **Esc** to cancel the preview. If the route passes the same place twice, choose the distance and neighboring stations for the intended pass. You can also adjust an existing station's **Route distance (km)** independently of its landmark coordinates.
-3. Select **Fill elevation gaps** above the elevation profile to estimate missing heights by distance between known samples. The edit can be undone in one step. Use **Next missing height** to inspect any remaining gaps. Missing endpoints need a known height, and a track without elevations needs source measurements before interpolation can fill it. When a KML supplies heights without an altitude mode, choose whether to use them on import.
+3. Choose **Fill elevation gaps** above the profile to interpolate between known heights up to 200 m apart. If gaps remain or the route has no heights, the editor fetches a GLO-30 preview for the whole route. Interpolation is a separate undoable edit. When a KML supplies heights without an altitude mode, choose whether to use them on import.
 4. Choose **Save project** to download a `.routeproj` file. Projects preserve unfinished edits, including missing heights. The editor also saves a recovery draft in the browser's IndexedDB. Use the project file for backups or to continue on another computer.
 5. Choose **Export RTE…** to check the route, review the output, set the filename and download the previewed bytes. Blocking errors can be opened in the inspector.
 6. Under **Route processing options**, the defaults are **10 m** for elevation sample spacing, **2 m** for geometry tolerance, and **10 m** for the smoothing window. Compare the profiles, node counts, ascent and file size as you adjust the settings. Endpoints and stage boundaries stay at their original distances. To preserve the project samples and geometry, choose **Keep project samples** and switch geometry tolerance and smoothing off. If samples share a 0.1 m device position, expand the processing record to see which height was used. These settings apply only to the device file and are remembered while editing this route in the current session.
@@ -28,6 +28,10 @@ To send the previewed RTE to an Arcap device, open the editor over HTTPS or loca
 
 Select a station or sample to keep its position marked while you inspect nearby points. In a narrow window, select an object and choose **Edit selection** to open its inspector. Drag the divider above the elevation profile to change its height, or focus the divider and use the arrow keys.
 
+Choose **Get elevations online** to fetch a GLO-30 profile. The chart overlays the current and proposed elevations and highlights stretches worth checking.
+
+When every sample has terrain data, choose **Replace all elevations** to apply the EGM2008 heights in one undoable edit. Cancel to keep the current profile.
+
 | Shortcut             | Action                                                  |
 | -------------------- | ------------------------------------------------------- |
 | `Ctrl/⌘ + O`         | Open a file                                             |
@@ -37,6 +41,8 @@ Select a station or sample to keep its position marked while you inspect nearby 
 | `Esc`                | Close a menu or dialog and return to the selection tool |
 
 Route editing and file conversion run in the browser. The online basemap is enabled by default, so MapLibre requests map resources for the current view from OpenFreeMap. You can turn it off to use a local coordinate grid; the map also falls back to the grid if the basemap is unavailable. To use a different provider, set `VITE_MAP_STYLE_URL` in `.env.local` to the URL of a MapLibre style, then restart the dev server or rebuild.
+
+Online terrain lookup requests one-degree tiles and byte ranges from the [Microsoft Planetary Computer GLO-30 collection](https://planetarycomputer.microsoft.com/dataset/cop-dem-glo-30). The editor samples the nearest grid point in the browser, adding samples about every 60 m on long intervals. The model measures surface heights and may represent treetops or the hillside above a tunnel. See the [Copernicus dataset and attribution](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
 
 ## Code and format support
 

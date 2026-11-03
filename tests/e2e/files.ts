@@ -19,6 +19,13 @@ export async function openMagnetics(page: Page) {
     await dialog.locator('.mag-export summary').click();
   return dialog;
 }
+export async function setSurveyDate(page: Page) {
+  const dialog = await openMagnetics(page);
+  const date = dialog.getByLabel('Reference date (UTC)');
+  await date.fill('2026-11-03');
+  await date.press('Enter');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+}
 export async function disableExportProcessing(page: Page) {
   const dialog = await openExport(page);
   await dialog.getByText('Route processing options').click();

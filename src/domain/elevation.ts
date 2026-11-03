@@ -14,7 +14,7 @@ interface Level {
 }
 
 /** Interpolate a draft on the same continuous horizontal distance axis used by the editor. */
-export function interpolateMissingHeights(document: RouteDocument): InterpolationResult {
+export function interpolateMissingHeights(document: RouteDocument, maxSpan = Infinity): InterpolationResult {
   const { vertices, elevation } = document;
   const missing = elevation.reduce((count, sample) => count + Number(sample.height === null), 0);
   const unchanged = { document, filled: 0, remaining: missing };
@@ -57,7 +57,7 @@ export function interpolateMissingHeights(document: RouteDocument): Interpolatio
     } else if (level.height === undefined) {
       if (previous) gap.push(level);
     } else {
-      if (previous) {
+      if (previous && level.distance - previous.distance <= maxSpan) {
         for (const interior of gap) {
           const t = (interior.distance - previous.distance) / (level.distance - previous.distance);
           fill(interior, (1 - t) * previous.height! + t * level.height);

@@ -1,0 +1,14 @@
+{
+  "title": "在线获取高程",
+  "originalDatum": "原基准",
+  "datumHint": "基准不同，曲线可能整体偏移。",
+  "currentLine": "原高程",
+  "replacementLine": "GLO-30",
+  "attention": "需留意路段",
+  "replace": "替换全部高程",
+  "retry": "重试",
+  "reading": "正在获取高程…",
+  "coverage": "已获取全部 {total} 个位置的高程。",
+  "missing": "{missing} 个位置缺少数据，无法替换全线高程。",
+  "sourceDetails": "数据来源"
+}

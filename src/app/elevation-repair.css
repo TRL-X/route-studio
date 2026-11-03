@@ -1,0 +1,61 @@
+.dialog.replace-dialog {
+  width: min(880px, 96vw);
+  max-height: 94dvh;
+  padding: 16px 18px 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.replace-dialog h2 {
+  margin: 0 0 8px;
+}
+.replace-dialog .replace-summary {
+  color: var(--route);
+}
+.replace-dialog .replace-datum {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.replace-datum strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.replace-datum .replace-hint {
+  display: inline-block;
+  margin-inline-start: 12px;
+}
+.replace-dialog .replace-status {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.replace-credit {
+  color: var(--muted);
+  font-size: 12px;
+  margin-block: 10px;
+}
+.replace-credit summary {
+  cursor: pointer;
+}
+.replace-dialog footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 -18px;
+  border-top: 1px solid var(--line);
+  padding: 10px 18px;
+  background: white;
+}
+@media (max-width: 600px) {
+  .dialog.replace-dialog {
+    padding: 12px 12px 0;
+  }
+  .replace-dialog footer {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+}

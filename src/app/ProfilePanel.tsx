@@ -9,14 +9,18 @@ export function ProfilePanel({
   children,
   t,
   count,
-  missing,
+  canFill,
+  canFetch,
   onFill,
+  onFetch,
 }: {
   children: ReactNode;
   t: Copy;
   count: number;
-  missing: number;
+  canFill: boolean;
+  canFetch: boolean;
   onFill: () => void;
+  onFetch: () => void;
 }) {
   const [height, setHeight] = useState(27);
   const [collapsed, setCollapsed] = useState(false);
@@ -73,11 +77,17 @@ export function ProfilePanel({
         <span className="sample-count">
           {count} {t.samples}
         </span>
-        {missing > 0 && (
-          <button className="sub-action gap-fill" title={t.interpolationHint} onClick={onFill}>
-            {t.interpolateGaps} ({missing})
-          </button>
-        )}
+        <button
+          className="sub-action gap-fill"
+          title={t.interpolationHint}
+          disabled={!canFill}
+          onClick={onFill}
+        >
+          {t.interpolateGaps}
+        </button>
+        <button className="sub-action terrain-action" disabled={!canFetch} onClick={onFetch}>
+          {t.fetchElevations}
+        </button>
         <button
           className="icon profile-toggle"
           aria-label={collapsed ? t.expandProfile : t.collapseProfile}

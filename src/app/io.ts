@@ -1,6 +1,6 @@
 import type { ExportOptions } from '../rte/processing';
 import type { ExportPreview, RteTarget } from '../rte';
-import type { RouteDocument } from '../domain/model';
+import type { Point, RouteDocument } from '../domain/model';
 export interface Choice {
   name: string;
   pointCount: number;
@@ -8,9 +8,11 @@ export interface Choice {
 }
 export type IORequest =
   | { type: 'read'; file: File; choice?: number; accept?: boolean }
+  | { type: 'terrain'; points: Point[] }
   | { type: 'compile'; doc: RouteDocument; options: ExportOptions };
 export type IOResult =
   | { type: 'document'; doc: RouteDocument }
+  | { type: 'heights'; values: (number | null)[] }
   | { type: 'choices'; choices: Choice[] }
   | { type: 'binary'; bytes: Uint8Array<ArrayBuffer>; preview: ExportPreview }
   | { type: 'error'; en: string; zh: string; fileCode?: string; target?: RteTarget };

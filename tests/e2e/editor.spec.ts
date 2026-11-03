@@ -1,22 +1,14 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { strings } from '../../src/app/strings';
 import { loadProject } from '../../src/files/project';
 import { prepareRte, readRte } from '../../src/rte';
 
-import { open, download, openExport, openMagnetics, disableExportProcessing } from './files';
+import { open, download, openExport, openMagnetics, disableExportProcessing, setSurveyDate } from './files';
 import { bgsRequests, answerBgs } from './bgs';
 
 test.beforeEach(async ({ page }) => {
   await page.route(bgsRequests, (route) => answerBgs(route));
 });
-
-async function setSurveyDate(page: Page) {
-  await openMagnetics(page);
-  const date = page.getByLabel('Reference date (UTC)');
-  await date.fill('2026-11-03');
-  await date.press('Enter');
-  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
-}
 
 const gpx = `<gpx version="1.1">
   <wpt lat="30.011" lon="105.01"><name>Water</name></wpt>
@@ -140,11 +132,12 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   await page.goto('/');
   await open(page, 'close.gpx', Buffer.from(source));
   await setSurveyDate(page);
-  const fill = page.getByRole('button', { name: 'Fill elevation gaps (1)' });
+  const fill = page.getByRole('button', { name: 'Fill elevation gaps', exact: true });
   await fill.click();
-  await expect(page.getByRole('status')).toContainText('Estimated heights: 1. Still missing: 0.');
+  await expect(page.getByText('Filled 1 · 0 remaining', { exact: true })).toBeVisible();
+  await expect(fill).toBeDisabled();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect(fill).toBeVisible();
+  await expect(fill).toBeEnabled();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await disableExportProcessing(page);
   await page.getByText('Resolved shared elevation positions: 1').click();
