@@ -1,5 +1,8 @@
 export type FileErrorCode =
   | 'invalid-xml'
+  | 'invalid-fit'
+  | 'unsupported-fit-type'
+  | 'fit-no-gps'
   | 'unsupported-format'
   | 'no-routes'
   | 'invalid-coordinates'

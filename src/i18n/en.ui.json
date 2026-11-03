@@ -159,6 +159,9 @@
   "missingHeight": "Missing height",
   "noElevationData": "No elevation data",
   "fileErrors": {
+    "invalid-fit": "The FIT file is damaged or incomplete. Check the original file and try again.",
+    "unsupported-fit-type": "Open a FIT Course or Activity file to import a route.",
+    "fit-no-gps": "No GPS track was found in this FIT file. Indoor activities may contain no route.",
     "invalid-xml": "The XML file is malformed.",
     "unsupported-format": "This file type is not supported.",
     "no-routes": "No route was found in this file.",

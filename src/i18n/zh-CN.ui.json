@@ -159,6 +159,9 @@
   "missingHeight": "海拔缺失",
   "noElevationData": "暂无海拔数据",
   "fileErrors": {
+    "invalid-fit": "FIT 文件损坏或不完整。请检查原始文件后重试。",
+    "unsupported-fit-type": "请选择 FIT 路线（Course）或活动（Activity）文件。",
+    "fit-no-gps": "此 FIT 文件中没有 GPS 轨迹。室内活动可能没有路线。",
     "invalid-xml": "XML 文件格式错误。",
     "unsupported-format": "不支持此文件类型。",
     "no-routes": "文件中没有可用路线。",

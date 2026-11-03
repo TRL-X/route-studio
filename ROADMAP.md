@@ -15,9 +15,13 @@
 - On November 3, 2026, the Bluetooth upload was tested on a physical Arcap device. The tester used **Bluetooth upload…** beside **Download RTE**, entered the device path, and uploaded the route. The file length and IEEE CRC32 reported by the device matched the exported RTE.
 - Cancellation and retry after a disconnect still need hardware testing. Same-name replacement is planned once the device can preserve the previous route through a failed transfer.
 
+## File formats
+
+- FIT Course and Activity import is available, including selection of GPS sessions and placement of course points by timestamp or recorded distance.
+
 ## Later candidates
 
-- Add FIT import and export, and support GPX and KML export. Explain which route information each target format can preserve.
+- Add FIT, GPX and KML export. Explain which route information each target format can preserve.
 - Consider an Electron shell if device connectivity or local file workflows require native desktop capabilities. Reuse the existing route model and format modules.
 
 As the RTE specification evolves, pin each adopted revision to a commit and update the reference vectors, firmware reader tests, and physical device acceptance record together.

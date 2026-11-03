@@ -1,4 +1,4 @@
-import { loadProject, parseRoutes, RouteFileError } from '../files';
+import { loadProject, parseRoutes, RouteFileError, type RouteChoice } from '../files';
 import { readRte, prepareRte, RteError } from '../rte';
 import type { IORequest, IOResult } from './io';
 async function handle(request: IORequest): Promise<IOResult> {
@@ -17,8 +17,15 @@ async function handle(request: IORequest): Promise<IOResult> {
   if (ext === 'rte')
     return { type: 'document', doc: readRte(new Uint8Array(await request.file.arrayBuffer())) };
   if (ext === 'routeproj') return { type: 'document', doc: loadProject(await request.file.text()) };
-  if (ext !== 'gpx' && ext !== 'kml') throw new RouteFileError('unsupported-format');
-  const choices = parseRoutes(await request.file.text(), request.file.name);
+  let choices: RouteChoice[];
+  if (ext === 'fit') {
+    const { parseFitRoutes } = await import('../files/fit');
+    choices = await parseFitRoutes(await request.file.arrayBuffer(), request.file.name);
+  } else if (ext === 'gpx' || ext === 'kml') {
+    choices = parseRoutes(await request.file.text(), request.file.name);
+  } else {
+    throw new RouteFileError('unsupported-format');
+  }
   if (request.choice === undefined && (choices.length > 1 || choices[0].hasUnconfirmedHeights)) {
     return {
       type: 'choices',

@@ -199,7 +199,7 @@ export function EditorToolbar({
         type="file"
         aria-label={t.openFile}
         hidden
-        accept=".gpx,.kml,.rte,.routeproj"
+        accept=".fit,.gpx,.kml,.rte,.routeproj"
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = '';

@@ -1,6 +1,6 @@
 # Route Studio
 
-Route Studio is a desktop browser editor for preparing routes for TRL-X devices. Open a GPX, KML, or RTE file, edit the course and its elevation profile, then download a validated `.rte` file for the device. The interface is available in English and Simplified Chinese.
+Route Studio is a desktop browser editor for preparing routes for TRL-X devices. Open a FIT, GPX, KML, or RTE file, edit the course and its elevation profile, then download a validated `.rte` file for the device. The interface is available in English and Simplified Chinese.
 
 ## Run locally
 
@@ -15,14 +15,14 @@ Open the local URL printed in the terminal. The editor opens with an editable ex
 
 ## Prepare a route
 
-1. Choose **Open**, drop a file onto the editor, or start drawing with **File → New route**. If a GPX contains multiple tracks or segments, or a KML contains several lines, select the course you want to edit. A GPX waypoint or KML point named for the start or finish within 100 m of a matching endpoint supplies that station's name and landmark coordinates. On a closed course, a shared start/finish marker can supply both stations. Other points become checkpoints with **Stage boundary** enabled. You can edit their settings in the station inspector.
+1. Choose **Open**, drop a file onto the editor, or start drawing with **File → New route**. If a FIT activity contains several GPS sessions, a GPX contains multiple tracks or segments, or a KML contains several lines, select the course you want to edit. A GPX waypoint or KML point named for the start or finish within 100 m of a matching endpoint supplies that station's name and landmark coordinates. On a closed course, a shared start/finish marker can supply both stations. Other points become checkpoints with **Stage boundary** enabled. You can edit their settings in the station inspector.
 2. Use **Append point** or **Insert point** to change the geometry. Drag a point with **Select**, or edit its coordinates in the inspector. To add a station, choose **Add station**, move near the route to preview its distance, and click to place it. Press **Esc** to cancel the preview. If the route passes the same place twice, choose the distance and neighboring stations for the intended pass. You can also adjust an existing station's **Route distance (km)** independently of its landmark coordinates.
 3. Choose **Fill elevation gaps** above the profile to interpolate between known heights up to 200 m apart. If gaps remain or the route has no heights, the editor fetches a GLO-30 preview for the whole route. Interpolation is a separate undoable edit. When a KML supplies heights without an altitude mode, choose whether to use them on import.
 4. Choose **Save project** to download a `.routeproj` file. Projects preserve unfinished edits, including missing heights. The editor also saves a recovery draft in the browser's IndexedDB. Use the project file for backups or to continue on another computer.
 5. Choose **Export RTE…** to check the route, review the output, set the filename and download the previewed bytes. Blocking errors can be opened in the inspector.
 6. Under **Route processing options**, the defaults are **10 m** for elevation sample spacing, **2 m** for geometry tolerance, and **10 m** for the smoothing window. Compare the profiles, node counts, ascent and file size as you adjust the settings. Endpoints and stage boundaries stay at their original distances. To preserve the project samples and geometry, choose **Keep project samples** and switch geometry tolerance and smoothing off. If samples share a 0.1 m device position, expand the processing record to see which height was used. These settings apply only to the device file and are remembered while editing this route in the current session.
 
-When **Export RTE…** opens, new routes and GPX/KML imports in **Magnetic declination → Automatic lookup** query BGS WMM2025 using the route’s distance midpoint, zero ellipsoid height, and an editable UTC date. Only that coordinate and date are shared with BGS. A successful result is saved with the project for offline export. Change the midpoint or date to refresh it. If lookup fails, retry, enter a manual value in degrees (east positive, west negative), or choose **Omit** to export without declination. Imported RTE files keep their original value, dates, and reference location, including an absent value, until you edit them.
+When **Export RTE…** opens, new routes and FIT/GPX/KML imports in **Magnetic declination → Automatic lookup** query BGS WMM2025 using the route’s distance midpoint, zero ellipsoid height, and an editable UTC date. Only that coordinate and date are shared with BGS. A successful result is saved with the project for offline export. Change the midpoint or date to refresh it. If lookup fails, retry, enter a manual value in degrees (east positive, west negative), or choose **Omit** to export without declination. Imported RTE files keep their original value, dates, and reference location, including an absent value, until you edit them.
 
 To send the previewed RTE to an Arcap device, open the editor over HTTPS or localhost in a browser with Web Bluetooth. Open **Export RTE…** and choose **Bluetooth upload…** next to **Download RTE**. Enter the full device path including a new filename, for example `/SD:/ROUTES/TEST.RTE`. The directory must already exist. Put the device into pairing mode if needed, then choose **Select device and upload**. Route Studio checks the device file's length and IEEE CRC32 against the preview bytes. An identical file at the chosen path also passes verification. If another file occupies that path, choose a different filename. An interrupted upload can leave a partial file at the destination.
 
@@ -53,11 +53,15 @@ Write code, comments, and documentation in English. Keep user-facing translation
 | Directory     | Responsibility                                                                          |
 | ------------- | --------------------------------------------------------------------------------------- |
 | `src/domain/` | Route geometry, independent elevation samples, station anchors, and editing operations  |
-| `src/files/`  | GPX and KML import, versioned project files, and local draft recovery                   |
+| `src/files/`  | FIT, GPX and KML import, versioned project files, and local draft recovery              |
 | `src/rte/`    | Binary RTE parsing and validation, plus compilation from an editable route              |
 | `src/app/`    | Desktop controls, undo and redo, language selection, and the file-processing Web Worker |
 | `src/i18n/`   | English and Simplified Chinese interface text and RTE diagnostics                       |
 | `src/views/`  | Map interaction and the linked elevation profile                                        |
+
+FIT import accepts Course files and Activity files with GPS records. Activity imports use each recorded session as a separate route and omit records without GPS coordinates. The editor uses enhanced altitude when present, falls back to altitude, and leaves missing heights editable. Heart rate, timing and other training measurements are not stored in the project. Distances in the editor are calculated from the imported geometry and can differ from the device's recorded distance.
+
+FIT course points become stations. A checkpoint becomes a stage boundary, and other cues become points of interest. Route Studio uses matching record timestamps, then recorded distance, to place a station on the intended pass. If only its coordinates identify it and the route passes there twice, the station keeps its landmark coordinates for manual placement.
 
 Elevation samples and stations attach to route segments using stable vertex IDs and fractional positions. A Web Worker handles file import and RTE compilation. During export, the compiler establishes the device's reference distance axis, computes stage statistics, and writes the geometry index. For imported RTE files, it reuses valid distance mappings so an unrelated edit, such as renaming a route, can preserve the original sampling.
 
