@@ -39,6 +39,8 @@ import { useHistory } from './history';
 import { runIO, type Choice, type IOResult } from './io';
 import { initialLanguage, strings, type Lang } from './strings';
 import './editor.css';
+import { saveFile } from './saveFile';
+import { DesktopBluetooth } from './DesktopBluetooth';
 
 type Localized = { en: string; zh: string };
 type Problem = Localized & { target?: Selection };
@@ -51,14 +53,6 @@ const both = (key: keyof Omit<(typeof strings)['en'], 'fileErrors'>): Localized 
   en: strings.en[key],
   zh: strings.zh[key],
 });
-function download(content: BlobPart, filename: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 function filename(name: string) {
   return (
     name
@@ -113,10 +107,13 @@ export function Editor({
   const [mapProbeDistance, setMapProbeDistance] = useState<number | null>(null);
   const [panel, setPanel] = useState<'outline' | 'inspector' | null>(null);
   const [busy, setBusy] = useState(false);
+  const [savingFile, setSavingFile] = useState(false);
+  const [fileSaveError, setFileSaveError] = useState<Localized | null>(null);
+  const saveLock = useRef(false);
   const [pending, setPending] = useState<Replacement | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
   const [elevationPreview, setElevationPreview] = useState<{ summary?: Localized } | null>(null);
-  const locked = busy || !!pending || !!choices || !!exportFormat || !!elevationPreview;
+  const locked = busy || savingFile || !!pending || !!choices || !!exportFormat || !!elevationPreview;
   const [draftState, setDraftState] = useState<'auto' | 'saving' | 'saved' | 'saveFailed'>(
     recoveryError ? 'saveFailed' : 'auto',
   );
@@ -124,6 +121,9 @@ export function Editor({
   const ioLock = useRef(false);
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const dirty = doc !== savedDoc;
+  useEffect(() => {
+    window.routeStudioDesktop?.setDocumentState(dirty, lang);
+  }, [dirty, lang]);
   const change = (next: RouteDocument) => {
     if (next === doc) return;
     autosave.current = true;
@@ -272,30 +272,60 @@ export function Editor({
     lang,
     name: exportName ?? filename(doc.name),
     onName: setExportName,
-    onClose: () => setExportFormat(null),
-    onDownload: (bytes: Uint8Array<ArrayBuffer>, name: string) => {
-      if (!exportFormat) return;
+    onClose: () => {
+      setExportFormat(null);
+      setFileSaveError(null);
+    },
+    saving: savingFile,
+    saveError: fileSaveError?.[lang],
+    onDownload: async (bytes: Uint8Array<ArrayBuffer>, name: string) => {
+      if (!exportFormat || saveLock.current) return;
+      saveLock.current = true;
+      setSavingFile(true);
+      setFileSaveError(null);
       const types = {
         rte: 'application/octet-stream',
         fit: 'application/octet-stream',
         gpx: 'application/gpx+xml',
         kml: 'application/vnd.google-earth.kml+xml',
       };
-      download(bytes, filename(name) + '.' + exportFormat, types[exportFormat]);
-      setExportFormat(null);
-      setNotice({
-        en: strings.en.formatDone.replace('{format}', exportFormat.toUpperCase()),
-        zh: strings.zh.formatDone.replace('{format}', exportFormat.toUpperCase()),
-      });
+      try {
+        if (!(await saveFile(bytes, filename(name) + '.' + exportFormat, types[exportFormat]))) return;
+        setExportFormat(null);
+        const key = window.routeStudioDesktop ? 'desktopFormatDone' : 'formatDone';
+        setNotice({
+          en: strings.en[key].replace('{format}', exportFormat.toUpperCase()),
+          zh: strings.zh[key].replace('{format}', exportFormat.toUpperCase()),
+        });
+      } catch {
+        setFileSaveError(both('fileSaveFailed'));
+      } finally {
+        saveLock.current = false;
+        setSavingFile(false);
+      }
     },
   };
-  function save() {
+  async function save() {
+    if (saveLock.current) return;
+    saveLock.current = true;
+    setSavingFile(true);
     try {
-      download(saveProject(doc), filename(doc.name) + '.routeproj', 'application/json');
+      if (!(await saveFile(saveProject(doc), filename(doc.name) + '.routeproj', 'application/json'))) return;
       setSavedDoc(doc);
-      setNotice(both('projectDone'));
+      setNotice(both(window.routeStudioDesktop ? 'desktopProjectDone' : 'projectDone'));
     } catch {
-      setProblem(both('saveFailed'));
+      setProblem(both('fileSaveFailed'));
+    } finally {
+      saveLock.current = false;
+      setSavingFile(false);
+    }
+  }
+  async function pickDesktopFile() {
+    try {
+      const file = await window.routeStudioDesktop!.openFile();
+      if (file) await openFile(new File([file.bytes], file.name));
+    } catch {
+      setProblem(both('readFailed'));
     }
   }
   function addStation() {
@@ -372,6 +402,7 @@ export function Editor({
           onNew={() => requestReplace({ doc: emptyRoute(), source: '' })}
           onExample={() => requestReplace({ doc: exampleRoute(), source: '', sample: true })}
           onOpen={openFile}
+          onPickFile={window.routeStudioDesktop ? () => void pickDesktopFile() : undefined}
           onSave={save}
           onExport={(format) => {
             setProblem(null);
@@ -621,6 +652,7 @@ export function Editor({
           </section>
         </div>
       )}
+      <DesktopBluetooth lang={lang} />
       {choices && (
         <div className="overlay">
           <section className="dialog" role="dialog" aria-modal="true" aria-label={t.selectTrack}>

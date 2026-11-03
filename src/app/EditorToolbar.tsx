@@ -23,6 +23,7 @@ interface ToolbarProps {
   onNew: () => void;
   onExample: () => void;
   onOpen: (file: File) => void;
+  onPickFile?: () => void;
   onSave: () => void;
   onExport: (format: ExportFormat) => void;
 }
@@ -52,6 +53,7 @@ export function EditorToolbar({
   onNew,
   onExample,
   onOpen,
+  onPickFile,
   onSave,
   onExport,
 }: ToolbarProps) {
@@ -63,7 +65,8 @@ export function EditorToolbar({
   const saveButton = useRef<HTMLButtonElement>(null);
   const pickFile = () => {
     setMenu(null);
-    picker.current?.click();
+    if (onPickFile) onPickFile();
+    else picker.current?.click();
   };
 
   useEffect(() => {

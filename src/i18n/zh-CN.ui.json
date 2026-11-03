@@ -229,5 +229,8 @@
   "exportHeightConflicts": "有 {count} 个轨迹位置包含互相冲突的高度，将省略这些位置的海拔。",
   "fitOmitted": "以下站点没有路线位置，将跳过：{names}。",
   "xmlOmitted": "以下站点既没有坐标也没有路线位置，将跳过：{names}。",
-  "trackProjectFields": "请使用项目文件保留站点短标签、自定义分段边界、海拔设置和磁偏角。"
+  "trackProjectFields": "请使用项目文件保留站点短标签、自定义分段边界、海拔设置和磁偏角。",
+  "desktopProjectDone": "项目已保存。",
+  "desktopFormatDone": "{format} 文件已保存。",
+  "fileSaveFailed": "无法保存文件，请尝试其他位置。"
 }

@@ -101,7 +101,15 @@ function requestClient(channel: BluetoothRemoteGATTCharacteristic, signal: Abort
 }
 
 export async function withBluetoothFs<T>(signal: AbortSignal, transfer: (request: FsRequest) => Promise<T>) {
-  const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [serviceId] }] });
+  signal.throwIfAborted();
+  const cancelSelection = () => window.routeStudioDesktop?.cancelBluetooth();
+  signal.addEventListener('abort', cancelSelection, { once: true });
+  let device: BluetoothDevice;
+  try {
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [serviceId] }] });
+  } finally {
+    signal.removeEventListener('abort', cancelSelection);
+  }
   signal.throwIfAborted();
   const gatt = device.gatt;
   if (!gatt) throw new UploadError('uploadDisconnected');

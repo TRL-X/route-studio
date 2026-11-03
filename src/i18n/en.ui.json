@@ -229,5 +229,8 @@
   "exportHeightConflicts": "Different elevations share {count} track positions. Their heights are omitted.",
   "fitOmitted": "Stations without a route position will be skipped: {names}.",
   "xmlOmitted": "Stations without coordinates or a route position will be skipped: {names}.",
-  "trackProjectFields": "Use a project file to preserve short labels, custom stage boundaries, elevation settings and magnetic declination."
+  "trackProjectFields": "Use a project file to preserve short labels, custom stage boundaries, elevation settings and magnetic declination.",
+  "desktopProjectDone": "Project saved.",
+  "desktopFormatDone": "{format} file saved.",
+  "fileSaveFailed": "Could not save the file. Try another location."
 }

@@ -1285,3 +1285,31 @@ input[type='checkbox'] {
 .declination-fields .field select {
   width: 100%;
 }
+
+.desktop-device-dialog {
+  width: min(480px, calc(100vw - 40px));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+  color: var(--ink);
+  background: var(--paper, #fff);
+  box-shadow: 0 16px 64px #0003;
+}
+.desktop-device-dialog::backdrop {
+  background: #142d2866;
+}
+.desktop-device-dialog h2 {
+  margin-top: 0;
+}
+.desktop-device-dialog p {
+  line-height: 1.5;
+}
+.desktop-device-dialog select,
+.desktop-device-dialog input {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+}
+.desktop-device-dialog select {
+  min-height: 150px;
+}

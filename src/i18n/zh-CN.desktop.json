@@ -1,0 +1,17 @@
+{
+  "open": "打开路线或项目",
+  "save": "保存文件",
+  "routeFiles": "路线和项目文件",
+  "closeTitle": "不保存项目直接关闭？",
+  "closeDetail": "请先保存项目文件以保留编辑副本。下次启动时可能仍可恢复本地草稿。",
+  "cancel": "取消",
+  "discard": "不保存并关闭",
+  "selectDevice": "选择蓝牙设备",
+  "scanning": "正在搜索兼容设备……请将设备放在附近并开启配对模式。",
+  "unnamedDevice": "未命名设备",
+  "connect": "连接",
+  "pair": "配对蓝牙设备",
+  "confirmPair": "允许与设备 {device} 配对？",
+  "confirmPin": "请确认此配对码与设备上显示的一致：{pin}",
+  "providePin": "输入设备上显示的配对码。"
+}

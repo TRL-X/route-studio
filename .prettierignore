@@ -1,6 +1,10 @@
 node_modules
 dist
+dist-electron
+release
+build/icons
 playwright-report
 test-results
+desktop-test-results
 package-lock.json
 tests/rte/vectors
