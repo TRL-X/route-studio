@@ -5,7 +5,6 @@ import { distances, type RouteDocument } from './model';
 import { planTerrain } from './terrain';
 import { localDifferenceSections, type ProfileReading } from './terrain-comparison';
 
-export const SHORT_GAP_SPAN_M = 200;
 const flatLengthM = 500;
 const maxFlatSampleSpacingM = 500;
 
@@ -143,10 +142,10 @@ export function planFullTerrain(doc: RouteDocument) {
   return { points, original: samples, sections, preview };
 }
 
-/** The quick action still fills only short, bounded gaps in the original height reference. */
+/** Fill short gaps locally and identify any stretches that still need terrain data. */
 export function fillShortElevationGaps(doc: RouteDocument) {
   const original = gapSections(originalLevels(originalReadings(doc)));
-  const { document } = interpolateMissingHeights(doc, SHORT_GAP_SPAN_M);
+  const { document } = interpolateMissingHeights(doc);
   const remaining = document === doc ? original : gapSections(originalLevels(originalReadings(document)));
   return { document, filled: original.length - remaining.length, remaining };
 }

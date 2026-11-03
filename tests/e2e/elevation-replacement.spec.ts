@@ -98,19 +98,46 @@ test('previews a complete datum change, replaces every height only on confirmati
   expect(await savedRoute(page)).toEqual(original);
 });
 
+test('short endpoint gaps fill locally in one undoable edit without starting terrain lookup', async ({
+  page,
+  context,
+}) => {
+  let lookups = 0;
+  await context.route('**/collections/cop-dem-glo-30/items/*', (route) => {
+    lookups++;
+    return route.abort();
+  });
+  const original = polarRoute([null, -5, 30, null], 2);
+  original.elevation.pop(); // The finish sample is absent rather than explicitly marked missing.
+  await openRoute(page, original);
+  const fill = page.getByRole('button', { name: t.interpolateGaps, exact: true });
+  await fill.click();
+  await expect(fill).toBeDisabled();
+  await expect(page.getByRole('dialog', { name: copy.title })).toHaveCount(0);
+  const next = await savedRoute(page);
+  expect(next.elevation.map((s) => s.height)).toEqual([-5, -5, 30, 30]);
+  expect(next.elevationReference).toBe(2);
+  await page.getByRole('button', { name: t.undo, exact: true }).click();
+  expect(await savedRoute(page)).toEqual(original);
+  expect(lookups).toBe(0);
+});
+
 test('safe short gaps are filled before the optional full-profile replacement; the two edits undo independently', async ({
   page,
   context,
 }) => {
   await mockOnlineTerrain(context);
   const original = polarRoute([10, null, 30, 50, null], 0);
+  original.vertices[4].lon += 0.15; // Put the final point more than 1 km from its nearest elevation.
   await openRoute(page, original);
   await page.getByRole('button', { name: t.interpolateGaps, exact: true }).click();
   const dialog = page.getByRole('dialog', { name: copy.title });
   const summary = t.interpolationResult.replace('{filled}', '1').replace('{remaining}', '1');
   await expect(dialog.getByText(summary, { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: copy.replace, exact: true }).click();
-  expect((await savedRoute(page)).elevation.map((s) => s.height)).toEqual([0, 50, -13.5, 123.5, 123.5]);
+  const replaced = await savedRoute(page);
+  expect(replaced.elevation.slice(0, 5).map((s) => s.height)).toEqual([0, 50, -13.5, 123.5, 123.5]);
+  expect(replaced.elevation.every((s) => s.height !== null)).toBe(true);
   const undo = page.getByRole('button', { name: t.undo, exact: true });
   await undo.click();
   expect((await savedRoute(page)).elevation.map((s) => s.height)).toEqual([

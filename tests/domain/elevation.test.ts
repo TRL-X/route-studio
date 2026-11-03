@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { interpolateMissingHeights } from '../../src/domain/elevation';
-import { emptyRoute, type RouteDocument, type Sample } from '../../src/domain/model';
+import { distances, emptyRoute, type RouteDocument, type Sample } from '../../src/domain/model';
 
 const sample = (vertexId: string, height: number | null, fraction = 0): Sample => ({
   anchor: { vertexId, fraction },
@@ -11,8 +11,8 @@ function route(elevation: Sample[]): RouteDocument {
     ...emptyRoute(),
     vertices: [
       { id: 'a', lat: 0, lon: 0 },
-      { id: 'b', lat: 0, lon: 0.01 },
-      { id: 'c', lat: 0, lon: 0.04 },
+      { id: 'b', lat: 0, lon: 0.001 },
+      { id: 'c', lat: 0, lon: 0.004 },
     ],
     elevation,
   };
@@ -37,7 +37,7 @@ test('uses the editor distance axis and preserves imported context when heights 
   expect(result.document.rte).toBe(doc.rte);
 });
 
-test('fills interior zeros and leaves unbracketed endpoint gaps missing', () => {
+test('extends a known zero through both endpoint gaps and interpolates the interior', () => {
   const doc = route([
     sample('a', null),
     sample('a', 0, 0.2),
@@ -46,18 +46,13 @@ test('fills interior zeros and leaves unbracketed endpoint gaps missing', () => 
     sample('c', null),
   ]);
   const result = interpolateMissingHeights(doc);
-  expect(result).toMatchObject({ filled: 1, remaining: 2 });
-  expect(result.document.elevation.map((s) => s.height)).toEqual([null, 0, 0, 0, null]);
-  for (const samples of [
-    [sample('a', null), sample('c', null)],
-    [sample('a', null), sample('b', 10), sample('c', null)],
-  ]) {
-    const unresolved = route(samples);
-    expect(interpolateMissingHeights(unresolved)).toEqual({ document: unresolved, filled: 0, remaining: 2 });
-  }
+  expect(result).toMatchObject({ filled: 3, remaining: 0 });
+  expect(result.document.elevation.map((s) => s.height)).toEqual([0, 0, 0, 0, 0]);
+  const unresolved = route([sample('a', null), sample('c', null)]);
+  expect(interpolateMissingHeights(unresolved)).toEqual({ document: unresolved, filled: 0, remaining: 2 });
 });
 
-test('copies an observed coincident height without extrapolating to a nearby endpoint', () => {
+test('fills coincident samples and uses the observation on the corresponding side for each endpoint', () => {
   const doc = route([
     sample('a', null),
     sample('a', null, 0.25),
@@ -66,8 +61,23 @@ test('copies an observed coincident height without extrapolating to a nearby end
     sample('c', null),
   ]);
   const result = interpolateMissingHeights(doc);
-  expect(result).toMatchObject({ filled: 1, remaining: 2 });
-  expect(result.document.elevation.map((s) => s.height)).toEqual([null, 14, 14, 12, null]);
+  expect(result).toMatchObject({ filled: 3, remaining: 0 });
+  expect(result.document.elevation.map((s) => s.height)).toEqual([14, 14, 14, 12, 12]);
+});
+
+test('adds absent endpoint samples only within reach of the original observation', () => {
+  const doc = route([sample('b', -4)]);
+  const limit = distances(doc.vertices)[1];
+  const result = interpolateMissingHeights(doc, limit);
+  expect(result).toMatchObject({ filled: 1, remaining: 1 });
+  expect(result.document.elevation).toEqual([doc.elevation[0], sample('a', -4)]);
+  expect(interpolateMissingHeights(result.document, limit).document).toBe(result.document);
+  expect(interpolateMissingHeights(doc, limit - 0.01).document).toBe(doc);
+});
+
+test('conflicting first and last observations cannot supply endpoint heights', () => {
+  const doc = route([sample('a', null), sample('b', 0), sample('b', 2), sample('c', null)]);
+  expect(interpolateMissingHeights(doc)).toEqual({ document: doc, filled: 0, remaining: 2 });
 });
 
 test('a conflicting observed height at one distance prevents interpolation on either side', () => {
@@ -96,7 +106,7 @@ test('keeps distinct editor positions separate even within a single device decim
     sample('b', 1000),
   ]);
   const result = interpolateMissingHeights(doc);
-  expect(result).toMatchObject({ filled: 2, remaining: 0 });
+  expect(result).toMatchObject({ filled: 3, remaining: 0 });
   expect(result.document.elevation[1].height).toBeCloseTo(0.01);
   expect(result.document.elevation[2].height).toBeCloseTo(0.02);
 });
