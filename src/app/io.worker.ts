@@ -7,6 +7,10 @@ async function handle(request: IORequest): Promise<IOResult> {
     const values = await sampleCopernicus(request.points, new AbortController().signal);
     return { type: 'heights', values };
   }
+  if (request.type === 'export') {
+    const { exportTrack } = await import('../files/export');
+    return { type: 'track-file', ...exportTrack(request.doc, request.format) };
+  }
   if (request.type === 'compile') {
     return {
       type: 'binary',
@@ -41,7 +45,9 @@ async function handle(request: IORequest): Promise<IOResult> {
 self.onmessage = async ({ data }: MessageEvent<IORequest>) => {
   try {
     const result = await handle(data);
-    self.postMessage(result, { transfer: result.type === 'binary' ? [result.bytes.buffer] : [] });
+    self.postMessage(result, {
+      transfer: result.type === 'binary' || result.type === 'track-file' ? [result.bytes.buffer] : [],
+    });
   } catch (error) {
     const en = error instanceof Error ? error.message : 'File operation failed.';
     const zh = error && typeof error === 'object' && 'messageZh' in error ? String(error.messageZh) : en;

@@ -26,6 +26,8 @@ import { exampleRoute } from '../domain/example';
 import { saveDraft, saveProject } from '../files';
 import { MapView } from '../views/MapView';
 import { ProfileView } from '../views/ProfileView';
+import { TrackExportDialog } from './TrackExportDialog';
+import type { ExportFormat } from '../files/export';
 import { ExportDialog } from './ExportDialog';
 import { defaultExportOptions } from '../rte/processing';
 import { EditorToolbar } from './EditorToolbar';
@@ -66,7 +68,7 @@ function filename(name: string) {
   );
 }
 function fileError(result: Extract<IOResult, { type: 'error' }>): Localized {
-  const key = result.fileCode as keyof typeof strings.en.fileErrors | undefined;
+  const key = result.fileCode;
   return key && Object.hasOwn(strings.en.fileErrors, key)
     ? { en: strings.en.fileErrors[key], zh: strings.zh.fileErrors[key] }
     : result;
@@ -104,7 +106,7 @@ export function Editor({
   const [notice, setNotice] = useState<Localized | null>(restored ? both('recovery') : null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [issue, setIssue] = useState<Problem | null>(null);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
   const [exportOptions, setExportOptions] = useState(defaultExportOptions);
   const [exportName, setExportName] = useState<string | null>(null);
   const [hoveredSample, setHoveredSample] = useState<number | null>(null);
@@ -114,7 +116,7 @@ export function Editor({
   const [pending, setPending] = useState<Replacement | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
   const [elevationPreview, setElevationPreview] = useState<{ summary?: Localized } | null>(null);
-  const locked = busy || !!pending || !!choices || exportOpen || !!elevationPreview;
+  const locked = busy || !!pending || !!choices || !!exportFormat || !!elevationPreview;
   const [draftState, setDraftState] = useState<'auto' | 'saving' | 'saved' | 'saveFailed'>(
     recoveryError ? 'saveFailed' : 'auto',
   );
@@ -228,7 +230,7 @@ export function Editor({
   function replace(next: Replacement) {
     setExportOptions(defaultExportOptions);
     setExportName(null);
-    setExportOpen(false);
+    setExportFormat(null);
     setElevationPreview(null);
     setExample(!!next.sample);
     setIssue(null);
@@ -266,6 +268,27 @@ export function Editor({
       ioLock.current = false;
     }
   }
+  const exportControls = {
+    lang,
+    name: exportName ?? filename(doc.name),
+    onName: setExportName,
+    onClose: () => setExportFormat(null),
+    onDownload: (bytes: Uint8Array<ArrayBuffer>, name: string) => {
+      if (!exportFormat) return;
+      const types = {
+        rte: 'application/octet-stream',
+        fit: 'application/octet-stream',
+        gpx: 'application/gpx+xml',
+        kml: 'application/vnd.google-earth.kml+xml',
+      };
+      download(bytes, filename(name) + '.' + exportFormat, types[exportFormat]);
+      setExportFormat(null);
+      setNotice({
+        en: strings.en.formatDone.replace('{format}', exportFormat.toUpperCase()),
+        zh: strings.zh.formatDone.replace('{format}', exportFormat.toUpperCase()),
+      });
+    },
+  };
   function save() {
     try {
       download(saveProject(doc), filename(doc.name) + '.routeproj', 'application/json');
@@ -350,9 +373,9 @@ export function Editor({
           onExample={() => requestReplace({ doc: exampleRoute(), source: '', sample: true })}
           onOpen={openFile}
           onSave={save}
-          onExport={() => {
+          onExport={(format) => {
             setProblem(null);
-            setExportOpen(true);
+            setExportFormat(format);
           }}
         />
         <div className="document-bar">
@@ -542,29 +565,24 @@ export function Editor({
           </div>
         )}
       </div>
-      {exportOpen && (
+      {exportFormat === 'rte' && (
         <ExportDialog
           doc={doc}
-          lang={lang}
+          {...exportControls}
           dispatch={dispatch}
           change={change}
           projectGain={gain}
           options={exportOptions}
           onOptions={setExportOptions}
-          name={exportName ?? filename(doc.name)}
-          onName={setExportName}
-          onClose={() => setExportOpen(false)}
-          onDownload={(bytes, name) => {
-            download(bytes, filename(name) + '.rte', 'application/octet-stream');
-            setExportOpen(false);
-            setNotice(both('done'));
-          }}
           onLocate={(error) => {
-            setExportOpen(false);
+            setExportFormat(null);
             setIssue(error);
             select(error.target ?? { type: 'route' }, true);
           }}
         />
+      )}
+      {exportFormat && exportFormat !== 'rte' && (
+        <TrackExportDialog doc={doc} format={exportFormat} {...exportControls} />
       )}
       {elevationPreview && (
         <ElevationRepair

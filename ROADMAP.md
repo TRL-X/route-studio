@@ -18,10 +18,10 @@
 ## File formats
 
 - FIT Course and Activity import is available, including selection of GPS sessions and placement of course points by timestamp or recorded distance.
+- Export GPX 1.1 tracks, KML 2.2 lines and FIT navigation courses. Review elevation and station information that the selected format can preserve before downloading.
 
 ## Later candidates
 
-- Add FIT, GPX and KML export. Explain which route information each target format can preserve.
 - Consider an Electron shell if device connectivity or local file workflows require native desktop capabilities. Reuse the existing route model and format modules.
 
 As the RTE specification evolves, pin each adopted revision to a commit and update the reference vectors, firmware reader tests, and physical device acceptance record together.

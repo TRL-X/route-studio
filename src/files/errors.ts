@@ -1,4 +1,8 @@
 export type FileErrorCode =
+  | 'export-no-line'
+  | 'export-xml-name'
+  | 'fit-export-name'
+  | 'fit-export-range'
   | 'invalid-xml'
   | 'invalid-fit'
   | 'unsupported-fit-type'

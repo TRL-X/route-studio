@@ -1,15 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, CircleCheck, ShieldAlert, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { declinationSettings } from '../domain/declination';
 import { DeclinationFields } from './DeclinationFields';
 import { DeviceUpload } from './DeviceUpload';
 import { useDeclinationLookup } from './useDeclinationLookup';
+import { ExportFrame, type ExportControls } from './ExportFrame';
 import type { RteTarget } from '../rte';
 import type { RouteDocument } from '../domain/model';
 import type { ExportPreview } from '../rte';
 import { exportChoices, type ExportOptions, type ProfilePoint } from '../rte/processing';
 import { runIO, type IOResult } from './io';
-import { strings, type Copy, type Lang } from './strings';
+import { strings, type Copy } from './strings';
 
 type ExportResult = Extract<IOResult, { type: 'binary' | 'error' }>;
 type ExportError = Extract<IOResult, { type: 'error' }>;
@@ -63,22 +64,16 @@ export function ExportDialog({
   onClose,
   onLocate,
   onDownload,
-}: {
+}: ExportControls & {
   doc: RouteDocument;
-  lang: Lang;
   projectGain: number | null;
   change: (doc: RouteDocument) => void;
   dispatch: Parameters<typeof useDeclinationLookup>[1];
   options: ExportOptions;
   onOptions: (v: ExportOptions) => void;
-  name: string;
-  onName: (v: string) => void;
-  onClose: () => void;
   onLocate: (error: ExportError & { target: Exclude<RteTarget, { type: 'declination' }> }) => void;
-  onDownload: (bytes: Uint8Array<ArrayBuffer>, name: string) => void;
 }) {
-  const t = strings[lang],
-    ref = useRef<HTMLDialogElement>(null);
+  const t = strings[lang];
   const lookup = useDeclinationLookup(doc, dispatch);
   const mag = declinationSettings(doc);
   const magDetails = useRef<HTMLDetailsElement>(null);
@@ -87,11 +82,6 @@ export function ExportDialog({
   );
   const [showPlot, setShowPlot] = useState(false);
   const [limit, setLimit] = useState(20);
-  useLayoutEffect(() => {
-    const dialog = ref.current!;
-    dialog.showModal();
-    return () => dialog.close();
-  }, []);
   useEffect(() => {
     if (lookup.pending) return;
     const controller = new AbortController();
@@ -119,203 +109,152 @@ export function ExportDialog({
   }, [magneticError]);
   const preview = ready?.preview;
   const display = (v: number) => v.toLocaleString(lang, { maximumFractionDigits: 1 });
-  const baseName = name
-    .trim()
-    .replace(/\.rte$/i, '')
-    .trim();
-  const invalidName = !baseName || /[\\/:*?"<>|\u0000-\u001f]/.test(baseName);
   const changeOption = (key: keyof ExportOptions, value: string) => {
     setLimit(20);
     onOptions({ ...options, [key]: Number(value) });
   };
   return (
-    <dialog
-      className="export-dialog"
-      ref={ref}
-      aria-labelledby="export-title"
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
+    <ExportFrame
+      format="rte"
+      lang={lang}
+      name={name}
+      onName={onName}
+      onClose={onClose}
+      onDownload={onDownload}
+      bytes={ready?.bytes}
+      extraAction={<DeviceUpload bytes={ready?.bytes} t={t} />}
     >
-      <header>
-        <div>
-          <small>Route Studio</small>
-          <h2 id="export-title">{t.exportTitle}</h2>
+      <details>
+        <summary>{t.processingOptions}</summary>
+        <div className="export-options">
+          <label>
+            {t.profileSampling}
+            <select value={options.intervalM} onChange={(e) => changeOption('intervalM', e.target.value)}>
+              <option value={0}>{t.keepSamples}</option>
+              {exportChoices.intervalM.slice(1).map((n) => (
+                <option key={n} value={n}>
+                  {n} m
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t.geomSimplify}
+            <select value={options.toleranceM} onChange={(e) => changeOption('toleranceM', e.target.value)}>
+              <option value={0}>{t.off}</option>
+              {exportChoices.toleranceM.slice(1).map((n) => (
+                <option key={n} value={n}>
+                  {n} m
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t.smoothWindow}
+            <select value={options.smoothingM} onChange={(e) => changeOption('smoothingM', e.target.value)}>
+              <option value={0}>{t.off}</option>
+              {exportChoices.smoothingM.slice(1).map((n) => (
+                <option key={n} value={n}>
+                  {n} m
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <button className="icon" aria-label={t.close} onClick={onClose}>
-          <X />
-        </button>
-      </header>
-      <div className="export-body">
-        <label className="export-field">
-          {t.exportFilename}
-          <span className="export-name">
-            <input
-              value={name}
-              onChange={(e) => onName(e.target.value)}
-              maxLength={100}
-              aria-invalid={invalidName}
-              aria-describedby={invalidName ? 'export-filename-error' : undefined}
-            />
-            <span>.rte</span>
-          </span>
-        </label>
-        {invalidName && (
-          <small id="export-filename-error" role="alert">
-            {t.invalidExportName}
+        {options.smoothingM > 0 && <small>{t.smoothingNote}</small>}
+      </details>
+      <details ref={magDetails} className="mag-export">
+        <summary>
+          {t.magTitle}{' '}
+          <small>
+            {mag.mode === 'auto' ? t.magAuto : mag.mode === 'manual' ? t.magManual : t.magOmit}
+            {preview?.declinationCdeg !== undefined &&
+              ' · ' + (preview.declinationCdeg / 100).toFixed(2) + '°'}
           </small>
-        )}
-        <details>
-          <summary>{t.processingOptions}</summary>
-          <div className="export-options">
-            <label>
-              {t.profileSampling}
-              <select value={options.intervalM} onChange={(e) => changeOption('intervalM', e.target.value)}>
-                <option value={0}>{t.keepSamples}</option>
-                {exportChoices.intervalM.slice(1).map((n) => (
-                  <option key={n} value={n}>
-                    {n} m
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t.geomSimplify}
-              <select value={options.toleranceM} onChange={(e) => changeOption('toleranceM', e.target.value)}>
-                <option value={0}>{t.off}</option>
-                {exportChoices.toleranceM.slice(1).map((n) => (
-                  <option key={n} value={n}>
-                    {n} m
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t.smoothWindow}
-              <select value={options.smoothingM} onChange={(e) => changeOption('smoothingM', e.target.value)}>
-                <option value={0}>{t.off}</option>
-                {exportChoices.smoothingM.slice(1).map((n) => (
-                  <option key={n} value={n}>
-                    {n} m
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {options.smoothingM > 0 && <small>{t.smoothingNote}</small>}
-        </details>
-        <details ref={magDetails} className="mag-export">
-          <summary>
-            {t.magTitle}{' '}
-            <small>
-              {mag.mode === 'auto' ? t.magAuto : mag.mode === 'manual' ? t.magManual : t.magOmit}
-              {preview?.declinationCdeg !== undefined &&
-                ' · ' + (preview.declinationCdeg / 100).toFixed(2) + '°'}
-            </small>
-          </summary>
-          <DeclinationFields lang={lang} doc={doc} t={t} change={change} lookup={lookup} />
-        </details>
-        <div className="export-state" role="status" data-error={!!error}>
-          {error ? <ShieldAlert size={16} /> : ready ? <CircleCheck size={16} /> : null}
-          {error ? t.needsRepair : ready ? t.exportReady : lookup.pending ? t.magPending : t.busy}
-        </div>
-        {error && (
-          <div className="field-issue" role="alert">
-            <p>{error[lang]}</p>
-            {error.target && error.target.type !== 'declination' && (
-              <button
-                className="sub-action"
-                onClick={() => {
-                  const target = error.target;
-                  if (target && target.type !== 'declination') onLocate({ ...error, target });
-                }}
-              >
-                {t.showIssue}
-              </button>
-            )}
-          </div>
-        )}
-        {preview && (
-          <>
-            <section className="export-preview">
-              <header>
-                <h3>{t.exportPreview}</h3>
-                <small>
-                  {(preview.totalM / 1000).toLocaleString(lang, { maximumFractionDigits: 4 })} km ·{' '}
-                  {t.stageCount.replace('{count}', display(preview.stages))}
-                </small>
-              </header>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.metric}</th>
-                    <th>{t.currentProject}</th>
-                    <th>{t.outputRte}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    [t.geometryPoints, display(doc.vertices.length), display(preview.vertices)],
-                    [t.profileSamples, display(doc.elevation.length), display(preview.samples)],
-                    [
-                      t.gain,
-                      projectGain === null ? '—' : display(projectGain) + ' m',
-                      display(preview.ascentM) + ' m',
-                    ],
-                  ].map(([label, project, out]) => (
-                    <tr key={label}>
-                      <th scope="row">{label}</th>
-                      <td>{project}</td>
-                      <td>{out}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-            <details open={showPlot} onToggle={(e) => setShowPlot(e.currentTarget.open)}>
-              <summary>{t.compareProfiles}</summary>
-              {showPlot && <CurveComparison preview={preview} t={t} />}
-            </details>
-            {!!options.intervalM && (
-              <small>{t.gridReport.replace('{step}', String(options.intervalM))}</small>
-            )}
-            {preview.shared.length > 0 && (
-              <details className="shared-records">
-                <summary>{t.sharedReport.replace('{count}', display(preview.shared.length))}</summary>
-                <ul>
-                  {preview.shared.slice(0, limit).map(({ meters, height }) => (
-                    <li key={meters}>
-                      {display(meters)} m → {display(height)} m
-                    </li>
-                  ))}
-                </ul>
-                {limit < preview.shared.length && (
-                  <button className="sub-action" onClick={() => setLimit(limit + 20)}>
-                    {t.showMore}
-                  </button>
-                )}
-              </details>
-            )}
-          </>
-        )}
+        </summary>
+        <DeclinationFields lang={lang} doc={doc} t={t} change={change} lookup={lookup} />
+      </details>
+      <div className="export-state" role="status" data-error={!!error}>
+        {error ? <ShieldAlert size={16} /> : ready ? <CircleCheck size={16} /> : null}
+        {error ? t.needsRepair : ready ? t.exportReady : lookup.pending ? t.magPending : t.busy}
       </div>
-      <footer>
-        <small>
-          {t.fileSize} · {ready ? display(ready.bytes.byteLength / 1024) + ' KiB' : '—'}
-        </small>
-        <button
-          className="button"
-          disabled={!ready || invalidName}
-          onClick={() => {
-            if (ready) onDownload(ready.bytes, baseName);
-          }}
-        >
-          <ArrowDownToLine />
-          {t.downloadRte}
-        </button>
-        <DeviceUpload bytes={ready?.bytes} t={t} />
-      </footer>
-    </dialog>
+      {error && (
+        <div className="field-issue" role="alert">
+          <p>{error[lang]}</p>
+          {error.target && error.target.type !== 'declination' && (
+            <button
+              className="sub-action"
+              onClick={() => {
+                const target = error.target;
+                if (target && target.type !== 'declination') onLocate({ ...error, target });
+              }}
+            >
+              {t.showIssue}
+            </button>
+          )}
+        </div>
+      )}
+      {preview && (
+        <>
+          <section className="export-preview">
+            <header>
+              <h3>{t.exportPreview}</h3>
+              <small>
+                {(preview.totalM / 1000).toLocaleString(lang, { maximumFractionDigits: 4 })} km ·{' '}
+                {t.stageCount.replace('{count}', display(preview.stages))}
+              </small>
+            </header>
+            <table>
+              <thead>
+                <tr>
+                  <th>{t.metric}</th>
+                  <th>{t.currentProject}</th>
+                  <th>{t.outputRte}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  [t.geometryPoints, display(doc.vertices.length), display(preview.vertices)],
+                  [t.profileSamples, display(doc.elevation.length), display(preview.samples)],
+                  [
+                    t.gain,
+                    projectGain === null ? '—' : display(projectGain) + ' m',
+                    display(preview.ascentM) + ' m',
+                  ],
+                ].map(([label, project, out]) => (
+                  <tr key={label}>
+                    <th scope="row">{label}</th>
+                    <td>{project}</td>
+                    <td>{out}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+          <details open={showPlot} onToggle={(e) => setShowPlot(e.currentTarget.open)}>
+            <summary>{t.compareProfiles}</summary>
+            {showPlot && <CurveComparison preview={preview} t={t} />}
+          </details>
+          {!!options.intervalM && <small>{t.gridReport.replace('{step}', String(options.intervalM))}</small>}
+          {preview.shared.length > 0 && (
+            <details className="shared-records">
+              <summary>{t.sharedReport.replace('{count}', display(preview.shared.length))}</summary>
+              <ul>
+                {preview.shared.slice(0, limit).map(({ meters, height }) => (
+                  <li key={meters}>
+                    {display(meters)} m → {display(height)} m
+                  </li>
+                ))}
+              </ul>
+              {limit < preview.shared.length && (
+                <button className="sub-action" onClick={() => setLimit(limit + 20)}>
+                  {t.showMore}
+                </button>
+              )}
+            </details>
+          )}
+        </>
+      )}
+    </ExportFrame>
   );
 }
