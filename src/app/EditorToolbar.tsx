@@ -10,6 +10,7 @@ import {
   Save,
   Undo2,
 } from 'lucide-react';
+import type { ExportFormat } from '../files/export';
 import { strings, type Lang } from './strings';
 
 interface ToolbarProps {
@@ -23,7 +24,7 @@ interface ToolbarProps {
   onExample: () => void;
   onOpen: (file: File) => void;
   onSave: () => void;
-  onExport: () => void;
+  onExport: (format: ExportFormat) => void;
 }
 
 function BrandMark() {
@@ -55,23 +56,25 @@ export function EditorToolbar({
   onExport,
 }: ToolbarProps) {
   const t = strings[lang];
-  const [menu, setMenu] = useState(false);
+  const [menu, setMenu] = useState<'file' | 'export' | null>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const saveButton = useRef<HTMLButtonElement>(null);
   const pickFile = () => {
-    setMenu(false);
+    setMenu(null);
     picker.current?.click();
   };
 
   useEffect(() => {
-    if (locked) setMenu(false);
+    if (locked) setMenu(null);
   }, [locked]);
 
   useEffect(() => {
     if (!menu) return;
     const close = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenu(false);
+      const ref = menu === 'file' ? menuRef : exportRef;
+      if (!ref.current?.contains(event.target as Node)) setMenu(null);
     };
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
@@ -80,7 +83,7 @@ export function EditorToolbar({
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setMenu(false);
+        setMenu(null);
         return;
       }
       if (locked || !(event.metaKey || event.ctrlKey) || event.altKey) return;
@@ -117,12 +120,16 @@ export function EditorToolbar({
           <span>Route Studio</span>
         </div>
         <div className="file-menu" ref={menuRef}>
-          <button className="quiet" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+          <button
+            className="quiet"
+            aria-expanded={menu === 'file'}
+            onClick={() => setMenu(menu === 'file' ? null : 'file')}
+          >
             {t.file}
             <ChevronDown size={13} />
           </button>
-          {menu && (
-            <div className="dropdown" onClick={() => setMenu(false)}>
+          {menu === 'file' && (
+            <div className="dropdown" onClick={() => setMenu(null)}>
               <button onClick={onNew}>
                 <FilePlus2 />
                 {t.new}
@@ -181,17 +188,44 @@ export function EditorToolbar({
             title={t.save}
             ref={saveButton}
             onClick={() => {
-              setMenu(false);
+              setMenu(null);
               onSave();
             }}
           >
             <Save />
             <span>{t.save}</span>
           </button>
-          <button className="primary" onClick={onExport} aria-haspopup="dialog">
-            <ArrowDownToLine />
-            {t.export}
-          </button>
+          <div className="export-actions" ref={exportRef}>
+            <button className="primary" onClick={() => onExport('rte')} aria-haspopup="dialog">
+              <ArrowDownToLine />
+              {t.export}
+            </button>
+            <button
+              className="primary export-formats"
+              aria-label={t.exportFormat}
+              title={t.exportFormat}
+              aria-expanded={menu === 'export'}
+              onClick={() => setMenu(menu === 'export' ? null : 'export')}
+            >
+              <ChevronDown size={14} />
+            </button>
+            {menu === 'export' && (
+              <div className="dropdown">
+                {(['rte', 'gpx', 'kml', 'fit'] as const).map((format) => (
+                  <button
+                    key={format}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setMenu(null);
+                      onExport(format);
+                    }}
+                  >
+                    {t.exportFormatTitle.replace('{format}', format.toUpperCase())}…
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
       <input

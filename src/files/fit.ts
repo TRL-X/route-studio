@@ -76,6 +76,7 @@ function addCoursePoints(
   const monotonic = fixes.every((fix, i) => i === 0 || fix.distance >= fixes[i - 1].distance);
   const [start, finish] = doc.stations;
   doc.stations = [start];
+  const namedEndpoints = new Set<string>();
   for (const [i, mark] of marks.entries()) {
     const location = position(mark);
     const vertex = mark.timestamp && timestamps.get(mark.timestamp.getTime());
@@ -88,6 +89,19 @@ function addCoursePoints(
     if (!anchor && location) {
       const passes = stationPassages(doc, location, axis);
       if (passes.length === 1) anchor = passes[0].anchor;
+    }
+    // A whole-course segment cue at the matching endpoint supplies its name and landmark.
+    const endpoint = mark.type === 'segment_start' ? start : mark.type === 'segment_end' ? finish : undefined;
+    if (
+      endpoint &&
+      anchor?.fraction === 0 &&
+      anchor.vertexId === endpoint.anchor?.vertexId &&
+      !namedEndpoints.has(endpoint.id)
+    ) {
+      endpoint.name = mark.name?.trim() || endpoint.name;
+      endpoint.location = location;
+      namedEndpoints.add(endpoint.id);
+      continue;
     }
     const checkpoint = mark.type === 'checkpoint';
     const label =

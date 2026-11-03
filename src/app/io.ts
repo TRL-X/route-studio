@@ -1,6 +1,8 @@
 import type { ExportOptions } from '../rte/processing';
 import type { ExportPreview, RteTarget } from '../rte';
 import type { Point, RouteDocument } from '../domain/model';
+import type { FileErrorCode } from '../files/errors';
+import type { TrackFormat, TrackExportPreview } from '../files/export';
 export interface Choice {
   name: string;
   pointCount: number;
@@ -9,13 +11,15 @@ export interface Choice {
 export type IORequest =
   | { type: 'read'; file: File; choice?: number; accept?: boolean }
   | { type: 'terrain'; points: Point[] }
+  | { type: 'export'; doc: RouteDocument; format: TrackFormat }
   | { type: 'compile'; doc: RouteDocument; options: ExportOptions };
 export type IOResult =
   | { type: 'document'; doc: RouteDocument }
   | { type: 'heights'; values: (number | null)[] }
   | { type: 'choices'; choices: Choice[] }
+  | { type: 'track-file'; bytes: Uint8Array<ArrayBuffer>; preview: TrackExportPreview }
   | { type: 'binary'; bytes: Uint8Array<ArrayBuffer>; preview: ExportPreview }
-  | { type: 'error'; en: string; zh: string; fileCode?: string; target?: RteTarget };
+  | { type: 'error'; en: string; zh: string; fileCode?: FileErrorCode; target?: RteTarget };
 export function runIO(request: IORequest, signal?: AbortSignal): Promise<IOResult> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./io.worker.ts', import.meta.url), { type: 'module' });

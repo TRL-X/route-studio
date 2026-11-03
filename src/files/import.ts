@@ -23,7 +23,10 @@ export type { RouteChoice } from './track';
 
 type XmlElement = Record<string, unknown>;
 type Position = { lat: number; lon: number };
-type Landmark = { name: string; location: Position };
+type Landmark = { name: string; location: Position; kind?: Station['kind'] };
+function stationKind(value: unknown): Station['kind'] | undefined {
+  return value === 'start' || value === 'finish' || value === 'cp' || value === 'poi' ? value : undefined;
+}
 
 function object(value: unknown): XmlElement {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as XmlElement) : {};
@@ -64,7 +67,8 @@ function readGpx(root: XmlElement, fallback: string) {
   const lines: Line[] = [];
   const landmarks = list(root.wpt).map((node) => {
     const { lat, lon } = gpxPoint(node);
-    return { name: text(object(node).name), location: { lat, lon } };
+    const kind = root['@_creator'] === 'Route Studio' ? stationKind(object(node).type) : undefined;
+    return { name: text(object(node).name), location: { lat, lon }, kind };
   });
 
   for (const entry of list(root.trk)) {
@@ -104,12 +108,12 @@ function readKml(root: XmlElement, fallback: string) {
   const lines: Line[] = [];
   const landmarks: Landmark[] = [];
 
-  function geometry(node: XmlElement, name: string) {
+  function geometry(node: XmlElement, name: string, kind?: Station['kind']) {
     for (const value of list(node.Point)) {
       const points = kmlPoints(object(value).coordinates);
       if (points.length !== 1) throw new RouteFileError('invalid-coordinates');
       const { lat, lon } = points[0];
-      landmarks.push({ name, location: { lat, lon } });
+      landmarks.push({ name, location: { lat, lon }, kind });
     }
 
     for (const tag of ['LineString', 'Track']) {
@@ -133,13 +137,16 @@ function readKml(root: XmlElement, fallback: string) {
       }
     }
     for (const child of [...list(node.MultiGeometry), ...list(node.MultiTrack)])
-      geometry(object(child), name);
+      geometry(object(child), name, kind);
   }
 
   function container(node: XmlElement) {
     for (const entry of list(node.Placemark)) {
       const placemark = object(entry);
-      geometry(placemark, text(placemark.name));
+      const role = list(object(placemark.ExtendedData).Data)
+        .map(object)
+        .find((d) => d['@_name'] === 'route-studio-kind');
+      geometry(placemark, text(placemark.name), stationKind(role?.value));
     }
     for (const child of [...list(node.Document), ...list(node.Folder)]) container(object(child));
   }
@@ -214,6 +221,13 @@ function applyEndpointMark(endpoint: Station, mark: Landmark, namedForRole: bool
 }
 
 function mergeEndpointMark(mark: Landmark, vertices: Vertex[], start: Station, finish: Station): boolean {
+  if (mark.kind) {
+    const endpoint = mark.kind === 'start' ? start : mark.kind === 'finish' ? finish : undefined;
+    if (!endpoint || endpoint.location) return false;
+    endpoint.name = mark.name || endpoint.name;
+    endpoint.location = mark.location;
+    return true;
+  }
   const combined = /起终点|起終點|start\s*[/&-]\s*finish/i.test(mark.name);
   const isStart = combined || /起点|起點|\bstart\b/i.test(mark.name);
   const isFinish = combined || /终点|終點|\bfinish\b/i.test(mark.name);
@@ -246,8 +260,8 @@ function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: bool
     doc.stations.push({
       id: newId(),
       name: mark.checkpointName,
-      kind: 'cp',
-      boundary: true,
+      kind: mark.kind === 'poi' ? 'poi' : 'cp',
+      boundary: mark.kind !== 'poi',
       location: mark.location,
       anchor: anchors[index],
     });
