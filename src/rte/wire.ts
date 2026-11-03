@@ -1,4 +1,5 @@
 import { msg } from './messages';
+import { crc32 } from '../crc32';
 // Header and section framing, TRL-X Route initial edition §§3–4, 8–10.
 import { check, limit, MAX_NODES, RteError } from './check';
 
@@ -13,20 +14,11 @@ const sizes = new Map<SectionType, number>([
 const aligned = (offset: number) => Math.ceil(offset / 4) * 4;
 const maxFile = 64 * 1024 * 1024;
 export const viewOf = (data: Uint8Array) => new DataView(data.buffer, data.byteOffset, data.byteLength);
-const table = new Uint32Array(256);
-for (let n = 0; n < table.length; n++) {
-  let crc = n;
-  for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-  table[n] = crc;
-}
 
 export function fileCrc(data: Uint8Array) {
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i++) {
-    const byte = i >= 14 && i < 18 ? 0 : data[i];
-    crc = (crc >>> 8) ^ table[(crc ^ byte) & 255];
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+  const header = new Uint8Array(data.subarray(0, 18));
+  header.fill(0, 14);
+  return crc32(data.subarray(18), crc32(header));
 }
 
 export function readSections(data: Uint8Array): Sections {

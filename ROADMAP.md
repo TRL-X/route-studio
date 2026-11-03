@@ -11,7 +11,9 @@
 
 ## v0.2 · Bluetooth upload
 
-Send a validated RTE file directly from a supported desktop browser to a device. Agree on the Bluetooth service and write protocol with the firmware implementation. Show transfer progress, support cancellation and retry after a disconnect, verify file integrity, and replace an existing route only after a successful transfer. Test interrupted uploads and same-name replacements on hardware. Keep file download available.
+- The editor sends the previewed RTE over MCUmgr Bluetooth to a user-entered file path. It shows progress as the device acknowledges each chunk and verifies the device file's length and IEEE CRC32. File download remains available.
+- On November 3, 2026, the Bluetooth upload was tested on a physical Arcap device. The tester used **Bluetooth upload…** beside **Download RTE**, entered the device path, and uploaded the route. The file length and IEEE CRC32 reported by the device matched the exported RTE.
+- Cancellation and retry after a disconnect still need hardware testing. Same-name replacement is planned once the device can preserve the previous route through a failed transfer.
 
 ## Later candidates
 
