@@ -7,7 +7,7 @@
 - Save incomplete routes as `.routeproj` files and recover the current draft in the same browser.
 - Edit on a local coordinate grid, validate routes, and download device-ready RTE files. Test RTE round trips against the pinned specification.
 
-**Physical device acceptance is pending.** A local build of the firmware route reader successfully opened the 164.2323 km UMY100M test route. On the target device, load the exported file, compare total distance, stations, and stage data with the editor, and check the navigation display.
+**Exported route confirmed working on a physical device.** On November 3, 2026, an exported route was tested on hardware and reported to work correctly. A local build of the firmware route reader also successfully opened the 164.2323 km UMY100M test route.
 
 ## v0.2 · Bluetooth upload
 
