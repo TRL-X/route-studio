@@ -1,5 +1,15 @@
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import { automaticDeclination, distances, newId, type Anchor, type RouteDocument } from '../domain/model';
+import {
+  automaticDeclination,
+  distanceMeters,
+  distances,
+  lonDelta,
+  newId,
+  type Anchor,
+  type RouteDocument,
+  type Station,
+  type Vertex,
+} from '../domain/model';
 import { stationPassages, type StationPassage } from '../domain/projection';
 import { RouteFileError } from './errors';
 
@@ -219,6 +229,34 @@ function matchLandmarks(doc: RouteDocument, landmarks: Landmark[]): (Anchor | nu
   return anchors;
 }
 
+function applyEndpointMark(endpoint: Station, mark: Landmark, namedForRole: boolean) {
+  const role = endpoint.kind === 'start' ? 'Start' : 'Finish';
+  const name = namedForRole ? mark.name : `${role} · ${mark.name}`;
+  if (endpoint.name === role || name.length >= endpoint.name.length) {
+    endpoint.name = name;
+    endpoint.location = mark.location;
+  }
+}
+
+function mergeEndpointMark(mark: Landmark, vertices: Vertex[], start: Station, finish: Station): boolean {
+  const combined = /起终点|起終點|start\s*[/&-]\s*finish/i.test(mark.name);
+  const isStart = combined || /起点|起點|\bstart\b/i.test(mark.name);
+  const isFinish = combined || /终点|終點|\bfinish\b/i.test(mark.name);
+  if (!isStart && !isFinish) return false;
+
+  const first = vertices[0];
+  const last = vertices[vertices.length - 1];
+  const closed = vertices.length > 2 && first.lat === last.lat && lonDelta(first.lon, last.lon) === 0;
+  const fromStart = distanceMeters(first, mark.location);
+  const fromFinish = distanceMeters(last, mark.location);
+  // On a loop the name distinguishes the two visits to the same place.
+  const atStart = fromStart <= 100 && (closed ? isStart : fromStart <= fromFinish);
+  const atFinish = fromFinish <= 100 && (closed ? isFinish : fromFinish <= fromStart);
+  if (atStart) applyEndpointMark(start, mark, isStart);
+  if (atFinish) applyEndpointMark(finish, mark, isFinish);
+  return atStart || atFinish;
+}
+
 function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: boolean): RouteDocument {
   const keepHeights =
     line.heights !== 'unavailable' && (line.heights !== 'unconfirmed' || useUnconfirmedHeights);
@@ -241,31 +279,38 @@ function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: bool
   };
   const first = vertices[0];
   const last = vertices[vertices.length - 1];
-  doc.stations.push({
+  const start: Station = {
     id: newId(),
     name: 'Start',
     kind: 'start',
     boundary: true,
     anchor: { vertexId: first.id, fraction: 0 },
-  });
-  const anchors = matchLandmarks(doc, landmarks);
-  for (const [index, mark] of landmarks.entries()) {
+  };
+  const finish: Station = {
+    id: newId(),
+    name: 'Finish',
+    kind: 'finish',
+    boundary: true,
+    anchor: { vertexId: last.id, fraction: 0 },
+  };
+  const checkpoints = landmarks.flatMap((mark, index) =>
+    mergeEndpointMark(mark, vertices, start, finish)
+      ? []
+      : [{ ...mark, checkpointName: mark.name || `CP ${index + 1}` }],
+  );
+  const anchors = matchLandmarks(doc, checkpoints);
+  doc.stations.push(start);
+  for (const [index, mark] of checkpoints.entries()) {
     doc.stations.push({
       id: newId(),
-      name: mark.name || `CP ${index + 1}`,
+      name: mark.checkpointName,
       kind: 'cp',
       boundary: true,
       location: mark.location,
       anchor: anchors[index],
     });
   }
-  doc.stations.push({
-    id: newId(),
-    name: 'Finish',
-    kind: 'finish',
-    boundary: true,
-    anchor: { vertexId: last.id, fraction: 0 },
-  });
+  doc.stations.push(finish);
   return doc;
 }
 
