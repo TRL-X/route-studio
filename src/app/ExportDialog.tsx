@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, CircleCheck, ShieldAlert, X } from 'lucide-react';
 import { declinationSettings } from '../domain/declination';
 import { DeclinationFields } from './DeclinationFields';
+import { DeviceUpload } from './DeviceUpload';
 import { useDeclinationLookup } from './useDeclinationLookup';
 import type { RteTarget } from '../rte';
 import type { RouteDocument } from '../domain/model';
@@ -304,7 +305,7 @@ export function ExportDialog({
           {t.fileSize} · {ready ? display(ready.bytes.byteLength / 1024) + ' KiB' : '—'}
         </small>
         <button
-          className="primary"
+          className="button"
           disabled={!ready || invalidName}
           onClick={() => {
             if (ready) onDownload(ready.bytes, baseName);
@@ -313,6 +314,7 @@ export function ExportDialog({
           <ArrowDownToLine />
           {t.downloadRte}
         </button>
+        <DeviceUpload bytes={ready?.bytes} t={t} />
       </footer>
     </dialog>
   );

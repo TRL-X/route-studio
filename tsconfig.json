@@ -10,7 +10,7 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client", "web-bluetooth"]
   },
   "include": ["src", "tests", "*.config.ts"]
 }

@@ -1019,7 +1019,6 @@ input[type='checkbox'] {
   background: #1a2b405e;
 }
 .export-dialog > header,
-.export-dialog footer,
 .export-preview header,
 .curve-legend,
 .plot-axis {
@@ -1048,6 +1047,10 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 .export-dialog footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
   border-top: 1px solid var(--line);
 }
 .export-body {
@@ -1076,6 +1079,7 @@ input[type='checkbox'] {
   padding-right: 10px;
 }
 .export-name input,
+.device-upload input,
 .export-options select {
   font-size: 13px;
   color: var(--ink);
@@ -1096,6 +1100,29 @@ input[type='checkbox'] {
 .export-options select {
   border: 1px solid var(--line);
   border-radius: 4px;
+}
+.device-upload {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.device-upload form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.device-upload label {
+  flex: 1 1 160px;
+}
+.device-upload input {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.device-upload [role='status']:not(:empty) {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
 }
 .export-preview table {
   width: 100%;
@@ -1182,6 +1209,15 @@ input[type='checkbox'] {
   .export-dialog footer,
   .export-body {
     padding: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .export-dialog footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .export-dialog footer > small {
+    grid-column: 1 / -1;
   }
 }
 
