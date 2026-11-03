@@ -246,7 +246,7 @@ export function Editor({
     try {
       const result = await runIO({ type: 'read', file, choice: index, accept });
       if (result.type === 'error') setProblem(fileError(result));
-      else if (result.type === 'choices') setChoices({ file, list: result.choices, index: 0, accept: false });
+      else if (result.type === 'choices') setChoices({ file, list: result.choices, index: 0, accept: true });
       else if (result.type === 'document') requestReplace({ doc: result.doc, source: file.name });
     } catch {
       setProblem(both('readFailed'));
@@ -580,7 +580,7 @@ export function Editor({
               autoFocus
               aria-label={t.route}
               value={choices.index}
-              onChange={(e) => setChoices({ ...choices, index: Number(e.target.value), accept: false })}
+              onChange={(e) => setChoices({ ...choices, index: Number(e.target.value), accept: true })}
             >
               {choices.list.map((item, i) => (
                 <option key={i} value={i}>

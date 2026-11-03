@@ -107,7 +107,7 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
   expect(Math.max(...readRte(device.bytes).elevation.map((sample) => sample.height!))).toBe(22);
 });
 
-test('opens a selected KML line with explicit height confirmation', async ({ page }) => {
+test('opens a selected KML line with altitude values enabled by default', async ({ page }) => {
   await page.goto('/');
   const kml = `<kml><Document><Placemark><name>Short loop</name>
     <LineString><coordinates>110,30,100 111,31,120</coordinates></LineString></Placemark>
@@ -115,8 +115,11 @@ test('opens a selected KML line with explicit height confirmation', async ({ pag
     </Placemark></Document></kml>`;
   await open(page, 'loops.kml', Buffer.from(kml));
   const dialog = page.getByRole('dialog', { name: 'Choose a route to open' });
+  const useAltitude = dialog.getByRole('checkbox', { name: 'Use the altitude values in this KML' });
+  await expect(useAltitude).toBeChecked();
+  await useAltitude.uncheck();
   await dialog.getByRole('combobox', { name: 'Route', exact: true }).selectOption('1');
-  await dialog.getByRole('checkbox', { name: 'Use the altitude values in this KML' }).check();
+  await expect(useAltitude).toBeChecked();
   await dialog.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Long loop', exact: true })).toBeVisible();
   await setSurveyDate(page);
