@@ -12,23 +12,18 @@ import {
 } from '../domain/model';
 import { stationPassages, type StationPassage } from '../domain/projection';
 import { RouteFileError } from './errors';
-
-export interface RouteChoice {
-  name: string;
-  pointCount: number;
-  hasUnconfirmedHeights: boolean;
-  open(useUnconfirmedHeights?: boolean): RouteDocument;
-}
+import {
+  documentFromLine,
+  mergeStationaryPoints,
+  type Line,
+  type RouteChoice,
+  type TrackPoint,
+} from './track';
+export type { RouteChoice } from './track';
 
 type XmlElement = Record<string, unknown>;
 type Position = { lat: number; lon: number };
-type TrackPoint = Position & { height: number | null };
 type Landmark = { name: string; location: Position };
-type Line = {
-  name: string;
-  points: TrackPoint[];
-  heights: 'unknown-reference' | 'sea-level' | 'unconfirmed' | 'unavailable';
-};
 
 function object(value: unknown): XmlElement {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as XmlElement) : {};
@@ -103,26 +98,6 @@ function kmlPoints(value: unknown): TrackPoint[] {
     if (parts.length > 3) throw new RouteFileError('invalid-coordinates');
     return point(parts[1], parts[0], parts[2]);
   });
-}
-
-// A stationary run has one route position. Preserve a single known height,
-// or leave a gap for the editor if its source measurements disagree.
-function mergeStationaryPoints(points: TrackPoint[]): TrackPoint[] {
-  const result: TrackPoint[] = [];
-  let index = 0;
-  while (index < points.length) {
-    const first = points[index++];
-    let height = first.height;
-    let conflicting = false;
-    while (index < points.length && points[index].lat === first.lat && points[index].lon === first.lon) {
-      const next = points[index++].height;
-      if (next === null) continue;
-      if (height !== null && height !== next) conflicting = true;
-      height = next;
-    }
-    result.push({ ...first, height: conflicting ? null : height });
-  }
-  return result;
 }
 
 function readKml(root: XmlElement, fallback: string) {
@@ -258,48 +233,15 @@ function mergeEndpointMark(mark: Landmark, vertices: Vertex[], start: Station, f
 }
 
 function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: boolean): RouteDocument {
-  const keepHeights =
-    line.heights !== 'unavailable' && (line.heights !== 'unconfirmed' || useUnconfirmedHeights);
-  const vertices = line.points.map(({ lat, lon }) => ({
-    id: newId(),
-    lat,
-    lon,
-  }));
-  const elevation = line.points.map(({ height }, i) => ({
-    anchor: { vertexId: vertices[i].id, fraction: 0 },
-    height: keepHeights ? height : null,
-  }));
-  const doc: RouteDocument = {
-    name: line.name,
-    declination: automaticDeclination(),
-    vertices,
-    elevation,
-    stations: [],
-    elevationReference: line.heights === 'sea-level' ? 1 : 0,
-  };
-  const first = vertices[0];
-  const last = vertices[vertices.length - 1];
-  const start: Station = {
-    id: newId(),
-    name: 'Start',
-    kind: 'start',
-    boundary: true,
-    anchor: { vertexId: first.id, fraction: 0 },
-  };
-  const finish: Station = {
-    id: newId(),
-    name: 'Finish',
-    kind: 'finish',
-    boundary: true,
-    anchor: { vertexId: last.id, fraction: 0 },
-  };
+  const doc = documentFromLine(line, useUnconfirmedHeights);
+  const [start, finish] = doc.stations;
   const checkpoints = landmarks.flatMap((mark, index) =>
-    mergeEndpointMark(mark, vertices, start, finish)
+    mergeEndpointMark(mark, doc.vertices, start, finish)
       ? []
       : [{ ...mark, checkpointName: mark.name || `CP ${index + 1}` }],
   );
   const anchors = matchLandmarks(doc, checkpoints);
-  doc.stations.push(start);
+  doc.stations = [start];
   for (const [index, mark] of checkpoints.entries()) {
     doc.stations.push({
       id: newId(),
