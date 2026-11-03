@@ -5,7 +5,7 @@ import { parseRoutes } from '../../src/files/import';
 import { automaticDeclination } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
 import { bgsRequests, answerBgs } from './bgs';
-import { open, download, openMagnetics, openExport } from './files';
+import { open, download, openMagnetics, openExport, disableExportProcessing } from './files';
 
 const gpx = Buffer.from(
   '<gpx><rte><name>Midpoint</name><rtept lat="5" lon="179"><ele>1</ele></rtept><rtept lat="5" lon="-179"><ele>2</ele></rtept></rte></gpx>',
@@ -30,6 +30,7 @@ test('RTE imports preserve all three reference vectors until the user edits the 
     await expect(page.getByText(id + '.rte', { exact: true })).toBeVisible();
     await openMagnetics(page);
     await expect(page.getByLabel('Declination mode')).toHaveValue(id === 'c' ? 'omit' : 'manual');
+    await disableExportProcessing(page);
     expect((await download(page, 'Download RTE')).bytes).toEqual(bytes);
   }
   await openMagnetics(page);

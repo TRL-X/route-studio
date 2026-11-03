@@ -115,7 +115,7 @@ function defaultLabel(name: string) {
   return result;
 }
 
-function compile(doc: RouteDocument, options = defaultExportOptions) {
+function compile(doc: RouteDocument, options: ExportOptions) {
   const { vertices, stations, elevation, rte } = doc;
   named(doc.name, 96, msg('field.routeName'), { type: 'route' });
   check(vertices.length >= 2, msg('compiler.verticesRequired'));
@@ -355,13 +355,15 @@ export interface RteWriteOptions {
   resampleElevation?: boolean;
 }
 
+const unprocessedOptions: ExportOptions = { intervalM: 0, toleranceM: 0, smoothingM: 0 };
+
 export function validateForRte(doc: RouteDocument, options: RteWriteOptions = {}): void {
-  const { precisionIssue } = compile(doc);
+  const { precisionIssue } = compile(doc, unprocessedOptions);
   if (precisionIssue && !options.resampleElevation) throw precisionIssue;
 }
 
 export function writeRte(doc: RouteDocument, options: RteWriteOptions = {}) {
-  const route = compile(doc);
+  const route = compile(doc, unprocessedOptions);
   const bytes = encode(route);
   if (route.precisionIssue && !options.resampleElevation) throw route.precisionIssue;
   return bytes;

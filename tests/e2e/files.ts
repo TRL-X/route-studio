@@ -19,6 +19,13 @@ export async function openMagnetics(page: Page) {
     await dialog.locator('.mag-export summary').click();
   return dialog;
 }
+export async function disableExportProcessing(page: Page) {
+  const dialog = await openExport(page);
+  await dialog.getByText('Route processing options').click();
+  await dialog.getByLabel('Elevation sample spacing').selectOption('0');
+  await dialog.getByLabel('Geometry tolerance').selectOption('0');
+  await dialog.getByLabel('Smoothing window').selectOption('0');
+}
 export async function download(page: Page, button: string) {
   if (button === 'Download RTE') await openExport(page);
   const started = page.waitForEvent('download');

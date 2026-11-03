@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { strings } from '../../src/app/strings';
 import { loadProject } from '../../src/files/project';
-import { readRte } from '../../src/rte';
+import { prepareRte, readRte } from '../../src/rte';
 
-import { open, download, openExport, openMagnetics } from './files';
+import { open, download, openExport, openMagnetics, disableExportProcessing } from './files';
 import { bgsRequests, answerBgs } from './bgs';
 
 test.beforeEach(async ({ page }) => {
@@ -65,8 +65,9 @@ test('imports, edits, undoes, recovers a draft and downloads project and device 
   expect(device.name).toMatch(/\.rte$/i);
   const decoded = readRte(device.bytes);
   expect(decoded.name).toBe('Ridge checkpoint');
-  // The Water checkpoint splits the stage between the second and third track samples.
-  expect(decoded.elevation.map((sample) => sample.height)).toEqual([10, 20, 19.7, 15]);
+  expect(device.bytes).toEqual(
+    Buffer.from(prepareRte(stored, { intervalM: 10, toleranceM: 2, smoothingM: 10 }).bytes),
+  );
   expect(decoded.stations.map((s) => s.name)).toEqual(['Start', 'Water', 'Finish']);
   expect(decoded.stations[1]).toMatchObject({ kind: 'cp', boundary: true });
   await open(page, device.name, device.bytes);
@@ -103,7 +104,7 @@ test('incomplete elevation can be saved to a project and corrected before RTE do
   await openExport(page);
   await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeEnabled();
   const device = await download(page, 'Download RTE');
-  expect(readRte(device.bytes).elevation[1].height).toBe(22);
+  expect(Math.max(...readRte(device.bytes).elevation.map((sample) => sample.height!))).toBe(22);
 });
 
 test('opens a selected KML line with explicit height confirmation', async ({ page }) => {
@@ -120,7 +121,9 @@ test('opens a selected KML line with explicit height confirmation', async ({ pag
   await expect(page.getByRole('heading', { name: 'Long loop', exact: true })).toBeVisible();
   await setSurveyDate(page);
   const device = await download(page, 'Download RTE');
-  expect(readRte(device.bytes).elevation.map((sample) => sample.height)).toEqual([200, 230]);
+  const { elevation } = readRte(device.bytes);
+  expect(elevation[0].height).toBe(200);
+  expect(elevation.at(-1)?.height).toBe(230);
 });
 
 test('fills gaps in one edit and resolves device-distance collisions in the preview', async ({ page }) => {
@@ -140,7 +143,7 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(fill).toBeVisible();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
-  await page.getByRole('button', { name: strings.en.export, exact: true }).click();
+  await disableExportProcessing(page);
   await page.getByText('Resolved shared elevation positions: 1').click();
   await expect(page.getByText('111.2 m → 10 m')).toBeVisible();
   const exported = readRte((await download(page, 'Download RTE')).bytes);
@@ -214,6 +217,7 @@ test('places a checkpoint and its separate landmark, inserts a vertex and edits 
   const height = page.getByRole('spinbutton', { name: 'Elevation (m)' });
   await height.fill('1028');
   await height.press('Enter');
+  await disableExportProcessing(page);
   const course = readRte((await download(page, 'Download RTE')).bytes);
   const station = course.stations.find((s) => s.name === 'Water stop');
   expect(station).toMatchObject({ kind: 'cp', boundary: true });
@@ -229,7 +233,12 @@ test('the export footer stays available on a narrow screen and only the chosen r
   await page.setViewportSize({ width: 360, height: 600 });
   const dialog = await openMagnetics(page);
   await dialog.getByText('Route processing options').click();
+  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveValue('10');
+  await expect(dialog.getByLabel('Geometry tolerance')).toHaveValue('2');
+  await expect(dialog.getByLabel('Smoothing window')).toHaveValue('10');
   await dialog.getByLabel('Elevation sample spacing').selectOption('20');
+  await dialog.getByLabel('Geometry tolerance').selectOption('5');
+  await dialog.getByLabel('Smoothing window').selectOption('50');
   await dialog.getByLabel('File name').fill('bad/name');
   await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
   await dialog.getByLabel('File name').fill('Trail');
@@ -240,6 +249,8 @@ test('the export footer stays available on a narrow screen and only the chosen r
   await expect(page.getByRole('heading', { name: 'North ridge' })).toBeVisible();
   await openExport(page);
   await dialog.getByText('Route processing options').click();
-  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveValue('0');
+  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveValue('10');
+  await expect(dialog.getByLabel('Geometry tolerance')).toHaveValue('2');
+  await expect(dialog.getByLabel('Smoothing window')).toHaveValue('10');
   await expect(dialog.getByLabel('File name')).toHaveValue('North ridge');
 });
