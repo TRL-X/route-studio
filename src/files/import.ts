@@ -252,9 +252,9 @@ function openLine(line: Line, landmarks: Landmark[], useUnconfirmedHeights: bool
   for (const [index, mark] of landmarks.entries()) {
     doc.stations.push({
       id: newId(),
-      name: mark.name || `POI ${index + 1}`,
-      kind: 'poi',
-      boundary: false,
+      name: mark.name || `CP ${index + 1}`,
+      kind: 'cp',
+      boundary: true,
       location: mark.location,
       anchor: anchors[index],
     });

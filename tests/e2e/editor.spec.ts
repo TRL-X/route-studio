@@ -65,8 +65,10 @@ test('imports, edits, undoes, recovers a draft and downloads project and device 
   expect(device.name).toMatch(/\.rte$/i);
   const decoded = readRte(device.bytes);
   expect(decoded.name).toBe('Ridge checkpoint');
-  expect(decoded.elevation.map((sample) => sample.height)).toEqual([10, 20, 15]);
+  // The Water checkpoint splits the stage between the second and third track samples.
+  expect(decoded.elevation.map((sample) => sample.height)).toEqual([10, 20, 19.7, 15]);
   expect(decoded.stations.map((s) => s.name)).toEqual(['Start', 'Water', 'Finish']);
+  expect(decoded.stations[1]).toMatchObject({ kind: 'cp', boundary: true });
   await open(page, device.name, device.bytes);
   await expect(page.getByText(device.name, { exact: true })).toBeVisible();
   await expect(name).toHaveValue('Ridge checkpoint');
