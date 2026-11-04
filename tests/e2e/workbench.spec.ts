@@ -159,6 +159,13 @@ test('leaves room for coordinate values and steppers, and aligns the export prev
 }) => {
   await page.route('https://**/*', (route) => route.abort());
   await page.goto('/');
+  // Exercise fallback font metrics and reserved scrollbar space on every OS.
+  await page.addStyleTag({
+    content: `
+      .radix-themes { --default-font-family: Arial, sans-serif; }
+      .inspect-content { scrollbar-gutter: stable; }
+    `,
+  });
   await page.getByRole('button', { name: 'First vertex', exact: true }).click();
   const latitude = page.getByRole('spinbutton', { name: 'Latitude', exact: true });
   const longitude = page.getByRole('spinbutton', { name: 'Longitude', exact: true });
@@ -206,8 +213,11 @@ test('leaves room for coordinate values and steppers, and aligns the export prev
                   parseFloat(style.paddingLeft) -
                   parseFloat(style.paddingRight) -
                   Math.max(0, parseFloat(style.textIndent) || 0);
-                if (context.measureText(field.value).width > available + 1)
-                  issues.push(`${name} cannot display a coordinate to five decimal places`);
+                const required = context.measureText(field.value).width;
+                if (required > available + 1)
+                  issues.push(
+                    `${name} needs ${required.toFixed(1)}px for five decimal places, but has ${available.toFixed(1)}px`,
+                  );
               }
               return issues;
             }),

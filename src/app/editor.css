@@ -146,7 +146,8 @@ p {
 }
 .workspace {
   display: grid;
-  grid-template-columns: clamp(190px, 16vw, 240px) minmax(0, 1fr) clamp(238px, 19vw, 310px);
+  /* Keep signed coordinates readable beside units and steppers, including with a scrollbar. */
+  grid-template-columns: clamp(190px, 16vw, 240px) minmax(0, 1fr) clamp(256px, 19vw, 310px);
   min-height: 0;
 }
 .sidebar,
@@ -625,7 +626,7 @@ h2 {
 }
 @media (max-width: 1120px) {
   .workspace {
-    grid-template-columns: 176px minmax(0, 1fr) 226px;
+    grid-template-columns: 176px minmax(0, 1fr) 256px;
   }
   .topbar {
     gap: 10px;
