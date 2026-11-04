@@ -160,13 +160,18 @@ export async function parseFitRoutes(bytes: ArrayBuffer, filename: string): Prom
   if (type === 'course') return [trackChoice(name, records, fit.course_points)];
   if (!fit.sessions || fit.sessions.length <= 1) return [trackChoice(name, records)];
 
-  // Session summaries can precede or follow the records. At a shared boundary the
-  // record belongs to the session that starts there, so no point is offered twice.
+  // A summary timestamp is its write time, not the session's end time. At a shared
+  // boundary the record belongs to the session that starts there, so no point is offered twice.
   const sessions = fit.sessions
     .map((session) => {
-      const start = session.start_time?.getTime(),
-        end = session.timestamp?.getTime();
-      if (start === undefined || end === undefined || end < start) throw new RouteFileError('invalid-fit');
+      const start = session.start_time?.getTime();
+      if (start === undefined || !Number.isFinite(start)) throw new RouteFileError('invalid-fit');
+      // Preserve support for incomplete legacy summaries that omit elapsed time.
+      const end =
+        session.total_elapsed_time === undefined
+          ? session.timestamp?.getTime()
+          : start + session.total_elapsed_time * 1000;
+      if (end === undefined || !Number.isFinite(end) || end < start) throw new RouteFileError('invalid-fit');
       return { start, end, sport: session.sport };
     })
     .sort((a, b) => a.start - b.start);
