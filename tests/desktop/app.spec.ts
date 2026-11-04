@@ -1,7 +1,7 @@
 import { selectOption } from '../controls';
 import { openSettings as settings, setPreference } from '../preferences';
 import { _electron, expect, test, type ElectronApplication } from '@playwright/test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { loadProject } from '../../src/files/project';
 import { strings } from '../../src/app/strings';
 import { commandStrings, type CommandId } from '../../src/app/commands';
 import type { Page } from '@playwright/test';
+import type { UpdateMode, UpdateState } from '../../electron/update-contracts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
@@ -18,7 +19,11 @@ let child: ReturnType<ElectronApplication['process']>;
 const gpx =
   '<gpx><trk><name>Desktop ridge</name><trkseg><trkpt lat="30" lon="105"><ele>10</ele></trkpt><trkpt lat="30.01" lon="105.01"><ele>20</ele></trkpt></trkseg></trk></gpx>';
 
-async function launch({ disableWebGL = false } = {}) {
+async function launch({ disableWebGL = false, updates = false, appImage = '' } = {}) {
+  if (updates) {
+    await mkdir(path.join(directory, 'profile'), { recursive: true });
+    await writeFile(path.join(directory, 'profile', 'updates.json'), JSON.stringify({ autoCheck: false }));
+  }
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
       ([key, value]) =>
@@ -31,8 +36,9 @@ async function launch({ disableWebGL = false } = {}) {
     args: [
       ...(process.env.DESKTOP_EXECUTABLE ? [] : [root]),
       `--user-data-dir=${path.join(directory, 'profile')}`,
+      ...(updates ? [] : ['--disable-updates']),
     ],
-    env,
+    env: { ...env, ...(appImage ? { APPIMAGE: appImage } : {}) },
   });
   child = desktop.process();
   child.stderr?.on('data', (chunk: Buffer) => {
@@ -115,6 +121,267 @@ test('starts with a blank route and no example command', async () => {
   await fileMenu(page);
   await expect(page.getByRole('menuitem', { name: 'New route', exact: true })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Open example', exact: true })).toHaveCount(0);
+});
+
+async function simulateUpdates(mode: UpdateMode) {
+  await desktop.evaluate(({ ipcMain, BrowserWindow }, mode) => {
+    let state: UpdateState = { currentVersion: '0.1.0', mode, status: 'idle', autoCheck: true };
+    const counters = { installed: 0, opened: 0 };
+    Object.assign(globalThis, { updateTestCounters: counters });
+    const publish = () => {
+      BrowserWindow.getAllWindows()[0].webContents.send('desktop:update-state', state);
+      return state;
+    };
+    for (const action of ['state', 'check', 'download', 'open', 'install', 'auto-check']) {
+      ipcMain.removeHandler(`desktop:update-${action}`);
+      ipcMain.handle(`desktop:update-${action}`, async (_event, value) => {
+        if (action === 'check')
+          state = {
+            ...state,
+            status: 'available',
+            release: { version: '0.2.0', notes: 'Route editing improvements' },
+          };
+        if (action === 'download') {
+          state = { ...state, status: 'downloading', percent: 25 };
+          publish();
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          state = { ...state, status: 'downloaded', percent: 100 };
+        }
+        if (action === 'open') counters.opened++;
+        if (action === 'install') counters.installed++;
+        if (action === 'auto-check') state = { ...state, autoCheck: value };
+        return publish();
+      });
+    }
+    publish();
+  }, mode);
+}
+
+test('manual updates show release notes and a browser download without installation controls', async ({}, testInfo) => {
+  const page = await launch();
+  await simulateUpdates('manual');
+  await nativeCommand('checkUpdates');
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(panel.getByRole('tab', { name: 'Software update' })).toHaveAttribute('data-state', 'active');
+  await expect(panel.getByRole('status')).toContainText('0.2.0');
+  await panel.getByText('Release notes', { exact: true }).click();
+  await expect(panel.getByText('Route editing improvements')).toBeVisible();
+  await panel.screenshot({ path: testInfo.outputPath('manual-update.png') });
+  await panel.getByRole('button', { name: 'Download new version', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Restart and install' })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Download update', exact: true })).toHaveCount(0);
+  await panel.getByRole('checkbox', { name: 'Automatically check for updates once a day' }).uncheck();
+  await expect
+    .poll(() => page.evaluate(async () => (await window.routeStudioDesktop!.getUpdateState()).autoCheck))
+    .toBe(false);
+  expect(
+    await desktop.evaluate(
+      () =>
+        (globalThis as unknown as { updateTestCounters: { installed: number; opened: number } })
+          .updateTestCounters,
+    ),
+  ).toEqual({ installed: 0, opened: 1 });
+});
+
+test('update installation waits for a successful project save and survives cancellation and disk errors', async () => {
+  const page = await launch();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Keep this route');
+  await name.press('Enter');
+  await simulateUpdates('automatic');
+  await nativeCommand('checkUpdates');
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await panel.getByRole('button', { name: 'Download update', exact: true }).click();
+  await panel.getByRole('button', { name: 'Restart and install', exact: true }).click();
+  await expect(panel.getByText('Save your project before restarting?')).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).first().click();
+  await expect(panel.getByRole('button', { name: 'Save and update' })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Restart and install', exact: true }).click();
+  await desktop.evaluate(({ dialog }) => {
+    dialog.showSaveDialog = async () => ({ canceled: true, filePath: '' });
+  });
+  await panel.getByRole('button', { name: 'Save and update' }).click();
+  await expect(panel.getByRole('alert')).toContainText('Saving was cancelled or could not finish');
+  await desktop.evaluate(({ dialog }) => {
+    dialog.showSaveDialog = async () => {
+      throw new Error('Disk unavailable');
+    };
+  });
+  await panel.getByRole('button', { name: 'Save and update' }).click();
+  await expect(panel.getByRole('alert')).toContainText('Saving was cancelled or could not finish');
+  expect(
+    await desktop.evaluate(
+      () =>
+        (globalThis as unknown as { updateTestCounters: { installed: number } }).updateTestCounters.installed,
+    ),
+  ).toBe(0);
+  const target = path.join(directory, 'before-update.routeproj');
+  await desktop.evaluate(({ dialog }, filename) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
+  }, target);
+  await panel.getByRole('button', { name: 'Save and update' }).click();
+  await expect
+    .poll(() =>
+      desktop.evaluate(
+        () =>
+          (globalThis as unknown as { updateTestCounters: { installed: number } }).updateTestCounters
+            .installed,
+      ),
+    )
+    .toBe(1);
+  expect(loadProject(await readFile(target, 'utf8')).name).toBe('Keep this route');
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).last().click();
+  await expect(name).toHaveValue('Keep this route');
+});
+
+test('update IPC rejects malformed requests and development builds cannot install', async () => {
+  const page = await launch();
+  expect(await page.evaluate(async () => (await window.routeStudioDesktop!.installUpdate(true)).mode)).toBe(
+    'disabled',
+  );
+  expect(
+    await page.evaluate(async () => {
+      try {
+        await window.routeStudioDesktop!.installUpdate('yes' as unknown as boolean);
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+  ).toBe(true);
+});
+
+test('packaged manual updater selects the matching asset and persists its preference', async ({}, testInfo) => {
+  test.skip(
+    !process.env.DESKTOP_EXECUTABLE || process.platform === 'win32',
+    'Requires a packaged manual-update platform',
+  );
+  const page = await launch({ updates: true });
+  const expectedURL = await desktop.evaluate(({ app, net, shell }) => {
+    const arch = process.platform === 'darwin' && app.runningUnderARM64Translation ? 'arm64' : process.arch;
+    const suffix = process.platform === 'darwin' ? `mac-${arch}.dmg` : `linux-${arch}.deb`;
+    const name = `Route-Studio-99.0.0-${suffix}`;
+    const url = `https://github.com/TRL-X/route-studio/releases/download/v99.0.0/${name}`;
+    net.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          tag_name: 'v99.0.0',
+          draft: false,
+          prerelease: false,
+          body: 'Packaged update test',
+          assets: [{ name, size: 100, browser_download_url: url }],
+        }),
+      );
+    shell.openExternal = async (url) => {
+      Object.assign(globalThis, { openedUpdateURL: url });
+    };
+    return url;
+  });
+  await nativeCommand('checkUpdates');
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(panel.getByRole('status')).toContainText('99.0.0');
+  await panel.getByRole('button', { name: 'Download new version' }).click();
+  await expect
+    .poll(() =>
+      desktop.evaluate(() => (globalThis as unknown as { openedUpdateURL: string }).openedUpdateURL),
+    )
+    .toBe(expectedURL);
+  await panel.getByRole('checkbox', { name: 'Automatically check for updates once a day' }).check();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse(await readFile(path.join(directory, 'profile', 'updates.json'), 'utf8')).autoCheck,
+    )
+    .toBe(true);
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(800, 600));
+  await panel.screenshot({ path: testInfo.outputPath('packaged-manual-update.png') });
+  await desktop.close();
+  await launch();
+  expect(await desktop.evaluate(({ app }) => app.getVersion())).not.toBe('99.0.0');
+  expect(JSON.parse(await readFile(path.join(directory, 'profile', 'updates.json'), 'utf8')).autoCheck).toBe(
+    true,
+  );
+});
+
+test('packaged automatic updater preserves install guards and saves before invoking the installer', async () => {
+  test.skip(
+    !process.env.DESKTOP_EXECUTABLE || process.platform === 'darwin',
+    'Requires a packaged automatic-update platform',
+  );
+  const appImage = path.join(directory, 'Route-Studio.AppImage');
+  await writeFile(appImage, 'permission-check fixture');
+  const page = await launch({ updates: true, appImage: process.platform === 'linux' ? appImage : '' });
+  const source = path.join(directory, 'update-route.gpx');
+  await writeFile(source, gpx);
+  await desktop.evaluate(({ dialog }, filename) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
+  }, source);
+  await nativeCommand('open');
+  await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
+  await desktop.evaluate(async ({ app }) => {
+    const { createRequire } = await import('node:module');
+    const path = await import('node:path');
+    const require = createRequire(path.join(app.getAppPath(), 'package.json'));
+    const { NsisUpdater, AppImageUpdater } = require('electron-updater') as typeof import('electron-updater');
+    const prototype = process.platform === 'win32' ? NsisUpdater.prototype : AppImageUpdater.prototype;
+    prototype.checkForUpdates = async function () {
+      if (this.autoDownload || this.autoInstallOnAppQuit || this.allowPrerelease || this.allowDowngrade)
+        throw new Error('Unsafe update defaults');
+      const updateInfo = {
+        version: '99.0.0',
+        releaseNotes: 'Packaged automatic update',
+        files: [],
+        path: '',
+        sha512: '',
+        releaseDate: '',
+      };
+      return { isUpdateAvailable: true, updateInfo, versionInfo: updateInfo };
+    };
+    prototype.downloadUpdate = async function () {
+      this.emit('download-progress', {
+        percent: 100,
+        bytesPerSecond: 100,
+        total: 100,
+        transferred: 100,
+        delta: 100,
+      });
+      return ['fixture'];
+    };
+    prototype.quitAndInstall = () => {
+      Object.assign(globalThis, { installerInvoked: true });
+    };
+  });
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Guarded update');
+  await name.press('Enter');
+  await nativeCommand('checkUpdates');
+  let panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await panel.getByRole('button', { name: 'Download update', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Restart and install' })).toBeVisible();
+  expect(await page.evaluate(async () => (await window.routeStudioDesktop!.installUpdate(false)).error)).toBe(
+    'unsaved',
+  );
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await nativeCommand('export');
+  await expect(page.getByRole('dialog', { name: 'Export route' })).toBeVisible();
+  expect(await page.evaluate(async () => (await window.routeStudioDesktop!.installUpdate(true)).error)).toBe(
+    'busy',
+  );
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await nativeCommand('checkUpdates');
+  panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const target = path.join(directory, 'guarded-update.routeproj');
+  await desktop.evaluate(({ dialog }, filename) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
+  }, target);
+  await panel.getByRole('button', { name: 'Restart and install' }).click();
+  await panel.getByRole('button', { name: 'Save and update' }).click();
+  await expect
+    .poll(() =>
+      desktop.evaluate(() => (globalThis as unknown as { installerInvoked: boolean }).installerInvoked),
+    )
+    .toBe(true);
+  expect(loadProject(await readFile(target, 'utf8')).name).toBe('Guarded update');
 });
 
 test('synchronizes the editor appearance with native window chrome and dialogs', async () => {

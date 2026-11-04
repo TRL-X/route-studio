@@ -17,6 +17,7 @@ export const commandIds = [
   'mapZoomOut',
   'toggleProfile',
   'settings',
+  'checkUpdates',
 ] as const;
 
 export type CommandId = (typeof commandIds)[number];
@@ -47,6 +48,7 @@ export const commandDefinitions: CommandDefinition[] = [
   { id: 'mapZoomOut', group: 'view' },
   { id: 'toggleProfile', group: 'view' },
   { id: 'settings', accelerator: 'CommandOrControl+,' },
+  { id: 'checkUpdates' },
 ];
 
 export interface DesktopCommandState {

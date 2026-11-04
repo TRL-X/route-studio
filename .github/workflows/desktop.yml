@@ -85,6 +85,8 @@ jobs:
             trap 'rm -f "$APPLE_API_KEY"' EXIT
           fi
           npx electron-builder "${args[@]}"
+      - name: Verify installers and update manifests
+        run: node scripts/verify-release.mjs release ${{ matrix.platform }} ${{ matrix.arch }}
       - name: Locate packaged executable
         shell: bash
         run: node scripts/packaged-executable.mjs >> "$GITHUB_ENV"
@@ -103,6 +105,8 @@ jobs:
             release/*.exe
             release/*.AppImage
             release/*.deb
+            release/latest*.yml
+            release/*.blockmap
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -117,11 +121,21 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       - uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
           merge-multiple: true
           path: installers
+      - name: Verify complete release
+        run: node scripts/verify-release.mjs installers
       - name: Upload installers to a draft release
         env:
           GH_TOKEN: ${{ github.token }}

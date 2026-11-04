@@ -9,6 +9,9 @@ import {
   Callout,
 } from '@radix-ui/themes';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { useUpdates } from './useUpdates';
+import { updateStrings } from './UpdatesPanel';
 import {
   Check,
   FolderOpen,
@@ -106,6 +109,9 @@ export function Editor({
 }) {
   const [history, dispatch] = useHistory(() => restored ?? emptyRoute());
   const { doc } = history;
+  const currentDoc = useRef(doc);
+  currentDoc.current = doc;
+  const updates = useUpdates();
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
   const { theme, scheme, changeTheme } = useTheme();
@@ -133,7 +139,7 @@ export function Editor({
   const [elevationPanel, setElevationPanel] = useState<'import' | 'tools' | 'online' | null>(null);
   const [importElevation, setImportElevation] = useState<ImportElevationAssessment | null>(null);
   const [elevationSummary, setElevationSummary] = useState<Localized | null>(null);
-  const [settingsTab, setSettingsTab] = useState<'general' | 'map' | null>(null);
+  const [settingsTab, setSettingsTab] = useState<'general' | 'map' | 'updates' | null>(null);
   const [basemap, setBasemap] = useState(loadBasemapPreferences);
   const [preferencesFailed, setPreferencesFailed] = useState(false);
   const [profileCollapsed, setProfileCollapsed] = useState(false);
@@ -154,9 +160,10 @@ export function Editor({
   const ioLock = useRef(false);
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const dirty = doc !== savedDoc;
-  useEffect(() => {
-    window.routeStudioDesktop?.setDocumentState(dirty, lang);
-  }, [dirty, lang]);
+  const updateBlocked = busy || savingFile || !!exportFormat || !!elevationPanel || !!pending || !!choices;
+  useLayoutEffect(() => {
+    window.routeStudioDesktop?.setDocumentState(dirty, lang, updateBlocked);
+  }, [dirty, lang, updateBlocked]);
   const change = (next: RouteDocument) => {
     if (next === doc) return;
     autosave.current = true;
@@ -344,19 +351,22 @@ export function Editor({
       }
     },
   };
-  async function save() {
-    if (saveLock.current) return;
+  async function save(): Promise<boolean> {
+    if (saveLock.current) return false;
     saveLock.current = true;
     setSavingFile(true);
     try {
-      if (!(await saveFile(saveProject(doc), filename(doc.name) + '.routeproj', 'application/json'))) return;
-      setSavedDoc(doc);
+      if (!(await saveFile(saveProject(doc), filename(doc.name) + '.routeproj', 'application/json')))
+        return false;
+      flushSync(() => setSavedDoc(doc));
       setNotice(both(window.routeStudioDesktop ? 'desktopProjectDone' : 'projectDone'));
+      return currentDoc.current === doc;
     } catch {
       setProblem(both('fileSaveFailed'));
+      return false;
     } finally {
       saveLock.current = false;
-      setSavingFile(false);
+      flushSync(() => setSavingFile(false));
     }
   }
   async function pickDesktopFile() {
@@ -496,6 +506,13 @@ export function Editor({
     mapZoomOut: { run: () => mapCommand('zoomOut') },
     toggleProfile: { run: () => setProfileCollapsed((value) => !value) },
     settings: { run: () => setSettingsTab('general') },
+    checkUpdates: {
+      run: () => {
+        setSettingsTab('updates');
+        void updates.check();
+      },
+      disabled: !window.routeStudioDesktop,
+    },
   };
   const toolHelp = {
     select: t.editing,
@@ -733,6 +750,14 @@ export function Editor({
             {notice ? notice[lang] : toolHelp}
           </span>
           <span className={draftState === 'saveFailed' ? 'save-error' : 'draft-status'}>{t[draftState]}</span>
+          {updates.state?.release && ['available', 'downloaded'].includes(updates.state.status) && (
+            <Button size="1" variant="ghost" onClick={() => setSettingsTab('updates')}>
+              {updateStrings[lang][updates.state.status === 'downloaded' ? 'readyNotice' : 'notice'].replace(
+                '{version}',
+                updates.state.release.version,
+              )}
+            </Button>
+          )}
           <span className="coord-system">WGS 84</span>
         </footer>
         {problem && (
@@ -782,6 +807,9 @@ export function Editor({
           initialTab={settingsTab}
           onApply={applyPreferences}
           onClose={() => setSettingsTab(null)}
+          updates={updates}
+          dirty={dirty}
+          onSave={save}
         />
       )}
       {elevationPanel === 'import' && importElevation && (

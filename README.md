@@ -92,7 +92,21 @@ The **Desktop packages** workflow builds and tests packages on native runners. P
 | macOS notarization | `APPLE_API_KEY` (base64 P8), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` |
 | Windows signing    | `WIN_CSC_LINK` (base64 PFX), `WIN_CSC_KEY_PASSWORD`                 |
 
-Without certificates, packages are unsigned. Check signing/notarization before distribution. Updates are manual; file associations are not enabled. Keep application ID `org.trlx.route-studio` unchanged to preserve profiles.
+Without certificates, packages are unsigned. Check signing/notarization before distribution. File associations are not enabled. Keep application ID `org.trlx.route-studio` unchanged to preserve profiles.
+
+### Software updates
+
+Desktop **Settings… → Software update** shows the current version, release notes and update progress. **Check for updates…** is also available in the application menu. Automatic checks start 15 seconds after launch and run at most once per 24 hours, including failed attempts; the preference is saved immediately in the desktop profile. Manual checks bypass this interval. Background checks never open a modal or start a download. Available updates appear in the status bar.
+
+- **macOS:** unsigned builds check public GitHub Releases and open the matching Intel or Apple Silicon DMG in the browser (including Apple Silicon when running under Rosetta). Save the project, quit the app and replace it in Applications. No automatic installer is loaded on macOS.
+- **Windows NSIS / Linux AppImage:** explicitly download the update, then choose **Restart and install**. Downloaded updates are not installed on ordinary quit. Unsaved projects require saving successfully or explicitly discarding changes. Saving, importing, exporting and Bluetooth selection/transfers block installation. AppImage installation requires write access to the file and its directory.
+- **Linux DEB:** check for updates and download the matching package for manual installation. Development builds have updates disabled.
+
+Only stable releases newer than the installed version are accepted; drafts, prereleases and downgrades are excluded. Update failures leave the editor usable and downloads can be retried. Update notes are displayed as text. No release token is shipped to clients. Projects, recovery drafts and preferences stay in their existing locations. Users of versions without this feature must install an update-capable version manually once.
+
+The update source is the public `TRL-X/route-studio` GitHub repository. Keep `electron-builder.yml` and `electron/update-release.ts` in sync if moving releases. Windows and Linux packages include `electron-updater` and `app-update.yml`; publish their `latest*.yml`, installers and generated `.blockmap` files together. macOS intentionally sets `publish: null` in the builder and uses GitHub release assets instead of `latest-mac.yml`, avoiding dual-architecture manifest collisions. The existing CI still uses `--publish never`, collects all outputs, validates manifest versions, sizes and SHA-512 hashes, then uploads to a **draft** release. Maintainers publish only after all four platform/architecture builds pass. Never replace artifacts in an already-published version; issue a higher patch version for a fix.
+
+`node scripts/verify-release.mjs release win x64` validates one build; omit the platform and architecture to validate the complete release directory. Update tests use simulated downloads/installers and isolated profiles; `--disable-updates` prevents real checks in desktop tests. Before distributing the first updater release, verify a real installed N → N+1 upgrade on Windows and a writable Linux AppImage, plus manual replacement on both Mac architectures. This also checks OS-specific installer behavior that simulation cannot cover.
 
 ## Contributing and verification
 

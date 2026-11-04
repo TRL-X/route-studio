@@ -12,9 +12,15 @@ files:
   - build/icons/icon.png
   - LICENSE
   - package.json
-  - '!node_modules/**/*'
+publish:
+  provider: github
+  owner: TRL-X
+  repo: route-studio
+  releaseType: draft
 artifactName: Route-Studio-${version}-${os}-${arch}.${ext}
 mac:
+  # Unsigned macOS builds use GitHub release metadata and manual DMG downloads.
+  publish: null
   category: public.app-category.utilities
   icon: build/icons/icon.icns
   hardenedRuntime: true

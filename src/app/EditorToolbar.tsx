@@ -192,6 +192,11 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
                 </DropdownMenu.Sub>
               ))}
               <DropdownMenu.Separator />
+              {desktop && (
+                <DropdownMenu.Item disabled={locked} onSelect={() => execute('checkUpdates')}>
+                  {t.checkUpdates}
+                </DropdownMenu.Item>
+              )}
               <DropdownMenu.Item
                 aria-label={t.settings}
                 shortcut={mac ? '⌘,' : 'Ctrl+,'}
