@@ -283,6 +283,27 @@ test('quitting with unsaved edits confirms once and exits without a destroyed-wi
 
 test('saves personal basemap settings across desktop restarts without including the Key in projects', async () => {
   let page = await launch();
+  const graphics = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    let failure = '';
+    canvas.addEventListener('webglcontextcreationerror', (event) => {
+      failure = (event as WebGLContextEvent).statusMessage;
+    });
+    const gl = canvas.getContext('webgl2', {
+      antialias: false,
+      powerPreference: 'high-performance',
+      alpha: true,
+      depth: true,
+      stencil: true,
+      premultipliedAlpha: true,
+    });
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return { webgl2: !!gl, failure };
+  });
+  const gpu = await desktop.evaluate(({ app }) => app.getGPUFeatureStatus());
+  expect({ ...graphics, gpu }, 'Tile requests require a working WebGL2 context').toMatchObject({
+    webgl2: true,
+  });
   const tiles = /https:\/\/t[0-7]\.tianditu\.gov\.cn\//;
   await page.route(tiles, (route) => route.fulfill({ status: 403, body: 'Denied' }));
   await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
