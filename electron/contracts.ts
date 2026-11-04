@@ -20,7 +20,14 @@ export interface DesktopAPI {
   setTheme: (theme: 'system' | 'light' | 'dark') => void;
   openFile: () => Promise<DesktopFile | null>;
   saveFile: (file: DesktopFile) => Promise<boolean>;
-  setDocumentState: (dirty: boolean, language: 'en' | 'zh') => void;
+  setDocumentState: (dirty: boolean, language: 'en' | 'zh', busy: boolean) => void;
+  getUpdateState: () => Promise<UpdateState>;
+  checkForUpdates: () => Promise<UpdateState>;
+  setUpdateAutoCheck: (enabled: boolean) => Promise<UpdateState>;
+  downloadUpdate: () => Promise<UpdateState>;
+  openUpdateDownload: () => Promise<UpdateState>;
+  installUpdate: (discard: boolean) => Promise<UpdateState>;
+  onUpdateState: (listener: (state: UpdateState) => void) => () => void;
   setCommandState: (state: DesktopCommandState) => void;
   onCommand: (listener: (command: CommandId) => void) => () => void;
   onBluetoothDevices: (listener: (devices: BluetoothChoice[] | null) => void) => () => void;
@@ -30,3 +37,4 @@ export interface DesktopAPI {
   cancelBluetooth: () => void;
 }
 import type { CommandId, DesktopCommandState } from './commands.js';
+import type { UpdateState } from './update-contracts.js';

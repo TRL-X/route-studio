@@ -8,6 +8,8 @@ import { Choice } from './Choice';
 import { Modal } from './Modal';
 import { strings, type Lang } from './strings';
 import type { Theme } from './theme';
+import { UpdatesPanel, updateStrings } from './UpdatesPanel';
+import type { UpdateControls } from './useUpdates';
 
 export interface SettingsValues {
   lang: Lang;
@@ -22,10 +24,16 @@ export function SettingsDialog({
   initialTab,
   onApply,
   onClose,
+  updates,
+  dirty,
+  onSave,
 }: SettingsValues & {
-  initialTab: 'general' | 'map';
+  initialTab: 'general' | 'map' | 'updates';
   onApply: (values: SettingsValues) => void;
   onClose: () => void;
+  updates: UpdateControls;
+  dirty: boolean;
+  onSave: () => Promise<boolean>;
 }) {
   const t = strings[lang];
   const copy = { en, zh }[lang];
@@ -34,6 +42,8 @@ export function SettingsDialog({
   const [draft, setDraft] = useState<SettingsValues>(() => ({ lang, theme, basemap: { ...basemap } }));
   const [showKey, setShowKey] = useState(false);
   const [missingKey, setMissingKey] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const installing = updateBusy || updates.state?.status === 'installing';
   const keyInput = useRef<HTMLInputElement>(null);
   const changeMap = (patch: Partial<BasemapPreferences>) => {
     setDraft((value) => ({ ...value, basemap: { ...value.basemap, ...patch } }));
@@ -43,11 +53,12 @@ export function SettingsDialog({
     if (missingKey) keyInput.current?.focus();
   }, [missingKey, tab]);
   return (
-    <Modal title={copy.title} maxWidth="480px" onClose={onClose}>
+    <Modal title={copy.title} maxWidth="480px" onClose={onClose} busy={installing}>
       <Flex asChild direction="column" gap="4">
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            if (installing) return;
             const map = { ...draft.basemap, tiandituKey: draft.basemap.tiandituKey.trim() };
             if (map.enabled && map.provider === 'tianditu' && !map.tiandituKey) {
               setTab('map');
@@ -57,10 +68,18 @@ export function SettingsDialog({
             onApply({ ...draft, basemap: map });
           }}
         >
-          <Tabs.Root value={tab} onValueChange={(value) => setTab(value as 'general' | 'map')}>
+          <Tabs.Root
+            value={tab}
+            onValueChange={(value) => {
+              if (!installing) setTab(value as typeof tab);
+            }}
+          >
             <Tabs.List>
               <Tabs.Trigger value="general">{copy.general}</Tabs.Trigger>
               <Tabs.Trigger value="map">{copy.map}</Tabs.Trigger>
+              {window.routeStudioDesktop && (
+                <Tabs.Trigger value="updates">{updateStrings[lang].title}</Tabs.Trigger>
+              )}
             </Tabs.List>
             <Tabs.Content value="general">
               <Flex direction="column" gap="4" pt="4">
@@ -180,15 +199,28 @@ export function SettingsDialog({
                 </Text>
               </Flex>
             </Tabs.Content>
+            {window.routeStudioDesktop && (
+              <Tabs.Content value="updates">
+                <UpdatesPanel
+                  lang={lang}
+                  updates={updates}
+                  dirty={dirty}
+                  onSave={onSave}
+                  onBusyChange={setUpdateBusy}
+                />
+              </Tabs.Content>
+            )}
           </Tabs.Root>
           <Text as="p" size="1" color="gray">
             {t.basemapLocalSettings}
           </Text>
           <Flex justify="end" gap="2">
-            <Button type="button" variant="soft" color="gray" onClick={onClose}>
+            <Button type="button" variant="soft" color="gray" onClick={onClose} disabled={installing}>
               {t.cancel}
             </Button>
-            <Button type="submit">{t.basemapApply}</Button>
+            <Button type="submit" disabled={installing}>
+              {t.basemapApply}
+            </Button>
           </Flex>
         </form>
       </Flex>

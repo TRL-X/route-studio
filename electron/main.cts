@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron';
 import { readFile, open, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { createUpdates } from './updates.cjs';
+import type { UpdateService } from './update-service.js';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -38,6 +40,9 @@ let language: 'en' | 'zh' = app.getPreferredSystemLanguages()[0]?.startsWith('zh
 let fileDialogOpen = false;
 let closing = false;
 let quitRequested = false;
+let documentStateKnown = false;
+let activityBusy = true;
+let updates: UpdateService | undefined;
 let bluetoothDevices: BluetoothChoice[] = [];
 let bluetoothCallback: ((id: string) => void) | undefined;
 let pairingCallback: ((response: { confirmed: boolean; pin?: string }) => void) | undefined;
@@ -112,6 +117,7 @@ async function updateCommandMenu() {
         { role: 'about' },
         { type: 'separator' },
         item('settings'),
+        item('checkUpdates'),
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -122,6 +128,7 @@ async function updateCommandMenu() {
         { role: 'quit' },
       ],
     });
+  if (process.platform !== 'darwin') groups.push({ label: labels.help, submenu: [item('checkUpdates')] });
   Menu.setApplicationMenu(Menu.buildFromTemplate([...groups, { role: 'windowMenu' }]));
 }
 
@@ -188,6 +195,8 @@ async function externalLink(value: string) {
 
 function createWindow() {
   dirty = false;
+  documentStateKnown = false;
+  activityBusy = true;
   closing = false;
   const current = new BrowserWindow({
     title: 'Route Studio',
@@ -216,6 +225,9 @@ function createWindow() {
     },
   });
   window = current;
+  current.webContents.on('render-process-gone', () => {
+    documentStateKnown = false;
+  });
   current.once('ready-to-show', () => current.show());
   current.on('close', (event) => {
     if (!dirty || closing) return;
@@ -397,10 +409,13 @@ ipcMain.on('desktop:state', (event, state) => {
     !trustedSender(event) ||
     !state ||
     typeof state.dirty !== 'boolean' ||
+    typeof state.busy !== 'boolean' ||
     !['en', 'zh'].includes(state.language)
   )
     return;
   dirty = state.dirty;
+  activityBusy = state.busy;
+  documentStateKnown = true;
   language = state.language;
   window!.setDocumentEdited(dirty);
 });
@@ -446,9 +461,29 @@ ipcMain.on('desktop:bluetooth-cancel', (event) => {
   if (trustedSender(event)) cancelBluetooth();
 });
 
+for (const action of ['state', 'check', 'auto-check', 'download', 'open', 'install'] as const) {
+  ipcMain.handle(`desktop:update-${action}`, (event, value: unknown) => {
+    if (!trustedSender(event) || !updates) throw new Error('Updates unavailable');
+    switch (action) {
+      case 'state':
+        return updates.snapshot();
+      case 'check':
+        return updates.check();
+      case 'download':
+        return updates.download();
+      case 'open':
+        return updates.open();
+      case 'auto-check':
+      case 'install':
+        if (typeof value !== 'boolean') throw new Error('Invalid update request');
+        return action === 'install' ? updates.install(value) : updates.setAutoCheck(value);
+    }
+  });
+}
+
 app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     protocol.handle('app', async (request) => {
       const filename = resourcePath(path.join(app.getAppPath(), 'dist'), request.url);
       if (!filename || !['GET', 'HEAD'].includes(request.method))
@@ -466,6 +501,34 @@ app
       }
     });
     disableCommands();
+    updates = await createUpdates({
+      publish: (state) => {
+        if (
+          window &&
+          !window.isDestroyed() &&
+          !window.webContents.isDestroyed() &&
+          trustedURL(window.webContents.getURL())
+        )
+          window.webContents.send('desktop:update-state', state);
+      },
+      canInstall: (discard) => {
+        if (
+          !documentStateKnown ||
+          activityBusy ||
+          fileDialogOpen ||
+          bluetoothCallback ||
+          pairingCallback ||
+          !window ||
+          window.isDestroyed() ||
+          window.webContents.isDestroyed()
+        )
+          return 'busy';
+        return dirty && !discard ? 'unsaved' : null;
+      },
+      setInstalling: (installing) => {
+        closing = installing;
+      },
+    });
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

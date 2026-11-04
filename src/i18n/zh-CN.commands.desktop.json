@@ -21,5 +21,7 @@
   "mapZoomIn": "放大地图",
   "mapZoomOut": "缩小地图",
   "toggleProfile": "显示 / 隐藏海拔剖面",
-  "settings": "设置…"
+  "settings": "设置…",
+  "checkUpdates": "检查更新…",
+  "help": "帮助"
 }

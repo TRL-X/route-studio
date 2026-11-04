@@ -21,5 +21,7 @@
   "mapZoomIn": "Zoom map in",
   "mapZoomOut": "Zoom map out",
   "toggleProfile": "Show / hide elevation profile",
-  "settings": "Settings…"
+  "settings": "Settings…",
+  "checkUpdates": "Check for updates…",
+  "help": "Help"
 }
