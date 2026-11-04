@@ -384,6 +384,7 @@ export function Editor({
   return (
     <div
       className="studio"
+      data-desktop={window.routeStudioDesktop?.platform}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
