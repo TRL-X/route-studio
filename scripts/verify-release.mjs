@@ -8,7 +8,12 @@ import { load } from 'js-yaml';
 export async function verifyRelease(directory, version, platform, arch) {
   const extensions = { mac: ['dmg', 'zip'], win: ['exe'], linux: ['AppImage', 'deb'] }[platform];
   if (!extensions || !['x64', 'arm64'].includes(arch)) throw new Error('Unsupported release target');
-  const names = extensions.map((extension) => `Route-Studio-${version}-${platform}-${arch}.${extension}`);
+  const names = extensions.map((extension) => {
+    // electron-builder uses each Linux package format's architecture name.
+    const artifactArch =
+      platform === 'linux' && arch === 'x64' ? (extension === 'deb' ? 'amd64' : 'x86_64') : arch;
+    return `Route-Studio-${version}-${platform}-${artifactArch}.${extension}`;
+  });
   for (const name of names) {
     const file = await stat(path.join(directory, name));
     if (!file.isFile() || !file.size) throw new Error(`Empty or missing installer: ${name}`);
