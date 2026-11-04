@@ -536,17 +536,25 @@ h2 {
 }
 
 .empty-overlay {
+  --card-background-color: var(--paper);
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 300px;
+  width: min(340px, calc(100% - 32px));
+  color: var(--ink);
   text-align: center;
 }
 .empty-overlay p {
   margin-bottom: 12px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.6;
+}
+.empty-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 .overlay {
   position: fixed;

@@ -11,6 +11,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
+  FolderOpen,
   Layers,
   Map as MapIcon,
   MapPin,
@@ -32,7 +33,6 @@ import {
   type RouteDocument,
 } from '../domain/model';
 import { ascent } from '../domain/summary';
-import { exampleRoute } from '../domain/example';
 import { saveDraft, saveProject } from '../files';
 import { MapView } from '../views/MapView';
 import { ProfileView } from '../views/ProfileView';
@@ -87,7 +87,6 @@ function fileError(result: Extract<IOResult, { type: 'error' }>): Localized {
 interface Replacement {
   doc: RouteDocument;
   source: string;
-  sample?: boolean;
 }
 interface ImportChoice {
   list: TrackChoice[];
@@ -103,7 +102,7 @@ export function Editor({
   restored: RouteDocument | null;
   recoveryError: boolean;
 }) {
-  const [history, dispatch] = useHistory(() => restored ?? exampleRoute());
+  const [history, dispatch] = useHistory(() => restored ?? emptyRoute());
   const { doc } = history;
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
@@ -111,7 +110,6 @@ export function Editor({
   const [selected, choose] = useState<Selection>({ type: 'route' });
   const [revealSelection, setRevealSelection] = useState(0);
   const [tool, setTool] = useState<Tool>('select');
-  const [example, setExample] = useState(!restored);
   const [source, setSource] = useState('');
   const [session, setSession] = useState(0);
   const [savedDoc, setSavedDoc] = useState(doc);
@@ -257,7 +255,6 @@ export function Editor({
     setElevationPanel(null);
     setElevationSummary(null);
     setMagneticExpanded(false);
-    setExample(!!next.sample);
     setIssue(null);
     setHoveredSample(null);
     setMapProbeDistance(null);
@@ -465,7 +462,6 @@ export function Editor({
   const commands: EditorCommands = {
     new: { run: () => requestReplace({ doc: emptyRoute(), source: '' }) },
     open: { run: () => (window.routeStudioDesktop ? void pickDesktopFile() : picker.current?.click()) },
-    example: { run: () => requestReplace({ doc: exampleRoute(), source: '', sample: true }) },
     save: { run: () => void save() },
     export: {
       run: () => {
@@ -530,7 +526,6 @@ export function Editor({
             doc={doc}
             axis={axis}
             selected={selected}
-            example={example}
             source={source}
             t={t}
             onSelect={select}
@@ -667,10 +662,16 @@ export function Editor({
                     <PanelsTopLeft size={25} />
                     <h2>{t.empty}</h2>
                     <p>{t.emptyHelp}</p>
-                    <Button onClick={() => setTool('append')}>
-                      <Plus />
-                      {t.append}
-                    </Button>
+                    <div className="empty-actions">
+                      <Button onClick={commands.open.run}>
+                        <FolderOpen />
+                        {t.openRoute}
+                      </Button>
+                      <Button variant="surface" color="gray" onClick={commands.append.run}>
+                        <Plus />
+                        {t.append}
+                      </Button>
+                    </div>
                   </Card>
                 )}
               </div>

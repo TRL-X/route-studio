@@ -1,3 +1,4 @@
+import { openRidge } from './files';
 import { setPreference } from '../preferences';
 import { expect, test } from '@playwright/test';
 import { emptyRoute } from '../../src/domain/model';
@@ -6,6 +7,7 @@ import { saveProject } from '../../src/files/project';
 test('keeps toolbar controls usable at desktop and compact widths in both languages', async ({ page }) => {
   await page.route('https://**/*', (route) => route.abort());
   await page.goto('/');
+  await openRidge(page);
   for (const language of ['en', 'zh']) {
     await setPreference(page, /Interface language|界面语言/, language);
     for (const width of [1440, 960, 480]) {
@@ -78,6 +80,7 @@ test('selecting a map station reveals its row without resetting the outline filt
 test('selects and inspects independently in a narrow workbench', async ({ page }) => {
   await page.setViewportSize({ width: 900, height: 700 });
   await page.goto('/');
+  await openRidge(page);
   const map = page.getByRole('application', { name: 'Route map' });
   const profile = page.getByRole('group', { name: 'Elevation profile' });
   await page.getByRole('button', { name: 'Route outline', exact: true }).click();
@@ -118,6 +121,7 @@ test('resizes the profile with its divider and restores its size when expanded',
 
 test('navigates command menus, outline rows and property groups from the keyboard', async ({ page }) => {
   await page.goto('/');
+  await openRidge(page);
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   const route = page.locator('.rv-route');
   const originalPath = await route.getAttribute('d');

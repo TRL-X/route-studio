@@ -1,7 +1,7 @@
-import { type RouteDocument } from './model';
+import { type RouteDocument } from '../../src/domain/model';
 
-/** A synthetic, fully editable course, deliberately independent of external map services. */
-export function exampleRoute(): RouteDocument {
+/** Synthetic route data for geometry, profile, and editor tests. */
+export function ridgeRoute(): RouteDocument {
   const path = [
     [7.392, 46.012, 1020],
     [7.398, 46.015, 1080],

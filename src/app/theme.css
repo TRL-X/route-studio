@@ -26,3 +26,15 @@
   --floating: var(--color-panel-solid);
   --scrim: var(--color-overlay);
 }
+
+/* Solid buttons contain small labels that need more contrast than accent step 9 provides. */
+.radix-themes .rt-BaseButton:where(.rt-variant-solid) {
+  --accent-9: var(--accent-11);
+  --accent-10: var(--accent-12);
+  --accent-contrast: var(--color-background);
+}
+
+.radix-themes .rt-TextFieldInput::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}

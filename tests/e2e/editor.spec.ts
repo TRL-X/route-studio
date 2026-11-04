@@ -6,7 +6,7 @@ import { setPreference } from '../preferences';
 import { loadProject } from '../../src/files/project';
 import { prepareRte, readRte } from '../../src/rte';
 
-import { open, download, openExport, disableExportProcessing, setSurveyDate } from './files';
+import { open, download, openExport, openRidge, disableExportProcessing, setSurveyDate } from './files';
 import { bgsRequests, answerBgs } from './bgs';
 
 test.beforeEach(async ({ page }) => {
@@ -171,11 +171,16 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   expect(readRte(grid.bytes).elevation.length).toBe(24);
 });
 
-test('creates and recovers an empty editable project', async ({ page }) => {
+test('starts with an empty route without an example command and recovers edits', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await page.getByRole('menuitem', { name: 'File', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'New route', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'New route', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Open example', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /Route details.*0 vertices/i })).toBeVisible();
+  await expect(page.locator('.station-row')).toHaveCount(0);
+  await expect(page.locator('.empty-overlay')).toBeVisible();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('');
   await name.fill('Survey draft');
@@ -195,6 +200,7 @@ test('places a checkpoint and its separate landmark, inserts a vertex and edits 
   page,
 }) => {
   await page.goto('/');
+  await openRidge(page);
   const map = page.getByRole('application', { name: 'Route map' });
   const position = await map.locator('.rv-route').evaluate((element) => {
     const path = element as SVGPathElement;
@@ -212,9 +218,9 @@ test('places a checkpoint and its separate landmark, inserts a vertex and edits 
   await expect(map.locator('.rv-connector')).toHaveCount(1);
   await page.getByRole('radio', { name: 'Insert point', exact: true }).click();
   await map.click({ position });
-  await expect(page.getByRole('button', { name: /Example route.*24 vertices/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Route details.*24 vertices/i })).toBeVisible();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect(page.getByRole('button', { name: /Example route.*23 vertices/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Route details.*23 vertices/i })).toBeVisible();
   const profile = page.getByRole('group', { name: 'Elevation profile' });
   await profile.focus();
   await profile.press('ArrowRight');

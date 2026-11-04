@@ -1,6 +1,6 @@
 import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
-import { download } from './files';
+import { download, openRidge } from './files';
 
 const styleURL = 'https://tiles.openfreemap.org/styles/liberty';
 const tileURLs = /https:\/\/t[0-7]\.tianditu\.gov\.cn\//;
@@ -33,6 +33,7 @@ test('applies a personal Key, preserves the view, restores settings and excludes
     if (tileURLs.test(request.url())) requests.push(new URL(request.url()));
   });
   await page.goto('/');
+  await openRidge(page);
   const trigger = page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true });
   await expect(trigger).toBeVisible();
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();

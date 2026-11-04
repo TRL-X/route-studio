@@ -1,3 +1,4 @@
+import { openRidge } from './files';
 import { expect, test, type Locator } from '@playwright/test';
 import type { RouteDocument } from '../../src/domain/model';
 import { saveProject } from '../../src/files/project';
@@ -12,6 +13,7 @@ async function routePoint(map: Locator, fraction: number) {
 
 test('station placement previews, ignores empty space and commits one undoable edit', async ({ page }) => {
   await page.goto('/');
+  await openRidge(page);
   const map = page.getByRole('application', { name: 'Route map' });
   const markers = map.locator('[data-station]');
   const add = page.getByRole('button', { name: 'Add station', exact: true });
@@ -102,6 +104,7 @@ test('a shared track asks which pass to use before creating the checkpoint', asy
 
 test('probing the route or profile keeps the selected checkpoint locked', async ({ page }) => {
   await page.goto('/');
+  await openRidge(page);
   await page.getByRole('button', { name: /Ridge Pass.*Checkpoint/ }).click();
   const map = page.getByRole('application', { name: 'Route map' });
   const profile = page.getByRole('group', { name: 'Elevation profile' });
@@ -129,6 +132,7 @@ test('probing the route or profile keeps the selected checkpoint locked', async 
 
 test('selecting an offscreen checkpoint again reveals it at the current zoom', async ({ page }) => {
   await page.goto('/');
+  await openRidge(page);
   const station = page.getByRole('button', { name: /Ridge Pass.*Checkpoint/ });
   const map = page.getByRole('application', { name: 'Route map' });
   await station.click();
