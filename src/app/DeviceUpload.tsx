@@ -5,12 +5,23 @@ import { UploadError, withBluetoothFs } from '../device/mcumgr';
 import { uploadFile, validDevicePath } from '../device/upload';
 import type { Copy } from './strings';
 
-export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
+export function DeviceUpload({
+  bytes,
+  t,
+  onBusyChange,
+}: {
+  bytes?: Uint8Array;
+  t: Copy;
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const current = useRef<AbortController | null>(null);
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
   const supported = window.isSecureContext && !!navigator.bluetooth?.requestDevice;
   const name = path.trim();
   const valid = validDevicePath(name);

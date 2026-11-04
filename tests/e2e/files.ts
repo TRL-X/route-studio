@@ -1,32 +1,42 @@
 import { selectOption } from '../controls';
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
-import { strings } from '../../src/app/strings';
+import { commandStrings } from '../../src/app/commands';
 
 export async function open(page: Page, name: string, bytes: Buffer) {
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Open…', exact: true }).click();
   await (await chooser).setFiles({ name, buffer: bytes, mimeType: 'application/octet-stream' });
 }
 
 export async function openExport(page: Page) {
   if (!(await page.getByRole('dialog').isVisible()))
-    await page.getByRole('button', { name: strings.en.export, exact: true }).click();
+    await page.getByRole('button', { name: commandStrings.en.export, exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   return page.getByRole('dialog');
 }
 export async function openMagnetics(page: Page) {
-  const dialog = await openExport(page);
-  if (!(await dialog.getByLabel('Declination mode').isVisible()))
-    await dialog.locator('.mag-export summary').click();
-  return dialog;
+  const dialog = page.getByRole('dialog');
+  if (await dialog.isVisible()) {
+    await dialog.getByRole('button', { name: 'Edit route properties', exact: true }).click();
+  } else {
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Route', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Route properties', exact: true }).click();
+  }
+  const inspector = page.locator('.inspector');
+  if (!(await inspector.getByLabel('Declination mode').isVisible()))
+    await inspector.locator('.magnetic-properties summary').click();
+  return inspector;
 }
 export async function setSurveyDate(page: Page) {
-  const dialog = await openMagnetics(page);
-  const date = dialog.getByLabel('Reference date (UTC)');
+  const inspector = await openMagnetics(page);
+  const date = inspector.getByLabel('Reference date (UTC)');
   await date.fill('2026-11-03');
   await date.press('Enter');
-  await dialog.getByRole('button', { name: 'Close' }).click();
+  await inspector.locator('.magnetic-properties summary').click();
 }
 export async function disableExportProcessing(page: Page) {
   const dialog = await openExport(page);

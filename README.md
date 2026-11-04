@@ -24,15 +24,15 @@ React changes reload automatically. Restart after changing `electron/` files. Th
 
 ## Editing routes
 
-1. Open or drop a file, or choose **File → New route**. For files containing multiple tracks or sessions, select a route to edit.
+1. Open a file through **Menu → File**, drop a file, or choose **Menu → File → New route**. For files containing multiple tracks or sessions, select a route to edit.
 2. Append, insert or drag route points. Add stations on the route, choosing the intended pass when a route visits the same location more than once. A station's route distance and landmark coordinates can be edited independently.
-3. Use **Fill elevation gaps** for gaps up to 1,000 m. For remaining gaps or a new terrain profile, use **Get elevations online** and review the preview before choosing **Replace all elevations**. These edits can be undone separately.
+3. Open **Elevation tools…** from the profile or **Menu → Route**. **Fill elevation gaps** interpolates gaps up to 1,000 m. Online requests start only after choosing **Get elevations online**; review the preview before **Replace all elevations**. Both edits can be undone.
 4. Save a `.routeproj` to preserve unfinished edits, missing heights, station settings and magnetic data. Recovery drafts are saved locally; use project files for backups and transfer between computers.
-5. Open **Export RTE…**, resolve blocking issues and review the output before downloading. The adjacent menu exports GPX, KML or FIT. RTE processing defaults to 10 m elevation spacing, 2 m geometry tolerance and 10 m smoothing; these settings affect the export, not the project.
+5. Open **Export…**, select RTE, GPX, KML or FIT, then resolve blocking issues and review the output before downloading. RTE processing defaults to 10 m elevation spacing, 2 m geometry tolerance and 10 m smoothing; these settings affect the export, not the project.
 
-The interface uses Radix Themes with system fonts, neutral surfaces and a blue accent. **Appearance** follows the system by default and remembers explicit light or dark choices. The inspector groups related properties, and narrow windows provide **Route outline** and **Edit selection** panels. Drag the profile divider, or focus it and use arrow keys, to resize the chart.
+The interface uses Radix Themes with system fonts, neutral surfaces and a blue accent. **Settings… → General** controls language and appearance; appearance follows the system by default. The inspector groups related properties, and narrow windows provide **Route outline** and **Edit selection** panels. Drag the profile divider, or focus it and use arrow keys, to resize the chart.
 
-Numeric fields support **Enter** to commit, **Escape** to cancel and **↑ / ↓** to step. The station list supports **↑ / ↓** and **Home / End**. File and export menus support keyboard navigation and return focus when closed.
+Numeric fields support **Enter** to commit, **Escape** to cancel and **↑ / ↓** to step. The station list supports **↑ / ↓** and **Home / End**. Menus and dialogs support keyboard navigation and return focus when closed.
 
 | Shortcut             | Action                                   |
 | -------------------- | ---------------------------------------- |
@@ -40,6 +40,7 @@ Numeric fields support **Enter** to commit, **Escape** to cancel and **↑ / ↓
 | `Ctrl/⌘ + S`         | Save project                             |
 | `Ctrl/⌘ + Z`         | Undo                                     |
 | `Ctrl/⌘ + Shift + Z` | Redo                                     |
+| `Ctrl/⌘ + ,`         | Settings                                 |
 | `Esc`                | Close a menu or dialog; cancel placement |
 
 ### Format support
@@ -61,10 +62,10 @@ RTE support targets the **November 1, 2026 draft of TRL-X Route 1.0**: [pinned s
 
 ### Online services and device upload
 
-- **Maps:** OpenFreeMap is the default. The basemap menu also supports Tianditu with your own [Key](https://console.tianditu.gov.cn/), or an offline coordinate grid. Apply saves changes; Cancel discards them. Provider, visibility and Key are stored locally, separate from projects. The Key is readable in storage and requests; **Clear Key** removes it after applying. Electron requests originate from `app://route-studio/`, so check Key restrictions in the packaged app. Failures preserve settings and offer Retry.
+- **Maps:** OpenFreeMap is the default. **Settings… → Map** also supports Tianditu with your own [Key](https://console.tianditu.gov.cn/), or an offline coordinate grid. Apply saves changes; Cancel discards them. Provider, visibility and Key are stored locally, separate from projects. The Key is readable in storage and requests; **Clear Key** removes it after applying. Electron requests originate from `app://route-studio/`, so check Key restrictions in the packaged app. Failures preserve settings and offer Retry.
 - **Custom maps:** `VITE_MAP_STYLE_URL` overrides OpenFreeMap. `VITE_MAP_DARK_STYLE_URL` optionally provides a dark variant. Restart or rebuild after changing either variable.
 - **Terrain:** The [Planetary Computer GLO-30 collection](https://planetarycomputer.microsoft.com/dataset/cop-dem-glo-30) supplies EGM2008 surface heights. Tile requests reveal the route's area. Nearest-grid sampling may include treetops or terrain above tunnels; review before replacement. [Copernicus attribution](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
-- **Magnetic declination:** Automatic RTE export lookup sends the route's distance midpoint and selected UTC date to BGS WMM2025. Results are saved in the project for offline use. Retry, enter a manual value (east positive), or omit declination if unavailable. Imported RTE magnetic metadata stays unchanged until edited.
+- **Magnetic declination:** Edit this in the inspector through **Menu → Route → Route properties**. Automatic lookup sends the route's distance midpoint and selected UTC date to BGS WMM2025. Results are saved in the project for offline use. Retry, enter a manual value (east positive), or omit declination if unavailable. Imported RTE magnetic metadata stays unchanged until edited.
 - **Bluetooth:** From the RTE preview, choose **Bluetooth upload…**, enter a new full destination such as `/SD:/ROUTES/TEST.RTE`, then select the device. The directory must exist. Length and IEEE CRC32 are verified; an existing different file requires another filename. Interrupted uploads may leave partial files. Web use requires HTTPS or localhost and Web Bluetooth support; desktop use requires OS permission and a working adapter. Physical-device acceptance testing is still required on each platform.
 
 ## Desktop packaging

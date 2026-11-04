@@ -1,12 +1,15 @@
 import { Choice } from './Choice';
 import { Table, Button, Heading, Callout, Flex, Text } from '@radix-ui/themes';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { declinationSettings } from '../domain/declination';
-import { DeclinationFields } from './DeclinationFields';
 import { DeviceUpload } from './DeviceUpload';
-import { useDeclinationLookup } from './useDeclinationLookup';
+import type { LookupState } from './useDeclinationLookup';
+import en from '../i18n/en.export.json';
+import zh from '../i18n/zh-CN.export.json';
 import { ExportFrame, type ExportControls } from './ExportFrame';
+import { TrackExportPreview } from './TrackExportPreview';
+import type { ExportFormat } from '../files/export';
 import type { RteTarget } from '../rte';
 import type { RouteDocument } from '../domain/model';
 import type { ExportPreview } from '../rte';
@@ -14,7 +17,7 @@ import { exportChoices, type ExportOptions, type ProfilePoint } from '../rte/pro
 import { runIO, type IOResult } from './io';
 import { strings, type Copy } from './strings';
 
-type ExportResult = Extract<IOResult, { type: 'binary' | 'error' }>;
+type ExportResult = Extract<IOResult, { type: 'binary' | 'track-file' | 'error' }>;
 type ExportError = Extract<IOResult, { type: 'error' }>;
 
 function CurveComparison({ preview, t }: { preview: ExportPreview; t: Copy }) {
@@ -55,14 +58,16 @@ function CurveComparison({ preview, t }: { preview: ExportPreview; t: Copy }) {
 
 export function ExportDialog({
   doc,
+  format,
   lang,
   projectGain,
-  change,
-  dispatch,
+  lookup,
+  onEditProperties,
   options,
   onOptions,
   name,
   onName,
+  onFormat,
   onClose,
   onLocate,
   onDownload,
@@ -70,47 +75,66 @@ export function ExportDialog({
   saveError,
 }: ExportControls & {
   doc: RouteDocument;
+  format: ExportFormat;
   projectGain: number | null;
-  change: (doc: RouteDocument) => void;
-  dispatch: Parameters<typeof useDeclinationLookup>[1];
+  lookup: LookupState;
+  onEditProperties: () => void;
   options: ExportOptions;
   onOptions: (v: ExportOptions) => void;
   onLocate: (error: ExportError & { target: Exclude<RteTarget, { type: 'declination' }> }) => void;
 }) {
   const t = strings[lang];
-  const lookup = useDeclinationLookup(doc, dispatch);
+  const copy = { en, zh }[lang];
+  const [uploading, setUploading] = useState(false);
   const mag = declinationSettings(doc);
-  const magDetails = useRef<HTMLDetailsElement>(null);
-  const [job, setJob] = useState<{ doc: RouteDocument; options: ExportOptions; result: ExportResult } | null>(
-    null,
-  );
+  const [job, setJob] = useState<{
+    doc: RouteDocument;
+    format: ExportFormat;
+    options: ExportOptions;
+    result: ExportResult;
+  } | null>(null);
   const [showPlot, setShowPlot] = useState(false);
   const [limit, setLimit] = useState(20);
   useEffect(() => {
-    if (lookup.pending) return;
+    if (format === 'rte' && lookup.pending) return;
     const controller = new AbortController();
-    runIO({ type: 'compile', doc, options }, controller.signal)
+    runIO(
+      format === 'rte' ? { type: 'compile', doc, options } : { type: 'export', doc, format },
+      controller.signal,
+    )
       .then((result) => {
-        if (!controller.signal.aborted && (result.type === 'binary' || result.type === 'error'))
-          setJob({ doc, options, result });
+        if (
+          !controller.signal.aborted &&
+          (result.type === 'binary' || result.type === 'track-file' || result.type === 'error')
+        )
+          setJob({ doc, format, options, result });
       })
       .catch(() => {
         if (!controller.signal.aborted)
           setJob({
             doc,
+            format,
             options,
-            result: { type: 'error', en: strings.en.checkFailed, zh: strings.zh.checkFailed },
+            result: {
+              type: 'error',
+              en: format === 'rte' ? strings.en.checkFailed : strings.en.trackExportFailed,
+              zh: format === 'rte' ? strings.zh.checkFailed : strings.zh.trackExportFailed,
+            },
           });
       });
     return () => controller.abort();
-  }, [doc, options, lookup.pending]);
-  const result = !lookup.pending && job?.doc === doc && job.options === options ? job.result : null;
+  }, [doc, format, options, lookup.pending]);
+  const result =
+    (format !== 'rte' || !lookup.pending) &&
+    job?.doc === doc &&
+    job.format === format &&
+    job.options === options
+      ? job.result
+      : null;
   const ready = result?.type === 'binary' ? result : null;
+  const trackFile = result?.type === 'track-file' ? result : null;
   const error = result?.type === 'error' ? result : null;
   const magneticError = error?.target?.type === 'declination';
-  useEffect(() => {
-    if (magneticError && magDetails.current) magDetails.current.open = true;
-  }, [magneticError]);
   const preview = ready?.preview;
   const display = (v: number) => v.toLocaleString(lang, { maximumFractionDigits: 1 });
   const changeOption = (key: keyof ExportOptions, value: string) => {
@@ -119,76 +143,100 @@ export function ExportDialog({
   };
   return (
     <ExportFrame
-      format="rte"
+      format={format}
       lang={lang}
       name={name}
       onName={onName}
+      onFormat={onFormat}
       onClose={onClose}
       onDownload={onDownload}
-      saving={saving}
+      saving={saving || uploading}
       saveError={saveError}
-      bytes={ready?.bytes}
-      extraAction={<DeviceUpload bytes={ready?.bytes} t={t} />}
+      bytes={ready?.bytes ?? trackFile?.bytes}
+      extraAction={
+        format === 'rte' ? <DeviceUpload bytes={ready?.bytes} t={t} onBusyChange={setUploading} /> : undefined
+      }
     >
-      <details>
-        <summary>{t.processingOptions}</summary>
-        <div className="export-options">
-          <label>
-            {t.profileSampling}
-            <Choice
-              value={options.intervalM}
-              onValueChange={(value) => changeOption('intervalM', value)}
-              options={[
-                { value: 0, label: t.keepSamples },
-                ...exportChoices.intervalM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
-              ]}
-            />
-          </label>
-          <label>
-            {t.geomSimplify}
-            <Choice
-              value={options.toleranceM}
-              onValueChange={(value) => changeOption('toleranceM', value)}
-              options={[
-                { value: 0, label: t.off },
-                ...exportChoices.toleranceM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
-              ]}
-            />
-          </label>
-          <label>
-            {t.smoothWindow}
-            <Choice
-              value={options.smoothingM}
-              onValueChange={(value) => changeOption('smoothingM', value)}
-              options={[
-                { value: 0, label: t.off },
-                ...exportChoices.smoothingM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
-              ]}
-            />
-          </label>
-        </div>
-        {options.smoothingM > 0 && <small>{t.smoothingNote}</small>}
-      </details>
-      <details ref={magDetails} className="mag-export">
-        <summary>
-          {t.magTitle}{' '}
-          <small>
-            {mag.mode === 'auto' ? t.magAuto : mag.mode === 'manual' ? t.magManual : t.magOmit}
-            {preview?.declinationCdeg !== undefined &&
-              ' · ' + (preview.declinationCdeg / 100).toFixed(2) + '°'}
-          </small>
-        </summary>
-        <DeclinationFields lang={lang} doc={doc} t={t} change={change} lookup={lookup} />
-      </details>
+      {format === 'rte' && (
+        <>
+          <details>
+            <summary>{t.processingOptions}</summary>
+            <div className="export-options">
+              <label>
+                {t.profileSampling}
+                <Choice
+                  disabled={saving || uploading}
+                  value={options.intervalM}
+                  onValueChange={(value) => changeOption('intervalM', value)}
+                  options={[
+                    { value: 0, label: t.keepSamples },
+                    ...exportChoices.intervalM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
+                  ]}
+                />
+              </label>
+              <label>
+                {t.geomSimplify}
+                <Choice
+                  disabled={saving || uploading}
+                  value={options.toleranceM}
+                  onValueChange={(value) => changeOption('toleranceM', value)}
+                  options={[
+                    { value: 0, label: t.off },
+                    ...exportChoices.toleranceM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
+                  ]}
+                />
+              </label>
+              <label>
+                {t.smoothWindow}
+                <Choice
+                  disabled={saving || uploading}
+                  value={options.smoothingM}
+                  onValueChange={(value) => changeOption('smoothingM', value)}
+                  options={[
+                    { value: 0, label: t.off },
+                    ...exportChoices.smoothingM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
+                  ]}
+                />
+              </label>
+            </div>
+            {options.smoothingM > 0 && <small>{t.smoothingNote}</small>}
+          </details>
+          <Flex direction="column" gap="2">
+            <Text size="2" weight="medium">
+              {t.magTitle} ·{' '}
+              {mag.mode === 'auto' ? t.magAuto : mag.mode === 'manual' ? t.magManual : t.magOmit}
+              {preview?.declinationCdeg !== undefined &&
+                ' · ' + (preview.declinationCdeg / 100).toFixed(2) + '°'}
+            </Text>
+            <Text size="1" color="gray">
+              {copy.magneticSummary}
+            </Text>
+            <Button variant="surface" color="gray" onClick={onEditProperties} disabled={saving || uploading}>
+              {copy.editProperties}
+            </Button>
+          </Flex>
+        </>
+      )}
       <Text size="2" weight="medium" color={error ? 'red' : 'blue'} asChild>
         <Flex align="center" gap="2" role="status">
-          {error ? <ShieldAlert size={16} /> : ready ? <CircleCheck size={16} /> : null}
-          {error ? t.needsRepair : ready ? t.exportReady : lookup.pending ? t.magPending : t.busy}
+          {error ? <ShieldAlert size={16} /> : ready || trackFile ? <CircleCheck size={16} /> : null}
+          {error
+            ? t.needsRepair
+            : ready || trackFile
+              ? t.exportReady
+              : format === 'rte' && lookup.pending
+                ? t.magPending
+                : t.busy}
         </Flex>
       </Text>
       {error && (
         <Callout.Root color="red" role="alert">
-          <Callout.Text>{error[lang]}</Callout.Text>
+          <Callout.Text>{error.fileCode ? t.fileErrors[error.fileCode] : error[lang]}</Callout.Text>
+          {magneticError && (
+            <Button variant="soft" color="gray" onClick={onEditProperties}>
+              {t.showIssue}
+            </Button>
+          )}
           {error.target && error.target.type !== 'declination' && (
             <Button
               variant="soft"
@@ -202,6 +250,9 @@ export function ExportDialog({
             </Button>
           )}
         </Callout.Root>
+      )}
+      {trackFile && format !== 'rte' && (
+        <TrackExportPreview format={format} lang={lang} preview={trackFile.preview} />
       )}
       {preview && (
         <>

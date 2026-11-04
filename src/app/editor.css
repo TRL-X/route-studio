@@ -126,21 +126,12 @@ p {
 .number-control button {
   margin: 0;
 }
-.export-actions {
-  display: flex;
-  gap: 4px;
-}
 .history-tools {
   display: flex;
   align-items: center;
   gap: 4px;
   border-left: 1px solid var(--line);
   padding-left: 8px;
-}
-.language,
-.theme-picker {
-  display: flex;
-  align-items: center;
 }
 .workspace {
   display: grid;
@@ -671,9 +662,6 @@ h2 {
     grid-column: 1 / -1;
     margin-left: 0;
   }
-  .top-actions .language {
-    margin-right: auto;
-  }
 }
 .station-passes {
   display: grid;
@@ -817,19 +805,18 @@ h2 {
   }
 }
 
-.mag-export summary small {
-  font-weight: 400;
-  margin-left: 6px;
-}
 .declination-fields {
   margin-top: 8px;
 }
-.declination-fields .field {
+.inspector .declination-fields .field {
+  grid-template-columns: minmax(0, 1fr);
   margin: 7px 0;
 }
 
 @container (max-width: 640px) {
-  .map-tools > .pane-title {
+  .map-tools > .pane-title,
+  .tools svg.lucide,
+  .mode-hint {
     display: none;
   }
 }
@@ -851,20 +838,8 @@ h2 {
   .studio[data-desktop] .brand {
     display: none;
   }
-  .studio[data-desktop] .language [role='combobox'] {
-    max-width: 66px;
-  }
-  .studio[data-desktop] .theme-picker [role='combobox'] {
-    max-width: 78px;
-  }
 }
 
-.language [role='combobox'] {
-  max-width: 104px;
-}
-.theme-picker [role='combobox'] {
-  max-width: 94px;
-}
 .tools {
   flex-shrink: 0;
 }
@@ -903,4 +878,35 @@ h2 {
   .top-actions > .file-action span {
     display: none;
   }
+}
+
+.map-tools {
+  position: relative;
+}
+.map-mode {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px var(--pane-inset);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  font-size: var(--font-size-1);
+}
+.map-mode > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.map-mode button {
+  flex-shrink: 0;
+}
+.map-area:has(.map-mode) .rv-map {
+  --map-tool-top: 54px;
 }

@@ -4,6 +4,7 @@ import { emptyRoute, type RouteDocument } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
 import copy from '../../src/i18n/en.repair.json' with { type: 'json' };
 import { download, open } from './files';
+import { openElevationTools, openOnlineTerrain } from './elevation';
 import { mockOnlineTerrain } from './fixtures/online-terrain';
 
 const t = strings.en;
@@ -44,11 +45,10 @@ test('closing during a lookup cancels it and a late response cannot overwrite th
   );
   const original = polarRoute([101, 102, 103], 1);
   await openRoute(page, original);
-  const open = page.getByRole('button', { name: t.fetchElevations, exact: true });
   const dialog = page.getByRole('dialog', { name: copy.title });
   const confirm = dialog.getByRole('button', { name: copy.replace, exact: true });
   const firstWorker = page.waitForEvent('worker', (worker) => worker.url().includes('io.worker'));
-  await open.click();
+  await openOnlineTerrain(page);
   await expect.poll(() => Boolean(heldLookup)).toBe(true);
   await expect(dialog.getByRole('status')).toHaveText(copy.reading);
   await expect(confirm).toHaveCount(0);
@@ -59,7 +59,7 @@ test('closing during a lookup cancels it and a late response cannot overwrite th
   expect(await savedRoute(page)).toEqual(original);
   await expect(page.getByRole('button', { name: t.undo, exact: true })).toBeDisabled();
 
-  await open.click();
+  await openOnlineTerrain(page);
   await expect(confirm).toBeEnabled();
   await heldLookup!.fulfill({ status: 503 });
   await expect(dialog.getByRole('alert')).toHaveCount(0);
@@ -74,17 +74,16 @@ test('previews a complete datum change, replaces every height only on confirmati
   await mockOnlineTerrain(context);
   const original = polarRoute([110, 150, 230], 2);
   await openRoute(page, original);
-  const open = page.getByRole('button', { name: t.fetchElevations, exact: true });
   const dialog = page.getByRole('dialog', { name: copy.title });
   const confirm = dialog.getByRole('button', { name: copy.replace, exact: true });
-  await open.click();
+  await openOnlineTerrain(page);
   await expect(confirm).toBeEnabled();
   await expect(dialog.locator('input[type=file]')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   expect(await savedRoute(page)).toEqual(original);
   await expect(page.getByRole('button', { name: t.undo, exact: true })).toBeDisabled();
-  await open.click();
+  await openOnlineTerrain(page);
   await confirm.click();
   await expect(dialog).toBeHidden();
   const next = await savedRoute(page);
@@ -110,10 +109,12 @@ test('short endpoint gaps fill locally in one undoable edit without starting ter
   const original = polarRoute([null, -5, 30, null], 2);
   original.elevation.pop(); // The finish sample is absent rather than explicitly marked missing.
   await openRoute(page, original);
-  const fill = page.getByRole('button', { name: t.interpolateGaps, exact: true });
+  const tools = await openElevationTools(page);
+  const fill = tools.getByRole('button', { name: t.interpolateGaps, exact: true });
   await fill.click();
   await expect(fill).toBeDisabled();
   await expect(page.getByRole('dialog', { name: copy.title })).toHaveCount(0);
+  await tools.getByRole('button', { name: 'Close', exact: true }).click();
   const next = await savedRoute(page);
   expect(next.elevation.map((s) => s.height)).toEqual([-5, -5, 30, 30]);
   expect(next.elevationReference).toBe(2);
@@ -130,10 +131,13 @@ test('safe short gaps are filled before the optional full-profile replacement; t
   const original = polarRoute([10, null, 30, 50, null], 0);
   original.vertices[4].lon += 0.15; // Put the final point more than 1 km from its nearest elevation.
   await openRoute(page, original);
-  await page.getByRole('button', { name: t.interpolateGaps, exact: true }).click();
+  const tools = await openElevationTools(page);
+  await tools.getByRole('button', { name: t.interpolateGaps, exact: true }).click();
   const dialog = page.getByRole('dialog', { name: copy.title });
+  await expect(dialog).toBeHidden();
   const summary = t.interpolationResult.replace('{filled}', '1').replace('{remaining}', '1');
-  await expect(dialog.getByText(summary, { exact: true })).toBeVisible();
+  await expect(tools.getByText(summary, { exact: true })).toBeVisible();
+  await tools.getByRole('button', { name: t.fetchElevations, exact: true }).click();
   await dialog.getByRole('button', { name: copy.replace, exact: true }).click();
   const replaced = await savedRoute(page);
   expect(replaced.elevation.slice(0, 5).map((s) => s.height)).toEqual([0, 50, -13.5, 123.5, 123.5]);
@@ -159,7 +163,7 @@ test('a tile covering only part of the route cannot confirm a mixed or incomplet
   // The fixture covers the western two posts. The catalog returns 404 for the adjacent tile.
   const original = polarRoute([500, 600, 700, 800], 1, 121 - 2 / 360);
   await openRoute(page, original);
-  await page.getByRole('button', { name: t.fetchElevations, exact: true }).click();
+  await openOnlineTerrain(page);
   const dialog = page.getByRole('dialog', { name: copy.title });
   await expect(dialog.getByRole('alert')).toContainText(copy.missing.replace('{missing}', '2'));
   await expect(dialog.getByRole('button', { name: copy.replace, exact: true })).toHaveCount(0);

@@ -19,7 +19,9 @@ export function Modal({
   const [invoker] = useState(() => {
     const active = document.activeElement as HTMLElement | null;
     // Menu commands unmount after selection; restore focus to their persistent trigger.
-    const trigger = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
+    const trigger =
+      active?.closest('[data-focus-return]')?.getAttribute('data-focus-return') ??
+      active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
     return (trigger && document.getElementById(trigger)) || active;
   });
   return (

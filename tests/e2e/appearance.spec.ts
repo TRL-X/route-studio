@@ -1,4 +1,6 @@
 import { selectOption } from '../controls';
+import { openSettings, setPreference } from '../preferences';
+import { openExport } from './files';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
@@ -8,23 +10,26 @@ test.beforeEach(async ({ page }) => {
 test('follows system changes, persists overrides and preserves the current selection', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
-  const appearance = page.getByLabel('Appearance', { exact: true });
-  await expect(appearance).toHaveAttribute('data-value', 'system');
+  const settings = await openSettings(page);
+  await expect(settings.getByLabel('Appearance', { exact: true })).toHaveAttribute('data-value', 'system');
+  await settings.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('button', { name: /Ridge Pass.*Checkpoint/ }).click();
-  await selectOption(appearance, 'dark');
+  await setPreference(page, 'Appearance', 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Ridge Pass');
   await expect(page.locator('.rv-station-active')).toHaveAttribute('data-station', '2');
   await page.reload();
-  await expect(appearance).toHaveAttribute('data-value', 'dark');
+  await openSettings(page);
+  await expect(settings.getByLabel('Appearance', { exact: true })).toHaveAttribute('data-value', 'dark');
+  await settings.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await selectOption(appearance, 'light');
+  await setPreference(page, 'Appearance', 'light');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await selectOption(appearance, 'system');
+  await setPreference(page, 'Appearance', 'system');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
@@ -38,17 +43,15 @@ test('changes appearance and opens dialogs when preference storage is unavailabl
     };
   });
   await page.goto('/');
-  const appearance = page.getByLabel('Appearance', { exact: true });
   for (const theme of ['dark', 'light']) {
-    await selectOption(appearance, theme);
+    await setPreference(page, 'Appearance', theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await page.getByRole('button', { name: 'Choose export format' }).click();
-    await page.getByRole('menuitem', { name: 'Export GPX…', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Export GPX', exact: true });
+    const dialog = await openExport(page);
+    await selectOption(dialog.getByLabel('Choose export format'), 'gpx');
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveCSS('color-scheme', theme);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Choose export format' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Export…', exact: true })).toBeFocused();
   }
 });
 
@@ -75,7 +78,7 @@ test('keeps the color basemap, labels and camera stable across appearance change
     .locator('.rv-station text')
     .first()
     .evaluate((el) => getComputedStyle(el).fill);
-  await selectOption(page.getByLabel('Appearance', { exact: true }), 'dark');
+  await setPreference(page, 'Appearance', 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(styles.every((url) => url.endsWith('/liberty'))).toBe(true);
   expect(await canvas!.evaluate((el) => el.isConnected)).toBe(true);

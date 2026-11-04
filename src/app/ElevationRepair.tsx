@@ -9,6 +9,7 @@ import zh from '../i18n/zh-CN.repair.json' with { type: 'json' };
 import { runIO } from './io';
 import { strings, type Lang } from './strings';
 import { TerrainCredit } from './TerrainCredit';
+import { workflowStrings } from './ElevationTools';
 
 const replacementCopy = { en, zh } satisfies Record<Lang, typeof en>;
 type Preview = ReturnType<ReturnType<typeof planFullTerrain>['preview']>;
@@ -19,12 +20,14 @@ export function ElevationRepair({
   initialSummary,
   onApply,
   onClose,
+  onBack,
 }: {
   doc: RouteDocument;
   lang: Lang;
   initialSummary?: string;
   onApply: (next: RouteDocument) => void;
   onClose: () => void;
+  onBack: () => void;
 }) {
   const t = strings[lang];
   const copy = replacementCopy[lang];
@@ -112,6 +115,9 @@ export function ElevationRepair({
           </details>
         </Text>
         <Flex justify="end" wrap="wrap" gap="2" mt="2">
+          <Button variant="surface" color="gray" mr="auto" onClick={onBack}>
+            {workflowStrings[lang].back}
+          </Button>
           <Button variant="soft" color="gray" autoFocus onClick={onClose}>
             {t.cancel}
           </Button>

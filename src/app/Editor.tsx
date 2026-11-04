@@ -13,6 +13,7 @@ import {
   Check,
   Layers,
   Map as MapIcon,
+  MapPin,
   MousePointer2,
   PanelsTopLeft,
   Plus,
@@ -20,7 +21,7 @@ import {
   Waypoints,
   X,
 } from 'lucide-react';
-import { appendVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
+import { appendVertex, deleteVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
 import { fillShortElevationGaps } from '../domain/elevation-repair';
 import {
   anchorDistance,
@@ -35,7 +36,6 @@ import { exampleRoute } from '../domain/example';
 import { saveDraft, saveProject } from '../files';
 import { MapView } from '../views/MapView';
 import { ProfileView } from '../views/ProfileView';
-import { TrackExportDialog } from './TrackExportDialog';
 import type { ExportFormat } from '../files/export';
 import { ExportDialog } from './ExportDialog';
 import { defaultExportOptions } from '../rte/processing';
@@ -53,6 +53,11 @@ import { DesktopBluetooth } from './DesktopBluetooth';
 import { useTheme } from './theme';
 import { Choice } from './Choice';
 import { Modal } from './Modal';
+import { SettingsDialog, type SettingsValues } from './SettingsDialog';
+import { loadBasemapPreferences, saveBasemapPreferences } from '../maps/basemap';
+import { ElevationTools, workflowStrings } from './ElevationTools';
+import { useDeclinationLookup } from './useDeclinationLookup';
+import { commandStrings, type EditorCommands } from './commands';
 
 type Localized = { en: string; zh: string };
 type Problem = Localized & { target?: Selection };
@@ -125,8 +130,22 @@ export function Editor({
   const saveLock = useRef(false);
   const [pending, setPending] = useState<Replacement | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
-  const [elevationPreview, setElevationPreview] = useState<{ summary?: Localized } | null>(null);
-  const locked = busy || savingFile || !!pending || !!choices || !!exportFormat || !!elevationPreview;
+  const [elevationPanel, setElevationPanel] = useState<'tools' | 'online' | null>(null);
+  const [elevationSummary, setElevationSummary] = useState<Localized | null>(null);
+  const [settingsTab, setSettingsTab] = useState<'general' | 'map' | null>(null);
+  const [basemap, setBasemap] = useState(loadBasemapPreferences);
+  const [preferencesFailed, setPreferencesFailed] = useState(false);
+  const [profileCollapsed, setProfileCollapsed] = useState(false);
+  const [viewCommand, setViewCommand] = useState<{ type: 'fit' | 'zoomIn' | 'zoomOut'; nonce: number }>();
+  const [magneticExpanded, setMagneticExpanded] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+  const locked =
+    busy || savingFile || !!pending || !!choices || !!exportFormat || !!elevationPanel || !!settingsTab;
+  const lookup = useDeclinationLookup(
+    doc,
+    dispatch,
+    exportFormat === 'rte' || (selected.type === 'route' && magneticExpanded),
+  );
   const [draftState, setDraftState] = useState<'auto' | 'saving' | 'saved' | 'saveFailed'>(
     recoveryError ? 'saveFailed' : 'auto',
   );
@@ -155,10 +174,6 @@ export function Editor({
     [doc.elevation],
   );
   function fillElevationGaps() {
-    if (missingHeights === doc.elevation.length) {
-      setElevationPreview({});
-      return;
-    }
     try {
       const { document, filled, remaining } = fillShortElevationGaps(doc);
       if (filled) change(document);
@@ -168,7 +183,7 @@ export function Editor({
           .replace('{remaining}', String(remaining.length));
       const summary = { en: message('en'), zh: message('zh') };
       setNotice(summary);
-      if (remaining.length) setElevationPreview({ summary });
+      setElevationSummary(summary);
     } catch {
       setProblem(both('terrainLimit'));
     }
@@ -218,11 +233,6 @@ export function Editor({
   }
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-    try {
-      localStorage.setItem('route-studio-language', lang);
-    } catch {
-      /* optional */
-    }
   }, [lang]);
   // Publish the pending status before the newly edited document is painted.
   useLayoutEffect(() => {
@@ -244,7 +254,9 @@ export function Editor({
     setExportOptions(defaultExportOptions);
     setExportName(null);
     setExportFormat(null);
-    setElevationPreview(null);
+    setElevationPanel(null);
+    setElevationSummary(null);
+    setMagneticExpanded(false);
     setExample(!!next.sample);
     setIssue(null);
     setHoveredSample(null);
@@ -283,6 +295,10 @@ export function Editor({
   }
   const exportControls = {
     lang,
+    onFormat: (format: ExportFormat) => {
+      setExportFormat(format);
+      setFileSaveError(null);
+    },
     name: exportName ?? filename(doc.name),
     onName: setExportName,
     onClose: () => {
@@ -359,35 +375,119 @@ export function Editor({
       }
       const i = doc.vertices.findIndex((vertex) => vertex.id === a.vertexId);
       change(next);
-      select({ type: 'vertex', id: next.vertices[i + 1].id });
+      select({ type: 'vertex', id: next.vertices[i + 1].id }, true);
     } else if (tool === 'newStation') {
       const id = newId();
       change({
         ...doc,
         stations: [...doc.stations, { id, name: t.newStation, kind: 'cp', boundary: false, anchor: a }],
       });
-      select({ type: 'station', id });
+      select({ type: 'station', id }, true);
       setNotice(both('stationAdded'));
     } else if (tool === 'stationAnchor' && activeStation) {
       change(updateStation(doc, activeStation.id, { anchor: a }));
-      select({ type: 'station', id: activeStation.id });
+      select({ type: 'station', id: activeStation.id }, true);
     }
+  }
+  function cancelTool() {
+    setTool('select');
+    setNotice(null);
+    setPanel(selected.type === 'route' ? null : 'inspector');
   }
   useEffect(() => {
     const dismiss = (event: KeyboardEvent) => {
       if (
+        locked ||
         event.key !== 'Escape' ||
         event.defaultPrevented ||
         (event.target instanceof Element &&
           event.target.closest('[role="dialog"], [role="menu"], [role="listbox"]'))
       )
         return;
-      setPanel(null);
-      setTool('select');
+      if (tool !== 'select') cancelTool();
+      else setPanel(null);
     };
     window.addEventListener('keydown', dismiss);
     return () => window.removeEventListener('keydown', dismiss);
-  }, []);
+  }, [locked, tool, selected]);
+  function applyPreferences(values: SettingsValues) {
+    const themeSaved = changeTheme(values.theme);
+    const mapSaved = saveBasemapPreferences(values.basemap);
+    let languageSaved = true;
+    try {
+      localStorage.setItem('route-studio-language', values.lang);
+    } catch {
+      languageSaved = false;
+    }
+    setLang(values.lang);
+    setBasemap(values.basemap);
+    setPreferencesFailed(!themeSaved || !mapSaved || !languageSaved);
+    setSettingsTab(null);
+    setNotice({ en: workflowStrings.en.settingsSaved, zh: workflowStrings.zh.settingsSaved });
+  }
+  const canDelete =
+    selected.type === 'vertex'
+      ? doc.vertices.length > 2
+      : selected.type === 'sample'
+        ? !!doc.elevation[selected.index]
+        : selected.type === 'station'
+          ? !!activeStation && !['start', 'finish'].includes(activeStation.kind)
+          : false;
+  function deleteSelected() {
+    if (!canDelete) return;
+    if (selected.type === 'vertex') change(deleteVertex(doc, selected.id));
+    else if (selected.type === 'sample')
+      change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
+    else if (selected.type === 'station')
+      change({ ...doc, stations: doc.stations.filter((s) => s.id !== selected.id) });
+    select({ type: 'route' }, true);
+  }
+  function startTool(next: Tool) {
+    if ((next === 'insert' || next === 'newStation') && doc.vertices.length < 2) return;
+    if (next === 'select') {
+      cancelTool();
+      return;
+    }
+    if (next === 'newStation') {
+      addStation();
+      return;
+    }
+    setTool(next);
+    setPanel(null);
+    setNotice(null);
+  }
+  function openElevationTools() {
+    setElevationSummary(null);
+    setElevationPanel('tools');
+  }
+  const mapCommand = (type: 'fit' | 'zoomIn' | 'zoomOut') =>
+    setViewCommand((previous) => ({ type, nonce: (previous?.nonce ?? 0) + 1 }));
+  const commands: EditorCommands = {
+    new: { run: () => requestReplace({ doc: emptyRoute(), source: '' }) },
+    open: { run: () => (window.routeStudioDesktop ? void pickDesktopFile() : picker.current?.click()) },
+    example: { run: () => requestReplace({ doc: exampleRoute(), source: '', sample: true }) },
+    save: { run: () => void save() },
+    export: {
+      run: () => {
+        setProblem(null);
+        setExportFormat('rte');
+      },
+    },
+    undo: { run: () => historyAction('undo'), disabled: !history.past.length },
+    redo: { run: () => historyAction('redo'), disabled: !history.future.length },
+    select: { run: () => startTool('select') },
+    append: { run: () => startTool('append') },
+    insert: { run: () => startTool('insert'), disabled: doc.vertices.length < 2 },
+    addStation: { run: addStation, disabled: doc.vertices.length < 2 },
+    deleteSelected: { run: deleteSelected, disabled: !canDelete },
+    routeProperties: { run: () => select({ type: 'route' }, true) },
+    elevation: { run: openElevationTools, disabled: !doc.vertices.length },
+    fitRoute: { run: () => mapCommand('fit'), disabled: !doc.vertices.length },
+    mapZoomIn: { run: () => mapCommand('zoomIn') },
+    mapZoomOut: { run: () => mapCommand('zoomOut') },
+    toggleProfile: { run: () => setProfileCollapsed((value) => !value) },
+    settings: { run: () => setSettingsTab('general') },
+  };
   const toolHelp = {
     select: t.editing,
     append: t.drawing,
@@ -411,24 +511,17 @@ export function Editor({
       }}
     >
       <div className="shell" inert={locked}>
-        <EditorToolbar
-          title={doc.name || t.untitled}
-          theme={theme}
-          onTheme={changeTheme}
-          lang={lang}
-          onLanguage={setLang}
-          locked={locked}
-          canUndo={history.past.length > 0}
-          canRedo={history.future.length > 0}
-          onHistory={historyAction}
-          onNew={() => requestReplace({ doc: emptyRoute(), source: '' })}
-          onExample={() => requestReplace({ doc: exampleRoute(), source: '', sample: true })}
-          onOpen={openFile}
-          onPickFile={window.routeStudioDesktop ? () => void pickDesktopFile() : undefined}
-          onSave={save}
-          onExport={(format) => {
-            setProblem(null);
-            setExportFormat(format);
+        <EditorToolbar title={doc.name || t.untitled} lang={lang} locked={locked} commands={commands} />
+        <input
+          ref={picker}
+          type="file"
+          aria-label={t.openFile}
+          hidden
+          accept=".fit,.gpx,.kml,.rte,.routeproj"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file && !locked) void openFile(file);
           }}
         />
         <div className="workspace" data-panel={panel ?? ''}>
@@ -479,24 +572,21 @@ export function Editor({
                   size="1"
                   value={tool}
                   aria-label={t.tools}
-                  onValueChange={(value) => {
-                    if (value === 'insert' && doc.vertices.length < 2) return;
-                    setNotice(null);
-                    setTool(value as Tool);
-                  }}
+                  onValueChange={(value) => startTool(value as Tool)}
                 >
                   {(
                     [
                       ['select', MousePointer2, t.select],
                       ['append', Plus, t.append],
                       ['insert', Waypoints, t.insert],
+                      ['newStation', MapPin, t.addStation],
                     ] as const
                   ).map(([k, Icon, label]) => (
                     <SegmentedControl.Item
                       key={k}
                       value={k}
                       title={label}
-                      aria-disabled={k === 'insert' && doc.vertices.length < 2}
+                      aria-disabled={(k === 'insert' || k === 'newStation') && doc.vertices.length < 2}
                     >
                       <span className="tool-label">
                         <Icon size={14} />
@@ -513,6 +603,30 @@ export function Editor({
                     ↑ {gainText} <small>m</small>
                   </span>
                 </div>
+                {tool !== 'select' && (
+                  <div className="map-mode" role="group" aria-label={t.tools}>
+                    <span>
+                      <strong>
+                        {
+                          {
+                            append: t.append,
+                            insert: t.insert,
+                            newStation: t.addStation,
+                            stationAnchor: t.pickRoutePosition,
+                            stationLocation: t.location,
+                          }[tool]
+                        }
+                      </strong>
+                      {activeStation &&
+                        (tool === 'stationAnchor' || tool === 'stationLocation') &&
+                        ` · ${selectionTitle}`}
+                      <span className="mode-hint"> · {toolHelp}</span>
+                    </span>
+                    <Button size="1" variant="soft" color="gray" onClick={cancelTool}>
+                      {t.cancel} · Esc
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="map-frame">
                 <MapView
@@ -523,7 +637,10 @@ export function Editor({
                   tool={tool}
                   axis={axis}
                   revealSelection={revealSelection}
-                  onCancelTool={() => setTool('select')}
+                  basemap={basemap}
+                  storageFailed={preferencesFailed}
+                  onOpenSettings={() => setSettingsTab('map')}
+                  viewCommand={viewCommand}
                   selectedVertexId={selected.type === 'vertex' ? selected.id : null}
                   selectedStationId={activeStation?.id ?? null}
                   focusAnchor={selected.type === 'sample' ? focus : null}
@@ -541,7 +658,7 @@ export function Editor({
                   onPickLocation={(p) => {
                     if (activeStation) {
                       change(updateStation(doc, activeStation.id, { location: p }));
-                      select({ type: 'station', id: activeStation.id });
+                      select({ type: 'station', id: activeStation.id }, true);
                     }
                   }}
                 />
@@ -561,15 +678,11 @@ export function Editor({
             <ProfilePanel
               t={t}
               count={doc.elevation.length}
-              canFill={
-                !!doc.vertices.length &&
-                (missingHeights > 0 ||
-                  doc.elevation.length === 0 ||
-                  (doc.vertices.length > 1 && gain === null))
-              }
-              canFetch={doc.vertices.length > 0}
-              onFill={fillElevationGaps}
-              onFetch={() => setElevationPreview({})}
+              actionLabel={commandStrings[lang].elevation}
+              disabled={!doc.vertices.length}
+              onProcess={openElevationTools}
+              collapsed={profileCollapsed}
+              onCollapsedChange={setProfileCollapsed}
             >
               <ProfileView
                 doc={doc}
@@ -584,17 +697,19 @@ export function Editor({
             </ProfilePanel>
           </main>
           <Inspector
+            lang={lang}
+            lookup={lookup}
+            magneticExpanded={magneticExpanded}
+            onMagneticExpanded={setMagneticExpanded}
+            onDelete={deleteSelected}
+            canDelete={canDelete}
             doc={doc}
             t={t}
             selected={selected}
             choose={(s) => select(s, true)}
             issue={sameTarget(selected, issue?.target) ? issue?.[lang] : undefined}
             change={change}
-            setTool={(mode) => {
-              setPanel(null);
-              setNotice(null);
-              setTool(mode);
-            }}
+            setTool={startTool}
             status={status}
           />
         </div>
@@ -624,12 +739,17 @@ export function Editor({
           </Callout.Root>
         )}
       </div>
-      {exportFormat === 'rte' && (
+      {exportFormat && (
         <ExportDialog
+          format={exportFormat}
           doc={doc}
           {...exportControls}
-          dispatch={dispatch}
-          change={change}
+          lookup={lookup}
+          onEditProperties={() => {
+            setExportFormat(null);
+            select({ type: 'route' }, true);
+            setMagneticExpanded(true);
+          }}
           projectGain={gain}
           options={exportOptions}
           onOptions={setExportOptions}
@@ -640,20 +760,39 @@ export function Editor({
           }}
         />
       )}
-      {exportFormat && exportFormat !== 'rte' && (
-        <TrackExportDialog doc={doc} format={exportFormat} {...exportControls} />
+      {settingsTab && (
+        <SettingsDialog
+          lang={lang}
+          theme={theme}
+          basemap={basemap}
+          initialTab={settingsTab}
+          onApply={applyPreferences}
+          onClose={() => setSettingsTab(null)}
+        />
       )}
-      {elevationPreview && (
+      {elevationPanel === 'tools' && (
+        <ElevationTools
+          lang={lang}
+          canFill={missingHeights < doc.elevation.length && (missingHeights > 0 || gain === null)}
+          hasKnownHeights={missingHeights < doc.elevation.length}
+          summary={elevationSummary?.[lang]}
+          onFill={fillElevationGaps}
+          onOnline={() => setElevationPanel('online')}
+          onClose={() => setElevationPanel(null)}
+        />
+      )}
+      {elevationPanel === 'online' && (
         <ElevationRepair
           doc={doc}
           lang={lang}
-          initialSummary={elevationPreview.summary?.[lang]}
+          initialSummary={elevationSummary?.[lang]}
+          onBack={() => setElevationPanel('tools')}
           onApply={(next) => {
             change(next);
             setNotice(both('elevationsReplaced'));
-            setElevationPreview(null);
+            setElevationPanel(null);
           }}
-          onClose={() => setElevationPreview(null)}
+          onClose={() => setElevationPanel(null)}
         />
       )}
       {busy && (

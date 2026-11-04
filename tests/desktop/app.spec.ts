@@ -1,4 +1,5 @@
 import { selectOption } from '../controls';
+import { openSettings as settings, setPreference } from '../preferences';
 import { _electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,6 +7,8 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadProject } from '../../src/files/project';
 import { strings } from '../../src/app/strings';
+import { commandStrings, type CommandId } from '../../src/app/commands';
+import type { Page } from '@playwright/test';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
@@ -54,8 +57,34 @@ async function launch({ disableWebGL = false } = {}) {
     });
     await page.reload();
   }
-  await selectOption(page.getByLabel('Interface language'), 'en');
+  await page.getByRole('button', { name: /^(Menu|菜单)$/ }).waitFor();
+  if ((await page.locator('html').getAttribute('lang')) !== 'en') await setLanguage(page, 'en');
   return page;
+}
+
+async function setLanguage(page: Page, language: 'en' | 'zh') {
+  await setPreference(page, /^(Interface language|界面语言)$/, language);
+}
+
+async function fileMenu(page: Page, language: 'en' | 'zh' = 'en') {
+  const copy = commandStrings[language];
+  await page.getByRole('button', { name: copy.menu, exact: true }).click();
+  await page.getByRole('menuitem', { name: copy.file, exact: true }).click();
+}
+
+async function nativeCommand(command: CommandId) {
+  await expect
+    .poll(() =>
+      desktop.evaluate(
+        ({ Menu }, id) => Menu.getApplicationMenu()?.getMenuItemById(`command:${id}`)?.enabled,
+        command,
+      ),
+    )
+    .toBe(true);
+  await desktop.evaluate(({ Menu, BrowserWindow }, id) => {
+    const item = Menu.getApplicationMenu()!.getMenuItemById(`command:${id}`)!;
+    item.click(item, BrowserWindow.getAllWindows()[0], {} as Electron.KeyboardEvent);
+  }, command);
 }
 
 test.beforeEach(async () => {
@@ -76,7 +105,9 @@ test.afterEach(async () => {
 test('synchronizes the editor appearance with native window chrome and dialogs', async () => {
   const page = await launch();
   for (const theme of ['dark', 'light', 'system']) {
-    await selectOption(page.getByLabel('Appearance', { exact: true }), theme);
+    const panel = await settings(page);
+    await selectOption(panel.getByLabel('Appearance', { exact: true }), theme);
+    await panel.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect.poll(() => desktop.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe(theme);
     const dark = await desktop.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors);
     await expect(page.locator('html')).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
@@ -86,6 +117,60 @@ test('synchronizes the editor appearance with native window chrome and dialogs',
       ),
     ).toBe(dark ? '#111113' : '#ffffff');
   }
+});
+
+test('native commands share editor history and stay disabled while a dialog is open', async () => {
+  const page = await launch();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  const route = page.locator('.rv-route');
+  const originalPath = await route.getAttribute('d');
+  await name.fill('Uncommitted native edit');
+  await nativeCommand('new');
+  const replacement = page.getByRole('dialog', { name: 'Open another route?', exact: true });
+  await expect(replacement).toBeVisible();
+  await replacement.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(name).toHaveValue('Uncommitted native edit');
+  await expect(name).toBeFocused();
+  await expect(route).toHaveAttribute('d', originalPath!);
+
+  await name.fill('First edit');
+  await name.press('Enter');
+  await name.fill('Native menu edit');
+  await name.press('Enter');
+  await page.getByRole('heading', { name: 'Native menu edit', exact: true }).click();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(name).toHaveValue('First edit');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(name).toHaveValue('Native menu edit');
+  await nativeCommand('undo');
+  await expect(name).toHaveValue('First edit');
+  await nativeCommand('redo');
+  await expect(name).toHaveValue('Native menu edit');
+  await nativeCommand('settings');
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(panel).toBeVisible();
+  await expect
+    .poll(() =>
+      desktop.evaluate(({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('command:open')!.enabled),
+    )
+    .toBe(false);
+  await desktop.evaluate(({ Menu, BrowserWindow }) => {
+    const item = Menu.getApplicationMenu()!.getMenuItemById('command:new')!;
+    item.click(item, BrowserWindow.getAllWindows()[0], {} as Electron.KeyboardEvent);
+  });
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(name).toHaveValue('Native menu edit');
+  await page.keyboard.press('ControlOrMeta+,');
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await nativeCommand('export');
+  await expect(page.getByRole('dialog', { name: 'Export route', exact: true })).toBeVisible();
+  const filename = page.getByLabel('File name');
+  await filename.press('End');
+  await filename.pressSequentially('X');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(filename).toHaveValue('Native menu edit');
 });
 
 test('title bar controls remain usable beside native buttons when resizing and zooming', async () => {
@@ -117,8 +202,9 @@ test('title bar controls remain usable beside native buttons when resizing and z
       .toBe(targetWidth);
     for (const language of ['en', 'zh'] as const) {
       const t = strings[language];
-      await selectOption(page.locator('.language [role="combobox"]'), language);
-      await expect(page.getByRole('button', { name: t.export, exact: true })).toBeVisible();
+      const copy = commandStrings[language];
+      await setLanguage(page, language);
+      await expect(page.getByRole('button', { name: copy.export, exact: true })).toBeVisible();
       await expect
         .poll(() =>
           page.evaluate(() => {
@@ -151,14 +237,13 @@ test('title bar controls remain usable beside native buttons when resizing and z
         )
         .toEqual([]);
 
-      await page.getByRole('button', { name: t.file, exact: true }).click();
+      await fileMenu(page, language);
       await expect(page.getByRole('menuitem', { name: t.new, exact: true })).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('menuitem', { name: t.new, exact: true })).not.toBeVisible();
-      await page.getByRole('button', { name: t.exportFormat, exact: true }).click();
-      const exportTitle = t.exportFormatTitle.replace('{format}', 'GPX');
-      await page.getByRole('menuitem', { name: `${exportTitle}…`, exact: true }).click();
-      const preview = page.getByRole('dialog', { name: exportTitle, exact: true });
+      await page.getByRole('button', { name: copy.export, exact: true }).click();
+      const preview = page.getByRole('dialog');
+      await selectOption(preview.getByLabel(t.exportFormat), 'gpx');
       await expect(preview).toBeVisible();
       await preview.getByRole('button', { name: t.close, exact: true }).click();
       await expect(preview).not.toBeVisible();
@@ -176,7 +261,7 @@ test('title bar controls remain usable beside native buttons when resizing and z
             }),
           )
           .toEqual({ scrolled: true, left: 0, top: 0 });
-        await page.getByRole('button', { name: t.file, exact: true }).click();
+        await fileMenu(page, language);
         await expect(page.getByRole('menuitem', { name: t.new, exact: true })).toBeVisible();
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.scrollTo(0, 0));
@@ -201,7 +286,7 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   await desktop.evaluate(({ dialog }, filename) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
   }, source);
-  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await nativeCommand('open');
   await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.fill('Saved desktop route');
@@ -228,8 +313,8 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   await desktop.evaluate(({ dialog }, filename) => {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
   }, exported);
-  await page.getByRole('button', { name: 'Choose export format', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Export GPX…', exact: true }).click();
+  await page.getByRole('button', { name: commandStrings.en.export, exact: true }).click();
+  await selectOption(page.getByLabel('Choose export format'), 'gpx');
   await page.getByRole('button', { name: 'Download GPX', exact: true }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   expect(await readFile(exported, 'utf8')).toContain('Saved desktop route');
@@ -319,7 +404,7 @@ for (const disableWebGL of [false, true]) {
     const tiles = /https:\/\/t[0-7]\.tianditu\.gov\.cn\//;
     await page.route(tiles, (route) => route.fulfill({ status: 403, body: 'Denied' }));
     await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
-    let panel = page.getByRole('dialog', { name: 'Basemap settings' });
+    let panel = page.getByRole('dialog', { name: 'Settings', exact: true });
     await selectOption(panel.getByLabel('Map provider'), 'tianditu');
     await panel.getByLabel('API Key', { exact: true }).fill('desktop-personal-test-key');
     await panel.getByRole('button', { name: 'Apply', exact: true }).click();
@@ -338,7 +423,7 @@ for (const disableWebGL of [false, true]) {
     await desktop.close();
     page = await launch({ disableWebGL });
     await page.getByRole('button', { name: 'Basemap: Tianditu', exact: true }).click();
-    panel = page.getByRole('dialog', { name: 'Basemap settings' });
+    panel = page.getByRole('dialog', { name: 'Settings', exact: true });
     await expect(panel.getByLabel('API Key', { exact: true })).toHaveValue('desktop-personal-test-key');
     await expect(panel.getByLabel('API Key', { exact: true })).toHaveAttribute('type', 'password');
     await expect(panel.getByLabel('Show basemap')).toBeChecked();

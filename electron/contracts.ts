@@ -21,9 +21,12 @@ export interface DesktopAPI {
   openFile: () => Promise<DesktopFile | null>;
   saveFile: (file: DesktopFile) => Promise<boolean>;
   setDocumentState: (dirty: boolean, language: 'en' | 'zh') => void;
+  setCommandState: (state: DesktopCommandState) => void;
+  onCommand: (listener: (command: CommandId) => void) => () => void;
   onBluetoothDevices: (listener: (devices: BluetoothChoice[] | null) => void) => () => void;
   selectBluetoothDevice: (id: string) => void;
   onBluetoothPairing: (listener: (request: PairingRequest | null) => void) => () => void;
   respondBluetoothPairing: (response: { confirmed: boolean; pin?: string }) => void;
   cancelBluetooth: () => void;
 }
+import type { CommandId, DesktopCommandState } from './commands.js';

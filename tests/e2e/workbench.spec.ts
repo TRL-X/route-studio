@@ -1,4 +1,4 @@
-import { selectOption } from '../controls';
+import { setPreference } from '../preferences';
 import { expect, test } from '@playwright/test';
 import { emptyRoute } from '../../src/domain/model';
 import { saveProject } from '../../src/files/project';
@@ -7,7 +7,7 @@ test('keeps toolbar controls usable at desktop and compact widths in both langua
   await page.route('https://**/*', (route) => route.abort());
   await page.goto('/');
   for (const language of ['en', 'zh']) {
-    await selectOption(page.getByLabel(/Interface language|界面语言/), language);
+    await setPreference(page, /Interface language|界面语言/, language);
     for (const width of [1440, 960, 480]) {
       await page.setViewportSize({ width, height: 700 });
       await expect
@@ -39,7 +39,7 @@ test('keeps toolbar controls usable at desktop and compact widths in both langua
         )
         .toEqual([]);
       const tools = page.locator('.map-tools').getByRole('radio');
-      await expect(tools).toHaveCount(3);
+      await expect(tools).toHaveCount(4);
       await tools.last().click();
       await expect(tools.last()).toHaveAttribute('aria-checked', 'true');
     }
@@ -118,17 +118,49 @@ test('resizes the profile with its divider and restores its size when expanded',
 
 test('navigates command menus, outline rows and property groups from the keyboard', async ({ page }) => {
   await page.goto('/');
-  const file = page.getByRole('button', { name: 'File', exact: true });
-  await file.press('ArrowDown');
-  const menu = page.getByRole('menu', { name: 'File', exact: true });
-  await expect(menu.getByRole('menuitem', { name: 'New route', exact: true })).toBeFocused();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  const route = page.locator('.rv-route');
+  const originalPath = await route.getAttribute('d');
+  await name.fill('Unsaved route name');
+  await name.press('ControlOrMeta+n');
+  const replacement = page.getByRole('dialog', { name: 'Open another route?', exact: true });
+  await expect(replacement).toBeVisible();
+  await replacement.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(name).toHaveValue('Unsaved route name');
+  await expect(name).toBeFocused();
+  await expect(route).toHaveAttribute('d', originalPath!);
+
+  await name.fill('Preserved after cancelling open');
+  const chooser = page.waitForEvent('filechooser');
+  await name.press('ControlOrMeta+o');
+  await (await chooser).setFiles([]);
+  await expect(
+    page.getByRole('heading', { name: 'Preserved after cancelling open', exact: true }),
+  ).toBeVisible();
+  await expect(name).toHaveValue('Preserved after cancelling open');
+  await expect(name).toBeFocused();
+  await expect(route).toHaveAttribute('d', originalPath!);
+
+  const trigger = page.getByRole('button', { name: 'Menu', exact: true });
+  await trigger.press('ArrowDown');
+  const menu = page.getByRole('menu', { name: 'Menu', exact: true });
+  await expect(menu.getByRole('menuitem', { name: 'File', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('menuitem', { name: 'New route', exact: true })).toBeFocused();
   await page.keyboard.press('End');
-  await expect(menu.getByRole('menuitem', { name: 'Save project', exact: true })).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(menu.getByRole('menuitem', { name: 'New route', exact: true })).toBeFocused();
+  await expect(page.getByRole('menuitem', { name: 'Export…', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Export route', exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.press('Escape');
+  await expect(trigger).toBeFocused();
+  await trigger.press('ArrowDown');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowLeft');
+  await expect(menu.getByRole('menuitem', { name: 'File', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
-  await expect(file).toBeFocused();
+  await expect(trigger).toBeFocused();
   const rows = page.locator('.station-list');
   await rows.getByRole('button', { name: /Ridge Pass.*Checkpoint/ }).focus();
   await page.keyboard.press('ArrowDown');
@@ -143,7 +175,7 @@ test('navigates command menus, outline rows and property groups from the keyboar
     .filter({ has: page.locator('summary', { hasText: /^Properties$/ }) });
   await properties.locator('summary').press('Space');
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toBeHidden();
-  await selectOption(page.getByLabel('Appearance', { exact: true }), 'dark');
+  await setPreference(page, 'Appearance', 'dark');
   await expect(properties).not.toHaveAttribute('open');
   await properties.locator('summary').press('Enter');
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Valley Gate');

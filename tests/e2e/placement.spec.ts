@@ -18,12 +18,13 @@ test('station placement previews, ignores empty space and commits one undoable e
   const undo = page.getByRole('button', { name: 'Undo', exact: true });
   const hit = await routePoint(map, 0.37);
   const bounds = (await map.boundingBox())!;
-  const far = { x: bounds.width / 2, y: 18 };
+  const far = { x: bounds.width / 2, y: 100 };
   await add.click();
-  const mode = (await page.locator('.rv-mode').boundingBox())!;
-  expect(mode.y).toBeGreaterThan(bounds.y + bounds.height / 2);
-  expect(mode.y + mode.height).toBeLessThanOrEqual(bounds.y + bounds.height);
-  expect(Math.abs(mode.x + mode.width / 2 - (bounds.x + bounds.width / 2))).toBeLessThan(2);
+  await expect(page.locator('.map-mode')).toContainText('Add station');
+  await expect(page.getByRole('radio', { name: 'Add station', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
   await map.click({ position: far });
   await expect(map.locator('.rv-snap-preview')).toHaveCount(0);
   await expect(markers).toHaveCount(4);
