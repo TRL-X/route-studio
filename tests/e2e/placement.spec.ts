@@ -2,6 +2,7 @@ import { openRidge } from './files';
 import { expect, test, type Locator } from '@playwright/test';
 import type { RouteDocument } from '../../src/domain/model';
 import { saveProject } from '../../src/files/project';
+import { dismissImportElevation } from './elevation';
 
 async function routePoint(map: Locator, fraction: number) {
   return map.locator('.rv-route').evaluate((element, fraction) => {
@@ -70,6 +71,7 @@ test('a shared track asks which pass to use before creating the checkpoint', asy
     mimeType: 'application/json',
     buffer: Buffer.from(saveProject(doc)),
   });
+  await dismissImportElevation(page);
   await expect(page.getByRole('heading', { name: doc.name, exact: true })).toBeVisible();
   const map = page.getByRole('application', { name: 'Route map' });
   const markers = map.locator('[data-station]');

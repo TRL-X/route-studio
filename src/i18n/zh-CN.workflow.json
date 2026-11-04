@@ -3,6 +3,16 @@
   "fillHelp": "根据已有高程插值补全 1000 米以内的缺口，保留现有有效值。操作可撤销。",
   "onlineHelp": "获取地形高程，对比当前剖面后再确认替换。",
   "noKnownHeights": "插值需要至少一处已知高程，请选择在线获取高程。",
+  "importElevationTitle": "完善导入路线的高程",
+  "importFillable": "检测到 {gaps} 处高程缺口，均可根据已有高程补全。",
+  "importNoHeights": "这条路线没有已知高程，无法通过插值补全。建议在线获取地形数据，生成完整高程。",
+  "importNeedsReplacement": "检测到 {gaps} 处高程缺口，其中 {remaining} 处无法用已有高程补全。建议在线获取并替换全线高程。",
+  "importReplacementHelp": "缺口跨度超过 1000 米或相邻高程存在冲突时，无法插值补全。获取地形高程后，先查看预览，再确认替换全部高程。操作可撤销。",
+  "importLaterHelp": "可以先继续编辑，稍后从「高程处理」继续。",
+  "importLater": "稍后处理",
+  "importFillAction": "补全缺失高程（推荐）",
+  "importPartialFill": "仅补全 {filled} 处短缺口",
+  "importOnlineAction": "预览在线替换",
   "back": "返回",
   "settingsSaved": "设置已应用。"
 }

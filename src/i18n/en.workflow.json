@@ -3,6 +3,16 @@
   "fillHelp": "Interpolate gaps up to 1,000 m using existing heights. Existing values are kept. You can undo the change.",
   "onlineHelp": "Get terrain heights and compare them with the current profile before replacing it.",
   "noKnownHeights": "At least one known height is needed for interpolation. Use online terrain data instead.",
+  "importElevationTitle": "Complete the imported elevations",
+  "importFillable": "Elevation gaps detected: {gaps}. All can be filled using the existing heights.",
+  "importNoHeights": "This route has no known elevations to interpolate from. Get online terrain data to create a complete profile.",
+  "importNeedsReplacement": "Elevation gaps detected: {gaps}. Unfillable gaps: {remaining}. We recommend replacing the full profile with online terrain data.",
+  "importReplacementHelp": "Gaps over 1,000 m or next to conflicting heights cannot be interpolated. Fetch terrain heights, review the preview, then confirm replacement of all elevations. The change can be undone.",
+  "importLaterHelp": "You can continue editing and return to Elevation tools later.",
+  "importLater": "Later",
+  "importFillAction": "Fill gaps (recommended)",
+  "importPartialFill": "Fill short gaps only ({filled})",
+  "importOnlineAction": "Preview online replacement",
   "back": "Back",
   "settingsSaved": "Settings applied."
 }

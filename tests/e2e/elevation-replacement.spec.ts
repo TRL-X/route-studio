@@ -4,7 +4,7 @@ import { emptyRoute, type RouteDocument } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
 import copy from '../../src/i18n/en.repair.json' with { type: 'json' };
 import { download, open } from './files';
-import { openElevationTools, openOnlineTerrain } from './elevation';
+import { dismissImportElevation, openElevationTools, openOnlineTerrain } from './elevation';
 import { mockOnlineTerrain } from './fixtures/online-terrain';
 
 const t = strings.en;
@@ -21,9 +21,10 @@ function polarRoute(heights: (number | null)[], reference: 0 | 1 | 2, start = 12
     ],
   };
 }
-async function openRoute(page: Page, doc: RouteDocument) {
+async function openRoute(page: Page, doc: RouteDocument, missing = false) {
   await page.goto('/');
   await open(page, 'polar.routeproj', Buffer.from(saveProject(doc)));
+  if (missing) await dismissImportElevation(page);
   await expect(page.getByRole('heading', { name: doc.name })).toBeVisible();
 }
 async function savedRoute(page: Page) {
@@ -108,7 +109,7 @@ test('short endpoint gaps fill locally in one undoable edit without starting ter
   });
   const original = polarRoute([null, -5, 30, null], 2);
   original.elevation.pop(); // The finish sample is absent rather than explicitly marked missing.
-  await openRoute(page, original);
+  await openRoute(page, original, true);
   const tools = await openElevationTools(page);
   const fill = tools.getByRole('button', { name: t.interpolateGaps, exact: true });
   await fill.click();
@@ -130,7 +131,7 @@ test('safe short gaps are filled before the optional full-profile replacement; t
   await mockOnlineTerrain(context);
   const original = polarRoute([10, null, 30, 50, null], 0);
   original.vertices[4].lon += 0.15; // Put the final point more than 1 km from its nearest elevation.
-  await openRoute(page, original);
+  await openRoute(page, original, true);
   const tools = await openElevationTools(page);
   await tools.getByRole('button', { name: t.interpolateGaps, exact: true }).click();
   const dialog = page.getByRole('dialog', { name: copy.title });

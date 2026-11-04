@@ -3,6 +3,7 @@ import type { ExportPreview, RteTarget } from '../rte';
 import type { Point, RouteDocument } from '../domain/model';
 import type { FileErrorCode } from '../files/errors';
 import type { TrackFormat, TrackExportPreview } from '../files/export';
+import type { ImportElevationAssessment } from '../domain/elevation-repair';
 export interface Choice {
   name: string;
   pointCount: number;
@@ -14,7 +15,7 @@ export type IORequest =
   | { type: 'export'; doc: RouteDocument; format: TrackFormat }
   | { type: 'compile'; doc: RouteDocument; options: ExportOptions };
 export type IOResult =
-  | { type: 'document'; doc: RouteDocument }
+  | { type: 'document'; doc: RouteDocument; elevationAssessment?: ImportElevationAssessment | null }
   | { type: 'heights'; values: (number | null)[] }
   | { type: 'choices'; choices: Choice[] }
   | { type: 'track-file'; bytes: Uint8Array<ArrayBuffer>; preview: TrackExportPreview }

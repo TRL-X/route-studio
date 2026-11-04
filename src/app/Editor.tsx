@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { appendVertex, deleteVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
-import { fillShortElevationGaps } from '../domain/elevation-repair';
+import { fillShortElevationGaps, type ImportElevationAssessment } from '../domain/elevation-repair';
 import {
   anchorDistance,
   distances,
@@ -56,6 +56,7 @@ import { Modal } from './Modal';
 import { SettingsDialog, type SettingsValues } from './SettingsDialog';
 import { loadBasemapPreferences, saveBasemapPreferences } from '../maps/basemap';
 import { ElevationTools, workflowStrings } from './ElevationTools';
+import { ImportElevationDialog } from './ImportElevationDialog';
 import { useDeclinationLookup } from './useDeclinationLookup';
 import { commandStrings, type EditorCommands } from './commands';
 
@@ -87,6 +88,7 @@ function fileError(result: Extract<IOResult, { type: 'error' }>): Localized {
 interface Replacement {
   doc: RouteDocument;
   source: string;
+  elevationAssessment?: ImportElevationAssessment | null;
 }
 interface ImportChoice {
   list: TrackChoice[];
@@ -128,7 +130,8 @@ export function Editor({
   const saveLock = useRef(false);
   const [pending, setPending] = useState<Replacement | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
-  const [elevationPanel, setElevationPanel] = useState<'tools' | 'online' | null>(null);
+  const [elevationPanel, setElevationPanel] = useState<'import' | 'tools' | 'online' | null>(null);
+  const [importElevation, setImportElevation] = useState<ImportElevationAssessment | null>(null);
   const [elevationSummary, setElevationSummary] = useState<Localized | null>(null);
   const [settingsTab, setSettingsTab] = useState<'general' | 'map' | null>(null);
   const [basemap, setBasemap] = useState(loadBasemapPreferences);
@@ -182,6 +185,10 @@ export function Editor({
       const summary = { en: message('en'), zh: message('zh') };
       setNotice(summary);
       setElevationSummary(summary);
+      if (elevationPanel === 'import') {
+        setImportElevation(null);
+        setElevationPanel(remaining.length ? 'tools' : null);
+      }
     } catch {
       setProblem(both('terrainLimit'));
     }
@@ -252,7 +259,8 @@ export function Editor({
     setExportOptions(defaultExportOptions);
     setExportName(null);
     setExportFormat(null);
-    setElevationPanel(null);
+    setElevationPanel(next.elevationAssessment ? 'import' : null);
+    setImportElevation(next.elevationAssessment ?? null);
     setElevationSummary(null);
     setMagneticExpanded(false);
     setIssue(null);
@@ -282,7 +290,12 @@ export function Editor({
       const result = await runIO({ type: 'read', file, choice: index, accept });
       if (result.type === 'error') setProblem(fileError(result));
       else if (result.type === 'choices') setChoices({ file, list: result.choices, index: 0, accept: true });
-      else if (result.type === 'document') requestReplace({ doc: result.doc, source: file.name });
+      else if (result.type === 'document')
+        requestReplace({
+          doc: result.doc,
+          source: file.name,
+          elevationAssessment: result.elevationAssessment,
+        });
     } catch {
       setProblem(both('readFailed'));
     } finally {
@@ -771,6 +784,18 @@ export function Editor({
           onClose={() => setSettingsTab(null)}
         />
       )}
+      {elevationPanel === 'import' && importElevation && (
+        <ImportElevationDialog
+          lang={lang}
+          assessment={importElevation}
+          onFill={fillElevationGaps}
+          onOnline={() => setElevationPanel('online')}
+          onClose={() => {
+            setElevationPanel(null);
+            setImportElevation(null);
+          }}
+        />
+      )}
       {elevationPanel === 'tools' && (
         <ElevationTools
           lang={lang}
@@ -787,13 +812,17 @@ export function Editor({
           doc={doc}
           lang={lang}
           initialSummary={elevationSummary?.[lang]}
-          onBack={() => setElevationPanel('tools')}
+          onBack={() => setElevationPanel(importElevation ? 'import' : 'tools')}
           onApply={(next) => {
             change(next);
             setNotice(both('elevationsReplaced'));
             setElevationPanel(null);
+            setImportElevation(null);
           }}
-          onClose={() => setElevationPanel(null)}
+          onClose={() => {
+            setElevationPanel(null);
+            setImportElevation(null);
+          }}
         />
       )}
       {busy && (

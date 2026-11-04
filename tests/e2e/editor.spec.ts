@@ -8,6 +8,7 @@ import { prepareRte, readRte } from '../../src/rte';
 
 import { open, download, openExport, openRidge, disableExportProcessing, setSurveyDate } from './files';
 import { bgsRequests, answerBgs } from './bgs';
+import { dismissImportElevation } from './elevation';
 
 test.beforeEach(async ({ page }) => {
   await page.route(bgsRequests, (route) => answerBgs(route));
@@ -79,6 +80,7 @@ test('imports, edits, undoes, recovers a draft and downloads project and device 
 test('incomplete elevation can be saved to a project and corrected before RTE download', async ({ page }) => {
   await page.goto('/');
   await open(page, 'incomplete.gpx', Buffer.from(gpx.replace('<ele>20</ele>', '')));
+  await dismissImportElevation(page);
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('North ridge');
   const project = await download(page, 'Save project');
@@ -134,6 +136,7 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
     '<trkpt lat="0" lon="0.002"><ele>30</ele></trkpt></trkseg></trk></gpx>';
   await page.goto('/');
   await open(page, 'close.gpx', Buffer.from(source));
+  await dismissImportElevation(page);
   await setSurveyDate(page);
   await page.getByRole('button', { name: 'Elevation tools…', exact: true }).click();
   const fill = page.getByRole('button', { name: 'Fill elevation gaps', exact: true });

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { type RouteDocument } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
+import { dismissImportElevation } from './elevation';
 
 const stationLocation = { lat: 0.00001, lon: 0.01 };
 function overlappingRoute(): RouteDocument {
@@ -47,6 +48,7 @@ test('changes the route pass by distance while keeping the landmark and one-step
     mimeType: 'application/json',
     buffer: Buffer.from(saveProject(overlappingRoute())),
   });
+  await dismissImportElevation(page);
   await page.getByRole('button', { name: /U14.*Checkpoint/ }).click();
   const field = page.getByRole('spinbutton', { name: 'Route distance (km)', exact: true });
   const original = await field.inputValue();
@@ -87,6 +89,7 @@ test('steps numeric properties with precision, bounds and one-step undo', async 
     mimeType: 'application/json',
     buffer: Buffer.from(saveProject(overlappingRoute())),
   });
+  await dismissImportElevation(page);
   await page.getByRole('button', { name: /U14.*Checkpoint/ }).click();
   const distance = page.getByRole('spinbutton', { name: 'Route distance (km)', exact: true });
   const original = await distance.inputValue();

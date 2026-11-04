@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { strings } from '../../src/app/strings';
 import { open } from './files';
-import { openOnlineTerrain } from './elevation';
+import { dismissImportElevation, openOnlineTerrain } from './elevation';
 import { mockOnlineTerrain } from './fixtures/online-terrain';
 
 const t = strings.en;
@@ -22,6 +22,7 @@ test('overlays both profiles on the same scale and inspecting the chart does not
     'preview.gpx',
     Buffer.from(`<gpx><trk><name>Two profiles</name><trkseg>${points}</trkseg></trk></gpx>`),
   );
+  await dismissImportElevation(page);
   await expect(page.getByRole('heading', { name: 'Two profiles' })).toBeVisible();
   await openOnlineTerrain(page);
   const dialog = page.getByRole('dialog');

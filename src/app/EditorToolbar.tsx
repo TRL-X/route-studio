@@ -37,6 +37,7 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
   const [menu, setMenu] = useState(false);
   const [textEditing, setTextEditing] = useState(false);
   const menuTriggerId = useId();
+  const restoreMenuFocus = useRef(true);
   const latest = useRef({ commands, locked });
   latest.current = { commands, locked };
   const mac = /Mac/.test(navigator.platform);
@@ -82,13 +83,26 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
   }, [locked]);
   useEffect(() => {
     const update = () => queueMicrotask(() => setTextEditing(editingText()));
-    document.addEventListener('focusin', update);
+    const focus = (event: FocusEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target !== document.body &&
+        target.id !== menuTriggerId &&
+        target.closest('[data-focus-return]')?.getAttribute('data-focus-return') !== menuTriggerId
+      ) {
+        // Menu exit animations may outlast the next edit, including its Enter-to-blur commit.
+        restoreMenuFocus.current = false;
+      }
+      update();
+    };
+    document.addEventListener('focusin', focus);
     document.addEventListener('focusout', update);
     return () => {
-      document.removeEventListener('focusin', update);
+      document.removeEventListener('focusin', focus);
       document.removeEventListener('focusout', update);
     };
-  }, []);
+  }, [menuTriggerId]);
   const enabled = Object.fromEntries(
     commandIds.map((id) => [
       id,
@@ -135,7 +149,13 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
           <span className="brand-mark" aria-hidden="true" />
         </div>
         <div className="file-menu">
-          <DropdownMenu.Root open={menu} onOpenChange={setMenu}>
+          <DropdownMenu.Root
+            open={menu}
+            onOpenChange={(open) => {
+              if (open) restoreMenuFocus.current = true;
+              setMenu(open);
+            }}
+          >
             <DropdownMenu.Trigger>
               <Button id={menuTriggerId} variant="ghost" color="gray" aria-label={t.menu}>
                 <Menu />
@@ -147,7 +167,8 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
               aria-label={t.menu}
               data-focus-return={menuTriggerId}
               onCloseAutoFocus={(event) => {
-                if (document.querySelector('[role="dialog"]')) event.preventDefault();
+                if (!restoreMenuFocus.current || document.querySelector('[role="dialog"]'))
+                  event.preventDefault();
               }}
             >
               {commandGroups.map((group) => (
