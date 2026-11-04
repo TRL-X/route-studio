@@ -1,4 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Modal } from './Modal';
+import { Choice } from './Choice';
+import { TextField, Button } from '@radix-ui/themes';
+import { useEffect, useState } from 'react';
 import type { BluetoothChoice, PairingRequest } from '../../electron/contracts';
 import en from '../i18n/en.desktop.json';
 import zh from '../i18n/zh-CN.desktop.json';
@@ -11,7 +14,6 @@ export function DesktopBluetooth({ lang }: { lang: Lang }) {
   const [pairing, setPairing] = useState<PairingRequest | null>(null);
   const [selected, setSelected] = useState('');
   const [pin, setPin] = useState('');
-  const ref = useRef<HTMLDialogElement>(null);
   const visible = devices !== null || pairing !== null;
   useEffect(() => {
     if (!api) return;
@@ -29,24 +31,13 @@ export function DesktopBluetooth({ lang }: { lang: Lang }) {
       api.cancelBluetooth();
     };
   }, [api]);
-  useLayoutEffect(() => {
-    const dialog = ref.current;
-    if (!visible || !dialog) return;
-    dialog.showModal();
-    return () => dialog.close();
-  }, [visible]);
   if (!api || !visible) return null;
   return (
-    <dialog
-      ref={ref}
+    <Modal
       className="desktop-device-dialog"
-      aria-labelledby="desktop-device-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        api.cancelBluetooth();
-      }}
+      title={pairing ? t.pair : t.selectDevice}
+      onClose={() => api.cancelBluetooth()}
     >
-      <h2 id="desktop-device-title">{pairing ? t.pair : t.selectDevice}</h2>
       {pairing ? (
         <>
           <p>{t.confirmPair.replace('{device}', pairing.deviceId)}</p>
@@ -54,7 +45,7 @@ export function DesktopBluetooth({ lang }: { lang: Lang }) {
           {pairing.pairingKind === 'providePin' && (
             <label>
               {t.providePin}
-              <input
+              <TextField.Root
                 autoFocus
                 value={pin}
                 inputMode="numeric"
@@ -67,29 +58,32 @@ export function DesktopBluetooth({ lang }: { lang: Lang }) {
       ) : (
         <>
           <p role="status">{t.scanning}</p>
-          <select
-            size={6}
+          <Choice
+            placeholder={t.selectDevice}
             aria-label={t.selectDevice}
             value={selected}
-            onChange={(event) => setSelected(event.target.value)}
-          >
-            <option value="" disabled>
-              {t.selectDevice}
-            </option>
-            {devices?.map((device) => (
-              <option key={device.deviceId} value={device.deviceId}>
-                {device.deviceName || t.unnamedDevice} ({device.deviceId})
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => setSelected(value)}
+            options={[
+              ...(devices ?? []).map((device) => ({
+                value: device.deviceId,
+                label: (
+                  <>
+                    {device.deviceName || t.unnamedDevice} ({device.deviceId})
+                  </>
+                ),
+              })),
+            ]}
+          />
         </>
       )}
       <div className="dialog-actions">
-        <button className="button" onClick={() => api.cancelBluetooth()}>
+        <Button variant="surface" color="gray" onClick={() => api.cancelBluetooth()}>
           {t.cancel}
-        </button>
-        <button
-          className="primary"
+        </Button>
+        <Button
+          variant="solid"
+          color="blue"
+
           disabled={pairing ? pairing.pairingKind === 'providePin' && !pin : !selected}
           onClick={() => {
             if (pairing)
@@ -101,8 +95,8 @@ export function DesktopBluetooth({ lang }: { lang: Lang }) {
           }}
         >
           {t.connect}
-        </button>
+        </Button>
       </div>
-    </dialog>
+    </Modal>
   );
 }

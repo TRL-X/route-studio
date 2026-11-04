@@ -10,6 +10,7 @@ function subscribe<T>(channel: string, listener: (value: T) => void) {
 const api: DesktopAPI = {
   platform: process.platform,
   getZoomFactor: () => webFrame.getZoomFactor(),
+  setTheme: (theme) => ipcRenderer.send('desktop:theme', theme),
   openFile: () => ipcRenderer.invoke('desktop:open'),
   saveFile: (file) => ipcRenderer.invoke('desktop:save', file),
   setDocumentState: (dirty, language) => ipcRenderer.send('desktop:state', { dirty, language }),

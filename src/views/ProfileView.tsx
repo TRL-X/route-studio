@@ -173,8 +173,8 @@ export function ProfileView({
       >
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
-            <stop offset="0" stopColor="#16745a" stopOpacity=".21" />
-            <stop offset="1" stopColor="#16745a" stopOpacity=".06" />
+            <stop offset="0" stopColor="var(--route)" stopOpacity=".21" />
+            <stop offset="1" stopColor="var(--route)" stopOpacity=".06" />
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((t) => (
@@ -208,7 +208,7 @@ export function ProfileView({
         <path d={trace.area} fill={'url(#' + fillId + ')'} />
         <path d={trace.line} className="rv-profile-line" />
         {trace.dots.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="#187357" />
+          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="var(--route)" />
         ))}
         {doc.stations
           .filter((s) => s.anchor && s.boundary)

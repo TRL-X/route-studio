@@ -13,7 +13,7 @@ for (const format of ['GPX', 'KML', 'FIT']) {
     });
     await page.goto('/');
     await page.getByRole('button', { name: 'Choose export format' }).click();
-    await page.getByRole('button', { name: `Export ${format}…`, exact: true }).click();
+    await page.getByRole('menuitem', { name: `Export ${format}…`, exact: true }).click();
     const dialog = page.getByRole('dialog', { name: `Export ${format}`, exact: true });
     await expect(dialog.getByText('23 track points · 4 stations')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Bluetooth upload…' })).toHaveCount(0);
@@ -59,14 +59,14 @@ test('previews omitted FIT cues and 2D KML while allowing an incomplete project 
   await open(page, 'trail.routeproj', Buffer.from(saveProject(doc)));
   await expect(page.getByRole('heading', { name: doc.name, exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Choose export format' }).click();
-  await page.getByRole('button', { name: 'Export FIT…', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Export FIT…', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText(/stations without a route position/i)).toContainText('Unassigned water');
   await expect(dialog.getByText('The file omits elevation at 1 of its track points.')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Download FIT' })).toBeEnabled();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Choose export format' }).click();
-  await page.getByRole('button', { name: 'Export KML…', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Export KML…', exact: true }).click();
   await expect(dialog.getByText(/the line is exported in 2D/i)).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Download KML' })).toBeEnabled();
 });

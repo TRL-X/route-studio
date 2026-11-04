@@ -1,3 +1,4 @@
+import { selectOption } from '../controls';
 import { _electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -52,7 +53,7 @@ async function launch({ disableWebGL = false } = {}) {
     });
     await page.reload();
   }
-  await page.getByLabel('Interface language').selectOption('en');
+  await selectOption(page.getByLabel('Interface language'), 'en');
   return page;
 }
 
@@ -69,6 +70,21 @@ test.afterEach(async () => {
   }
   await rm(directory, { recursive: true, force: true });
   expect(mainErrors).toEqual([]);
+});
+
+test('synchronizes the editor appearance with native window chrome and dialogs', async () => {
+  const page = await launch();
+  for (const theme of ['dark', 'light', 'system']) {
+    await selectOption(page.getByLabel('Appearance', { exact: true }), theme);
+    await expect.poll(() => desktop.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe(theme);
+    const dark = await desktop.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
+    expect(
+      await desktop.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()[0].getBackgroundColor().toLowerCase(),
+      ),
+    ).toBe(dark ? '#111113' : '#ffffff');
+  }
 });
 
 test('title bar controls remain usable beside native buttons when resizing and zooming', async () => {
@@ -100,7 +116,7 @@ test('title bar controls remain usable beside native buttons when resizing and z
       .toBe(targetWidth);
     for (const language of ['en', 'zh'] as const) {
       const t = strings[language];
-      await page.locator('.language select').selectOption(language);
+      await selectOption(page.locator('.language [role="combobox"]'), language);
       await expect(page.getByRole('button', { name: t.export, exact: true })).toBeVisible();
       await expect
         .poll(() =>
@@ -135,12 +151,12 @@ test('title bar controls remain usable beside native buttons when resizing and z
         .toEqual([]);
 
       await page.getByRole('button', { name: t.file, exact: true }).click();
-      await expect(page.getByRole('button', { name: t.new, exact: true })).toBeVisible();
+      await expect(page.getByRole('menuitem', { name: t.new, exact: true })).toBeVisible();
       await page.keyboard.press('Escape');
-      await expect(page.getByRole('button', { name: t.new, exact: true })).not.toBeVisible();
+      await expect(page.getByRole('menuitem', { name: t.new, exact: true })).not.toBeVisible();
       await page.getByRole('button', { name: t.exportFormat, exact: true }).click();
       const exportTitle = t.exportFormatTitle.replace('{format}', 'GPX');
-      await page.getByRole('button', { name: `${exportTitle}…`, exact: true }).click();
+      await page.getByRole('menuitem', { name: `${exportTitle}…`, exact: true }).click();
       const preview = page.getByRole('dialog', { name: exportTitle, exact: true });
       await expect(preview).toBeVisible();
       await preview.getByRole('button', { name: t.close, exact: true }).click();
@@ -160,7 +176,7 @@ test('title bar controls remain usable beside native buttons when resizing and z
           )
           .toEqual({ scrolled: true, left: 0, top: 0 });
         await page.getByRole('button', { name: t.file, exact: true }).click();
-        await expect(page.getByRole('button', { name: t.new, exact: true })).toBeVisible();
+        await expect(page.getByRole('menuitem', { name: t.new, exact: true })).toBeVisible();
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.scrollTo(0, 0));
       }
@@ -212,7 +228,7 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
   }, exported);
   await page.getByRole('button', { name: 'Choose export format', exact: true }).click();
-  await page.getByRole('button', { name: 'Export GPX…', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Export GPX…', exact: true }).click();
   await page.getByRole('button', { name: 'Download GPX', exact: true }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   expect(await readFile(exported, 'utf8')).toContain('Saved desktop route');
@@ -274,7 +290,7 @@ test('device chooser updates discovery results and cancels without selecting a d
       () => {},
     );
   });
-  await chooser.getByRole('listbox').selectOption('device-1');
+  await selectOption(chooser.getByRole('combobox'), 'device-1');
   await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(chooser).not.toBeVisible();
   expect(
@@ -303,7 +319,7 @@ for (const disableWebGL of [false, true]) {
     await page.route(tiles, (route) => route.fulfill({ status: 403, body: 'Denied' }));
     await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
     let panel = page.getByRole('dialog', { name: 'Basemap settings' });
-    await panel.getByLabel('Map provider').selectOption('tianditu');
+    await selectOption(panel.getByLabel('Map provider'), 'tianditu');
     await panel.getByLabel('API Key', { exact: true }).fill('desktop-personal-test-key');
     await panel.getByRole('button', { name: 'Apply', exact: true }).click();
     // Map initialization can fail before any request on runners without WebGL2.

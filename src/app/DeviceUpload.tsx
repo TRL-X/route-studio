@@ -1,3 +1,4 @@
+import { TextField, Button } from '@radix-ui/themes';
 import { useEffect, useRef, useState } from 'react';
 import { Bluetooth } from 'lucide-react';
 import { UploadError, withBluetoothFs } from '../device/mcumgr';
@@ -59,9 +60,10 @@ export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
 
   return (
     <>
-      <button
+      <Button
+        variant={expanded ? 'surface' : 'solid'}
+        color={expanded ? 'gray' : 'blue'}
         type="button"
-        className={expanded ? 'button' : 'primary'}
         aria-expanded={expanded}
         aria-controls={expanded ? 'device-upload' : undefined}
         disabled={busy}
@@ -69,7 +71,7 @@ export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
       >
         <Bluetooth />
         {t.bluetoothUpload}
-      </button>
+      </Button>
       {expanded && (
         <div id="device-upload" className="device-upload">
           {supported ? (
@@ -81,7 +83,7 @@ export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
             >
               <label className="export-field">
                 {t.uploadPath}
-                <input
+                <TextField.Root
                   value={path}
                   onChange={(e) => {
                     setPath(e.target.value);
@@ -92,9 +94,15 @@ export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
                   aria-invalid={!!name && !valid}
                 />
               </label>
-              <button type="submit" className="primary" disabled={!bytes || !valid || busy}>
+              <Button
+                variant="solid"
+                color="blue"
+                type="submit"
+
+                disabled={!bytes || !valid || busy}
+              >
                 {t.uploadSend}
-              </button>
+              </Button>
             </form>
           ) : (
             <small>{t.uploadUnsupported}</small>

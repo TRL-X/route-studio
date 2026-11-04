@@ -1,19 +1,27 @@
+import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowDownToLine,
-  ChevronDown,
   FilePlus2,
   FolderOpen,
   Globe2,
   Mountain,
+  Monitor,
+  Moon,
+  Sun,
   Redo2,
   Save,
   Undo2,
 } from 'lucide-react';
 import type { ExportFormat } from '../files/export';
 import { strings, type Lang } from './strings';
+import type { Theme } from './theme';
+import { Choice } from './Choice';
 
 interface ToolbarProps {
+  title: string;
+  theme: Theme;
+  onTheme: (theme: Theme) => void;
   lang: Lang;
   onLanguage: (lang: Lang) => void;
   locked: boolean;
@@ -28,22 +36,10 @@ interface ToolbarProps {
   onExport: (format: ExportFormat) => void;
 }
 
-function BrandMark() {
-  return (
-    <svg viewBox="0 0 34 34" width="33" height="33" aria-hidden="true">
-      <rect width="34" height="34" rx="7" fill="#16745a" />
-      <path
-        d="m5 24 9-16 7 12 4-6 6 10M14 8l.5 10 6 2"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="2.1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 export function EditorToolbar({
+  title,
+  theme,
+  onTheme,
   lang,
   onLanguage,
   locked,
@@ -62,16 +58,18 @@ export function EditorToolbar({
   const [zoom, setZoom] = useState(() => desktop?.getZoomFactor() ?? 1);
   const [windowControlsVisible, setWindowControlsVisible] = useState(true);
   const [menu, setMenu] = useState<'file' | 'export' | null>(null);
-  const exportRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const saveButton = useRef<HTMLButtonElement>(null);
+  const shortcut = /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl+';
   const pickFile = () => {
     setMenu(null);
     if (onPickFile) onPickFile();
     else picker.current?.click();
   };
-
+  const returnFocus = (event: Event) => {
+    // A command may have opened a dialog; let its focus scope take over.
+    if (document.querySelector('[role="dialog"]')) event.preventDefault();
+  };
   useEffect(() => {
     if (!desktop) return;
     const overlay = navigator.windowControlsOverlay;
@@ -87,28 +85,12 @@ export function EditorToolbar({
       window.removeEventListener('resize', update);
     };
   }, [desktop]);
-
   useEffect(() => {
     if (locked) setMenu(null);
   }, [locked]);
-
-  useEffect(() => {
-    if (!menu) return;
-    const close = (event: PointerEvent) => {
-      const ref = menu === 'file' ? menuRef : exportRef;
-      if (!ref.current?.contains(event.target as Node)) setMenu(null);
-    };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, [menu]);
-
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMenu(null);
-        return;
-      }
-      if (locked || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.defaultPrevented || locked || !(event.metaKey || event.ctrlKey) || event.altKey) return;
       const key = event.key.toLowerCase();
       if (key === 'o') {
         event.preventDefault();
@@ -116,16 +98,9 @@ export function EditorToolbar({
       } else if (key === 's') {
         event.preventDefault();
         (document.activeElement as HTMLElement)?.blur();
-        // Field blur commits the edit. Click the rendered save action after React has updated.
         queueMicrotask(() => saveButton.current?.click());
       } else if (key === 'z' || key === 'y') {
-        const target = event.target;
-        if (
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement
-        )
-          return;
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
         event.preventDefault();
         onHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo');
       }
@@ -133,7 +108,6 @@ export function EditorToolbar({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   });
-
   return (
     <>
       {desktop && <div aria-hidden="true" style={{ height: 48 / zoom }} />}
@@ -142,117 +116,140 @@ export function EditorToolbar({
         data-window-controls={desktop ? (windowControlsVisible ? 'visible' : 'hidden') : undefined}
         style={desktop ? ({ '--titlebar-scale': 1 / zoom } as CSSProperties) : undefined}
       >
-        <div className="brand" aria-label="Route Studio">
-          <BrandMark />
-          <span>Route Studio</span>
+        <div className="brand" role="img" aria-label="Route Studio">
+          <span className="brand-mark" aria-hidden="true" />
         </div>
-        <div className="file-menu" ref={menuRef}>
-          <button
-            className="quiet"
-            aria-expanded={menu === 'file'}
-            onClick={() => setMenu(menu === 'file' ? null : 'file')}
-          >
-            {t.file}
-            <ChevronDown size={13} />
-          </button>
-          {menu === 'file' && (
-            <div className="dropdown" onClick={() => setMenu(null)}>
-              <button onClick={onNew}>
-                <FilePlus2 />
+        <div className="file-menu">
+          <DropdownMenu.Root open={menu === 'file'} onOpenChange={(open) => setMenu(open ? 'file' : null)}>
+            <DropdownMenu.Trigger>
+              <Button variant="ghost" m="0" color="gray">
+                {t.file}
+                <DropdownMenu.TriggerIcon />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content loop aria-label={t.file} onCloseAutoFocus={returnFocus}>
+              <DropdownMenu.Item onSelect={onNew}>
+                <FilePlus2 size={15} />
                 {t.new}
-              </button>
-              <button onClick={pickFile}>
-                <FolderOpen />
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={pickFile} shortcut={shortcut + 'O'}>
+                <FolderOpen size={15} />
                 {t.openFile}
-              </button>
-              <button onClick={onExample}>
-                <Mountain />
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={onExample}>
+                <Mountain size={15} />
                 {t.example}
-              </button>
-              <hr />
-              <button onClick={onSave}>
-                <Save />
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item aria-label={t.save} onSelect={onSave} shortcut={shortcut + 'S'}>
+                <Save size={15} />
                 {t.save}
-              </button>
-            </div>
-          )}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         </div>
         <div className="history-tools">
-          <button
-            className="icon"
+          <IconButton
+            variant="ghost"
+            m="0"
+            color="gray"
             title={t.undo + ' (⌘/Ctrl Z)'}
             aria-label={t.undo}
             disabled={!canUndo}
             onClick={() => onHistory('undo')}
           >
             <Undo2 />
-          </button>
-          <button
-            className="icon"
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            m="0"
+            color="gray"
             title={t.redo + ' (⌘/Ctrl Shift Z)'}
             aria-label={t.redo}
             disabled={!canRedo}
             onClick={() => onHistory('redo')}
           >
             <Redo2 />
-          </button>
+          </IconButton>
         </div>
-        {desktop && <div className="titlebar-drag-space" aria-hidden="true" />}
+        <div className="titlebar-drag-space">
+          <h1 title={title}>{title}</h1>
+        </div>
         <div className="top-actions">
+          <label className="theme-picker" title={t.theme}>
+            {theme === 'system' ? <Monitor /> : theme === 'dark' ? <Moon /> : <Sun />}
+            <Choice
+              variant="ghost"
+              m="0"
+              aria-label={t.theme}
+              value={theme}
+              onValueChange={(v) => onTheme(v as Theme)}
+              options={[
+                { value: 'system', label: t.themeSystem },
+                { value: 'light', label: t.themeLight },
+                { value: 'dark', label: t.themeDark },
+              ]}
+            />
+          </label>
           <label className="language">
             <Globe2 size={16} />
-            <select aria-label={t.lang} value={lang} onChange={(e) => onLanguage(e.target.value as Lang)}>
-              <option value="en">{strings.en.languageName}</option>
-              <option value="zh">{strings.zh.languageName}</option>
-            </select>
+            <Choice
+              variant="ghost"
+              m="0"
+              aria-label={t.lang}
+              value={lang}
+              onValueChange={(v) => onLanguage(v as Lang)}
+              options={[
+                { value: 'en', label: strings.en.languageName },
+                { value: 'zh', label: strings.zh.languageName },
+              ]}
+            />
           </label>
-          <button className="button" aria-label={t.open} title={t.open} onClick={pickFile}>
+          <Button
+            variant="surface"
+            color="gray"
+            className="file-action"
+            aria-label={t.open}
+            title={t.open}
+            onClick={pickFile}
+          >
             <FolderOpen />
             <span>{t.open}</span>
-          </button>
-          <button
-            className="button"
+          </Button>
+          <Button
+            variant="surface"
+            color="gray"
+            className="file-action"
             aria-label={t.save}
             title={t.save}
             ref={saveButton}
-            onClick={() => {
-              setMenu(null);
-              onSave();
-            }}
+            onClick={onSave}
           >
             <Save />
             <span>{t.save}</span>
-          </button>
-          <div className="export-actions" ref={exportRef}>
-            <button className="primary" onClick={() => onExport('rte')} aria-haspopup="dialog">
+          </Button>
+          <div className="export-actions">
+            <Button onClick={() => onExport('rte')} aria-haspopup="dialog">
               <ArrowDownToLine />
               {t.export}
-            </button>
-            <button
-              className="primary export-formats"
-              aria-label={t.exportFormat}
-              title={t.exportFormat}
-              aria-expanded={menu === 'export'}
-              onClick={() => setMenu(menu === 'export' ? null : 'export')}
+            </Button>
+            <DropdownMenu.Root
+              open={menu === 'export'}
+              onOpenChange={(open) => setMenu(open ? 'export' : null)}
             >
-              <ChevronDown size={14} />
-            </button>
-            {menu === 'export' && (
-              <div className="dropdown">
+              <DropdownMenu.Trigger>
+                <IconButton className="export-formats" aria-label={t.exportFormat} title={t.exportFormat}>
+                  <DropdownMenu.TriggerIcon />
+                </IconButton>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end" aria-label={t.exportFormat} onCloseAutoFocus={returnFocus}>
                 {(['rte', 'gpx', 'kml', 'fit'] as const).map((format) => (
-                  <button
-                    key={format}
-                    aria-haspopup="dialog"
-                    onClick={() => {
-                      setMenu(null);
-                      onExport(format);
-                    }}
-                  >
+                  <DropdownMenu.Item key={format} onSelect={() => onExport(format)}>
                     {t.exportFormatTitle.replace('{format}', format.toUpperCase())}…
-                  </button>
+                  </DropdownMenu.Item>
                 ))}
-              </div>
-            )}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
           </div>
         </div>
       </header>

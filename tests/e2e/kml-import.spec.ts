@@ -1,3 +1,4 @@
+import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
 import { loadProject } from '../../src/files/project';
 import { download, open } from './files';
@@ -24,7 +25,7 @@ test('opens a KML route with inherited heights and leaves other routes’ landma
   await page.goto('/');
   await open(page, 'routes.kml', Buffer.from(kml));
   const dialog = page.getByRole('dialog', { name: 'Choose a route to open' });
-  await dialog.getByRole('combobox').selectOption('0');
+  await selectOption(dialog.getByRole('combobox'), '0');
   await expect(dialog.getByRole('checkbox', { name: 'Use the altitude values in this KML' })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Route A', exact: true })).toBeVisible();

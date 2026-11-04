@@ -1,3 +1,5 @@
+import { Choice } from './Choice';
+import { TextField, Checkbox, Button, IconButton } from '@radix-ui/themes';
 import { useId } from 'react';
 import { Check, ChevronLeft, ChevronRight, MapPin, Trash2 } from 'lucide-react';
 import { anchorDistance, type Point, type RouteDocument, type Sample, type Station } from '../domain/model';
@@ -5,6 +7,7 @@ import { deleteVertex, moveVertex, updateStation } from '../domain/edit';
 import type { Copy } from './strings';
 import { Field } from './Field';
 import { StationPosition } from './StationPosition';
+import { PropertyGroup } from './PropertyGroup';
 
 export type Selection =
   { type: 'route' } | { type: 'vertex' | 'station'; id: string } | { type: 'sample'; index: number };
@@ -34,10 +37,16 @@ function Stepper({
   return (
     <div className="index-stepper">
       <label htmlFor={inputId}>{label}</label>
-      <button aria-label={label + ' −1'} disabled={!index} onClick={() => select(index - 1)}>
+      <IconButton
+        variant="surface"
+        color="gray"
+        aria-label={label + ' −1'}
+        disabled={!index}
+        onClick={() => select(index - 1)}
+      >
         <ChevronLeft size={14} />
-      </button>
-      <input
+      </IconButton>
+      <TextField.Root
         id={inputId}
         type="number"
         min={1}
@@ -53,9 +62,15 @@ function Stepper({
           if (e.key === 'Enter') e.currentTarget.blur();
         }}
       />
-      <button aria-label={label + ' +1'} disabled={index === count - 1} onClick={() => select(index + 1)}>
+      <IconButton
+        variant="surface"
+        color="gray"
+        aria-label={label + ' +1'}
+        disabled={index === count - 1}
+        onClick={() => select(index + 1)}
+      >
         <ChevronRight size={14} />
-      </button>
+      </IconButton>
     </div>
   );
 }
@@ -98,6 +113,8 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
             key={key}
             label={t[key]}
             number
+            increment={0.00001}
+            unit="°"
             onInvalid={() => status(t.invalidNumber)}
             min={key === 'lat' ? -90 : -180}
             max={key === 'lat' ? 90 : 180}
@@ -133,13 +150,17 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
               index={doc.vertices.indexOf(v)}
               select={(i) => choose({ type: 'vertex', id: doc.vertices[i].id })}
             />
-            {coords(v, (p) => change(moveVertex(doc, v.id, p)))}
+            <PropertyGroup title={t.geometry}>
+              {coords(v, (p) => change(moveVertex(doc, v.id, p)))}
+            </PropertyGroup>
             <div className="inspector-actions">
-              <button className="sub-action" onClick={addSample}>
+              <Button variant="surface" color="gray" onClick={addSample}>
                 {t.elevation}
-              </button>
-              <button
-                className="danger"
+              </Button>
+              <Button
+                variant="soft"
+                color="red"
+
                 disabled={doc.vertices.length <= 2}
                 onClick={() => {
                   change(deleteVertex(doc, v.id));
@@ -148,51 +169,52 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
               >
                 <Trash2 />
                 {t.delete}
-              </button>
+              </Button>
             </div>
           </>
         ) : station ? (
           <>
-            <Field label={t.name} value={station.name} save={(name) => patchStation({ name })} />
-            <Field
-              label={t.short}
-              value={station.shortLabel ?? ''}
-              save={(shortLabel) => patchStation({ shortLabel: shortLabel || undefined })}
-            />
-            <label className="field">
-              <span>{t.type}</span>
-              <select
-                value={station.kind}
-                onChange={(e) => {
-                  const kind = e.target.value as Station['kind'];
-                  if (kind === 'start' || kind === 'finish') {
-                    const v = kind === 'start' ? doc.vertices[0] : doc.vertices.at(-1);
-                    patchStation({
-                      kind,
-                      boundary: true,
-                      anchor: v ? { vertexId: v.id, fraction: 0 } : null,
-                    });
-                  } else patchStation({ kind });
-                }}
-              >
-                {(['start', 'finish', 'cp', 'poi'] as const).map((k) => (
-                  <option key={k} value={k}>
-                    {t[k]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="check-field">
-              <input
-                type="checkbox"
-                checked={station.boundary}
-                disabled={station.kind === 'start' || station.kind === 'finish'}
-                onChange={(e) => patchStation({ boundary: e.target.checked })}
+            <PropertyGroup title={t.attributes}>
+              <Field label={t.name} value={station.name} save={(name) => patchStation({ name })} />
+              <Field
+                label={t.short}
+                value={station.shortLabel ?? ''}
+                save={(shortLabel) => patchStation({ shortLabel: shortLabel || undefined })}
               />
-              {t.boundary}
-            </label>
+              <label className="field">
+                <span>{t.type}</span>
+                <Choice
+                  value={station.kind}
+                  onValueChange={(value) => {
+                    const kind = value as Station['kind'];
+                    if (kind === 'start' || kind === 'finish') {
+                      const v = kind === 'start' ? doc.vertices[0] : doc.vertices.at(-1);
+                      patchStation({
+                        kind,
+                        boundary: true,
+                        anchor: v ? { vertexId: v.id, fraction: 0 } : null,
+                      });
+                    } else patchStation({ kind });
+                  }}
+                  options={[
+                    ...(['start', 'finish', 'cp', 'poi'] as const).map((k) => ({
+                      value: k,
+                      label: <>{t[k]}</>,
+                    })),
+                  ]}
+                />
+              </label>
+              <label className="check-field">
+                <Checkbox
+                  checked={station.boundary}
+                  disabled={station.kind === 'start' || station.kind === 'finish'}
+                  onCheckedChange={(value) => patchStation({ boundary: value === true })}
+                />
+                {t.boundary}
+              </label>
+            </PropertyGroup>
             <StationPosition
-              key={station.id + '/' + station.anchor?.vertexId + '/' + station.anchor?.fraction}
+              key={station.id}
               doc={doc}
               station={station}
               t={t}
@@ -202,35 +224,48 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
               }}
               onPick={() => setTool('stationAnchor')}
             />
-            <h3>{t.location}</h3>
-            {station.location ? (
-              coords(station.location, (p) => patchStation({ location: p }))
-            ) : (
-              <p className="hint">{t.same}</p>
-            )}
-            <div className="inspector-actions">
-              <button className="sub-action" onClick={() => setTool('stationLocation')}>
-                <MapPin />
-                {t.pick}
-              </button>
-              {station.location && (
-                <button className="sub-action" onClick={() => patchStation({ location: undefined })}>
-                  {t.reset}
-                </button>
+            <PropertyGroup title={t.location}>
+              {station.location ? (
+                coords(station.location, (p) => patchStation({ location: p }))
+              ) : (
+                <p className="hint">{t.same}</p>
               )}
-              {station.kind !== 'start' && station.kind !== 'finish' && (
-                <button
-                  className="danger"
-                  onClick={() => {
-                    change({ ...doc, stations: doc.stations.filter((s) => s.id !== station.id) });
-                    choose({ type: 'route' });
-                  }}
+              <div className="inspector-actions">
+                <Button
+                  variant="surface"
+                  color="gray"
+
+                  onClick={() => setTool('stationLocation')}
                 >
-                  <Trash2 />
-                  {t.delete}
-                </button>
-              )}
-            </div>
+                  <MapPin />
+                  {t.pick}
+                </Button>
+                {station.location && (
+                  <Button
+                    variant="surface"
+                    color="gray"
+
+                    onClick={() => patchStation({ location: undefined })}
+                  >
+                    {t.reset}
+                  </Button>
+                )}
+                {station.kind !== 'start' && station.kind !== 'finish' && (
+                  <Button
+                    variant="soft"
+                    color="red"
+
+                    onClick={() => {
+                      change({ ...doc, stations: doc.stations.filter((s) => s.id !== station.id) });
+                      choose({ type: 'route' });
+                    }}
+                  >
+                    <Trash2 />
+                    {t.delete}
+                  </Button>
+                )}
+              </div>
+            </PropertyGroup>
           </>
         ) : sample && selected.type === 'sample' ? (
           <>
@@ -240,80 +275,95 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
               index={selected.index}
               select={toSample}
             />
-            <p className="metric-line">
-              {t.distance} <strong>{(anchorDistance(doc, sample.anchor) / 1000).toFixed(3)} km</strong>
-            </p>
-            <Field
-              label={t.height}
-              describedBy={issue ? 'inspector-diagnostic' : undefined}
-              value={sample.height}
-              number
-              optional
-              onInvalid={() => status(t.invalidNumber)}
-              save={(raw) =>
-                change({
-                  ...doc,
-                  elevation: doc.elevation.map((s, i) =>
-                    i === selected.index ? { ...s, height: raw === '' ? null : Number(raw) } : s,
-                  ),
-                })
-              }
-            />
             {diagnostic}
-            <div className="inspector-actions">
-              <button className="sub-action" onClick={missing}>
-                {t.nextMissing}
-              </button>
-              <button
-                className="danger"
-                onClick={() => {
-                  change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
-                  choose({ type: 'route' });
-                }}
-              >
-                <Trash2 />
-                {t.delete}
-              </button>
-            </div>
+            <PropertyGroup title={t.elevation}>
+              <p className="metric-line">
+                {t.distance} <strong>{(anchorDistance(doc, sample.anchor) / 1000).toFixed(3)} km</strong>
+              </p>
+              <Field
+                label={t.height}
+                displayLabel={t.elevation}
+                describedBy={issue ? 'inspector-diagnostic' : undefined}
+                value={sample.height}
+                number
+                unit="m"
+                optional
+                onInvalid={() => status(t.invalidNumber)}
+                save={(raw) =>
+                  change({
+                    ...doc,
+                    elevation: doc.elevation.map((s, i) =>
+                      i === selected.index ? { ...s, height: raw === '' ? null : Number(raw) } : s,
+                    ),
+                  })
+                }
+              />
+              <div className="inspector-actions">
+                <Button variant="surface" color="gray" onClick={missing}>
+                  {t.nextMissing}
+                </Button>
+                <Button
+                  variant="soft"
+                  color="red"
+
+                  onClick={() => {
+                    change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
+                    choose({ type: 'route' });
+                  }}
+                >
+                  <Trash2 />
+                  {t.delete}
+                </Button>
+              </div>
+            </PropertyGroup>
           </>
         ) : (
           <>
-            <Field label={t.name} value={doc.name} save={(name) => change({ ...doc, name })} />
-            <label className="field">
-              <span>{t.reference}</span>
-              <select
-                value={doc.elevationReference}
-                onChange={(e) => change({ ...doc, elevationReference: Number(e.target.value) as 0 | 1 | 2 })}
-              >
-                <option value={0}>{t.unknown}</option>
-                <option value={1}>{t.msl}</option>
-                <option value={2}>{t.wgs}</option>
-              </select>
-            </label>
-            <h3>{t.geometry}</h3>
-            <p className="metric-line">
-              {t.geometry}
-              <strong>{doc.vertices.length}</strong>
-            </p>
-            {doc.vertices.length > 0 && (
-              <button
-                className="sub-action"
-                onClick={() => choose({ type: 'vertex', id: doc.vertices[0].id })}
-              >
-                {t.first}
-              </button>
-            )}
-            <h3>{t.elevation}</h3>
-            <p className="metric-line">
-              {t.missingCount}
-              <strong>{doc.elevation.filter((s) => s.height === null).length}</strong>
-            </p>
-            {doc.elevation.some((s) => s.height === null) && (
-              <button className="sub-action" onClick={missing}>
-                {t.nextMissing}
-              </button>
-            )}
-            <p className="hint">{t.sampleHelp}</p>
+            <PropertyGroup title={t.attributes}>
+              <Field label={t.name} value={doc.name} save={(name) => change({ ...doc, name })} />
+              <label className="field">
+                <span>{t.reference}</span>
+                <Choice
+                  value={doc.elevationReference}
+                  onValueChange={(value) =>
+                    change({ ...doc, elevationReference: Number(value) as 0 | 1 | 2 })
+                  }
+                  options={[
+                    { value: 0, label: <>{t.unknown}</> },
+                    { value: 1, label: <>{t.msl}</> },
+                    { value: 2, label: <>{t.wgs}</> },
+                  ]}
+                />
+              </label>
+            </PropertyGroup>
+            <PropertyGroup title={t.geometry}>
+              <p className="metric-line">
+                {t.geometry}
+                <strong>{doc.vertices.length}</strong>
+              </p>
+              {doc.vertices.length > 0 && (
+                <Button
+                  variant="surface"
+                  color="gray"
+
+                  onClick={() => choose({ type: 'vertex', id: doc.vertices[0].id })}
+                >
+                  {t.first}
+                </Button>
+              )}
+            </PropertyGroup>
+            <PropertyGroup title={t.elevation}>
+              <p className="metric-line">
+                {t.missingCount}
+                <strong>{doc.elevation.filter((s) => s.height === null).length}</strong>
+              </p>
+              {doc.elevation.some((s) => s.height === null) && (
+                <Button variant="surface" color="gray" onClick={missing}>
+                  {t.nextMissing}
+                </Button>
+              )}
+              <p className="hint">{t.sampleHelp}</p>
+            </PropertyGroup>
           </>
         )}
       </div>

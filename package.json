@@ -25,6 +25,7 @@
     "desktop:compile": "node scripts/build-electron.mjs"
   },
   "dependencies": {
+    "@radix-ui/themes": "3.3.0",
     "cborg": "6.2.1",
     "fast-xml-parser": "5.11.2",
     "fit-file-parser": "6.2.3",

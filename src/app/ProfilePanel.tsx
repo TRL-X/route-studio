@@ -1,3 +1,4 @@
+import { Button, IconButton } from '@radix-ui/themes';
 import { useState, type ReactNode } from 'react';
 import { Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Copy } from './strings';
@@ -77,19 +78,29 @@ export function ProfilePanel({
         <span className="sample-count">
           {count} {t.samples}
         </span>
-        <button
-          className="sub-action gap-fill"
+        <Button
+          variant="surface"
+          color="gray"
+
           title={t.interpolationHint}
           disabled={!canFill}
           onClick={onFill}
         >
           {t.interpolateGaps}
-        </button>
-        <button className="sub-action terrain-action" disabled={!canFetch} onClick={onFetch}>
+        </Button>
+        <Button
+          variant="surface"
+          color="gray"
+          className="terrain-action"
+          disabled={!canFetch}
+          onClick={onFetch}
+        >
           {t.fetchElevations}
-        </button>
-        <button
-          className="icon profile-toggle"
+        </Button>
+        <IconButton
+          variant="ghost"
+          color="gray"
+
           aria-label={collapsed ? t.expandProfile : t.collapseProfile}
           title={collapsed ? t.expandProfile : t.collapseProfile}
           aria-expanded={!collapsed}
@@ -97,7 +108,7 @@ export function ProfilePanel({
           onClick={() => setCollapsed(!collapsed)}
         >
           {collapsed ? <ChevronUp /> : <ChevronDown />}
-        </button>
+        </IconButton>
       </div>
       <div className="profile-frame" id="profile-frame" hidden={collapsed}>
         {children}

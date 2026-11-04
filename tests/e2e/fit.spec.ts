@@ -1,3 +1,4 @@
+import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
 import { multisportActivity, indoorActivity, outAndBackCourse } from '../files/fit-fixtures';
 import { loadProject } from '../../src/files/project';
@@ -30,7 +31,7 @@ test('drops a multisport FIT and opens just the selected session', async ({ page
   );
   await page.locator('.shell').dispatchEvent('drop', { dataTransfer: transfer });
   const dialog = page.getByRole('dialog', { name: 'Choose a route to open' });
-  await dialog.getByRole('combobox').selectOption('1');
+  await selectOption(dialog.getByRole('combobox'), '1');
   await dialog.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'race · 2 · cycling', exact: true })).toBeVisible();
   await expect(page.getByText('2 vertices', { exact: true })).toBeVisible();

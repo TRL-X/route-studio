@@ -1,3 +1,4 @@
+import { Button } from '@radix-ui/themes';
 import { Check } from 'lucide-react';
 import type { Anchor, Station } from '../domain/model';
 import type { StationPassage } from '../domain/projection';
@@ -26,7 +27,9 @@ export function StationPassOptions({ candidates, positions, stationId, meters, t
         const after = others[next]?.station;
         const context = [before, after].flatMap((s) => (s ? [s.name || t[s.kind]] : [])).join(' → ');
         return (
-          <button
+          <Button
+            variant={active ? 'soft' : 'surface'}
+            color={active ? 'blue' : 'gray'}
             key={candidate.distance}
             type="button"
             className="station-pass"
@@ -37,7 +40,7 @@ export function StationPassOptions({ candidates, positions, stationId, meters, t
             <b>{(candidate.distance / 1000).toFixed(3)} km</b>
             {active && <Check size={13} />}
             {context && <small>{context}</small>}
-          </button>
+          </Button>
         );
       })}
     </div>
