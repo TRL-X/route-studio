@@ -1,6 +1,15 @@
+import {
+  Checkbox,
+  Button,
+  IconButton,
+  Theme,
+  SegmentedControl,
+  Card,
+  Spinner,
+  Callout,
+} from '@radix-ui/themes';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  Activity,
   Check,
   Layers,
   Map as MapIcon,
@@ -36,11 +45,14 @@ import { ProfilePanel } from './ProfilePanel';
 import { ElevationRepair } from './ElevationRepair';
 import { Inspector, type Selection, type Tool } from './Inspector';
 import { useHistory } from './history';
-import { runIO, type Choice, type IOResult } from './io';
+import { runIO, type Choice as TrackChoice, type IOResult } from './io';
 import { initialLanguage, strings, type Lang } from './strings';
 import './editor.css';
 import { saveFile } from './saveFile';
 import { DesktopBluetooth } from './DesktopBluetooth';
+import { useTheme } from './theme';
+import { Choice } from './Choice';
+import { Modal } from './Modal';
 
 type Localized = { en: string; zh: string };
 type Problem = Localized & { target?: Selection };
@@ -73,7 +85,7 @@ interface Replacement {
   sample?: boolean;
 }
 interface ImportChoice {
-  list: Choice[];
+  list: TrackChoice[];
   file: File;
   index: number;
   accept: boolean;
@@ -90,6 +102,7 @@ export function Editor({
   const { doc } = history;
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
+  const { theme, scheme, changeTheme } = useTheme();
   const [selected, choose] = useState<Selection>({ type: 'route' });
   const [revealSelection, setRevealSelection] = useState(0);
   const [tool, setTool] = useState<Tool>('select');
@@ -362,11 +375,13 @@ export function Editor({
   }
   useEffect(() => {
     const dismiss = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || (event.target instanceof Element && event.target.closest('dialog')))
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        (event.target instanceof Element &&
+          event.target.closest('[role="dialog"], [role="menu"], [role="listbox"]'))
+      )
         return;
-      setPending(null);
-      setChoices(null);
-      setElevationPreview(null);
       setPanel(null);
       setTool('select');
     };
@@ -382,7 +397,13 @@ export function Editor({
     stationLocation: t.locating,
   }[tool];
   return (
-    <div
+    <Theme
+      appearance={scheme}
+      accentColor="blue"
+      grayColor="slate"
+      radius="medium"
+      scaling="90%"
+      panelBackground="solid"
       className="studio"
       data-desktop={window.routeStudioDesktop?.platform}
       onDragOver={(e) => e.preventDefault()}
@@ -394,6 +415,9 @@ export function Editor({
     >
       <div className="shell" inert={locked}>
         <EditorToolbar
+          title={doc.name || t.untitled}
+          theme={theme}
+          onTheme={changeTheme}
           lang={lang}
           onLanguage={setLang}
           locked={locked}
@@ -410,23 +434,6 @@ export function Editor({
             setExportFormat(format);
           }}
         />
-        <div className="document-bar">
-          <h1 title={doc.name || t.untitled}>{doc.name || t.untitled}</h1>
-          <div className="course-totals">
-            <div>
-              <span>{t.total}</span>
-              <b>
-                {length.toFixed(2)} <small>km</small>
-              </b>
-            </div>
-            <div>
-              <span>{t.gain}</span>
-              <b>
-                {gainText} <small>m</small>
-              </b>
-            </div>
-          </div>
-        </div>
         <div className="workspace" data-panel={panel ?? ''}>
           <RouteOutline
             key={session}
@@ -441,26 +448,28 @@ export function Editor({
           />
           <main className="canvas">
             <div className="compact-panels">
-              <button
+              <Button
+                variant={panel === 'outline' ? 'soft' : 'ghost'}
                 aria-pressed={panel === 'outline'}
                 onClick={() => setPanel(panel === 'outline' ? null : 'outline')}
               >
                 <Layers size={14} />
                 {t.outline}
-              </button>
+              </Button>
               <span className="selection-summary">
                 {selectionTitle}
                 {focusedMeters != null &&
                   Number.isFinite(focusedMeters) &&
                   ' · ' + (focusedMeters / 1000).toFixed(2) + ' km'}
               </span>
-              <button
+              <Button
+                variant={panel === 'inspector' ? 'soft' : 'ghost'}
                 aria-pressed={panel === 'inspector'}
                 onClick={() => setPanel(panel === 'inspector' ? null : 'inspector')}
               >
                 <PanelsTopLeft size={14} />
                 {panel === 'inspector' ? t.close : t.editSelection}
-              </button>
+              </Button>
             </div>
             <section className="map-area">
               <div className="map-tools">
@@ -468,7 +477,17 @@ export function Editor({
                   <MapIcon size={15} />
                   {t.routeMap}
                 </span>
-                <div className="tools" aria-label={t.tools}>
+                <SegmentedControl.Root
+                  className="tools"
+                  size="2"
+                  value={tool}
+                  aria-label={t.tools}
+                  onValueChange={(value) => {
+                    if (value === 'insert' && doc.vertices.length < 2) return;
+                    setNotice(null);
+                    setTool(value as Tool);
+                  }}
+                >
                   {(
                     [
                       ['select', MousePointer2, t.select],
@@ -476,21 +495,26 @@ export function Editor({
                       ['insert', Waypoints, t.insert],
                     ] as const
                   ).map(([k, Icon, label]) => (
-                    <button
+                    <SegmentedControl.Item
                       key={k}
-                      className={tool === k ? 'on' : ''}
-                      aria-pressed={tool === k}
+                      value={k}
                       title={label}
-                      disabled={k === 'insert' && doc.vertices.length < 2}
-                      onClick={() => {
-                        setNotice(null);
-                        setTool(k);
-                      }}
+                      aria-disabled={k === 'insert' && doc.vertices.length < 2}
                     >
-                      <Icon size={14} />
-                      {label}
-                    </button>
+                      <span className="tool-label">
+                        <Icon size={14} />
+                        {label}
+                      </span>
+                    </SegmentedControl.Item>
                   ))}
+                </SegmentedControl.Root>
+                <div className="course-totals" aria-label={t.info}>
+                  <span title={t.total}>
+                    {length.toFixed(2)} <small>km</small>
+                  </span>
+                  <span title={t.gain}>
+                    ↑ {gainText} <small>m</small>
+                  </span>
                 </div>
               </div>
               <div className="map-frame">
@@ -498,6 +522,7 @@ export function Editor({
                   key={session}
                   doc={doc}
                   lang={lang}
+                  scheme={scheme}
                   tool={tool}
                   axis={axis}
                   revealSelection={revealSelection}
@@ -524,15 +549,20 @@ export function Editor({
                   }}
                 />
                 {!doc.vertices.length && tool !== 'append' && (
-                  <div className="empty-overlay">
+                  <Card className="empty-overlay" size="3">
                     <PanelsTopLeft size={25} />
                     <h2>{t.empty}</h2>
                     <p>{t.emptyHelp}</p>
-                    <button className="primary" onClick={() => setTool('append')}>
+                    <Button
+                      variant="solid"
+                      color="blue"
+
+                      onClick={() => setTool('append')}
+                    >
                       <Plus />
                       {t.append}
-                    </button>
-                  </div>
+                    </Button>
+                  </Card>
                 )}
               </div>
             </section>
@@ -585,16 +615,21 @@ export function Editor({
           <span className="coord-system">WGS 84</span>
         </footer>
         {problem && (
-          <div className="problem" data-severity="error" role="alert">
-            <ShieldCheck size={20} />
-            <div>
-              <strong>{t.file}</strong>
-              <p>{problem[lang]}</p>
-            </div>
-            <button className="icon" aria-label={t.close} onClick={() => setProblem(null)}>
+          <Callout.Root className="problem" color="red" role="alert">
+            <Callout.Icon>
+              <ShieldCheck size={20} />
+            </Callout.Icon>
+            <Callout.Text>{problem[lang]}</Callout.Text>
+            <IconButton
+              variant="ghost"
+              color="gray"
+
+              aria-label={t.close}
+              onClick={() => setProblem(null)}
+            >
               <X />
-            </button>
-          </div>
+            </IconButton>
+          </Callout.Root>
         )}
       </div>
       {exportFormat === 'rte' && (
@@ -631,74 +666,80 @@ export function Editor({
       )}
       {busy && (
         <div className="overlay">
-          <div className="processing" role="status">
-            <Activity size={18} />
-            {t.busy}
-          </div>
+          <Card>
+            <div className="processing" role="status">
+              <Spinner />
+              {t.busy}
+            </div>
+          </Card>
         </div>
       )}
       {pending && (
-        <div className="overlay">
-          <section className="dialog" role="dialog" aria-modal="true" aria-label={t.discardTitle}>
-            <h2>{t.discardTitle}</h2>
-            <p>{t.replace}</p>
-            <div className="dialog-actions">
-              <button className="button" autoFocus onClick={() => setPending(null)}>
-                {t.cancel}
-              </button>
-              <button className="primary" onClick={() => replace(pending)}>
-                {t.confirm}
-              </button>
-            </div>
-          </section>
-        </div>
+        <Modal className="dialog" title={t.discardTitle} onClose={() => setPending(null)}>
+          <p>{t.replace}</p>
+          <div className="dialog-actions">
+            <Button
+              variant="surface"
+              color="gray"
+
+              autoFocus
+              onClick={() => setPending(null)}
+            >
+              {t.cancel}
+            </Button>
+            <Button variant="solid" color="blue" onClick={() => replace(pending)}>
+              {t.confirm}
+            </Button>
+          </div>
+        </Modal>
       )}
       <DesktopBluetooth lang={lang} />
       {choices && (
-        <div className="overlay">
-          <section className="dialog" role="dialog" aria-modal="true" aria-label={t.selectTrack}>
-            <span className="eyebrow">{t.openFile}</span>
-            <h2>{t.selectTrack}</h2>
-            <select
-              autoFocus
-              aria-label={t.route}
-              value={choices.index}
-              onChange={(e) => setChoices({ ...choices, index: Number(e.target.value), accept: true })}
+        <Modal className="dialog" title={t.selectTrack} onClose={() => setChoices(null)}>
+          <Choice
+            autoFocus
+            aria-label={t.route}
+            value={choices.index}
+            onValueChange={(value) => setChoices({ ...choices, index: Number(value), accept: true })}
+            options={[
+              ...choices.list.map((item, i) => ({
+                value: i,
+                label: (
+                  <>
+                    {item.name} · {item.pointCount} {t.vertices}
+                  </>
+                ),
+              })),
+            ]}
+          />
+          {choices.list[choices.index].hasUnconfirmedHeights && (
+            <>
+              <p>{t.unconfirmed}</p>
+              <label className="check-field">
+                <Checkbox
+                  checked={choices.accept}
+                  onCheckedChange={(value) => setChoices({ ...choices, accept: value === true })}
+                />
+                {t.acceptHeights}
+              </label>
+            </>
+          )}
+          <div className="dialog-actions">
+            <Button variant="surface" color="gray" onClick={() => setChoices(null)}>
+              {t.cancel}
+            </Button>
+            <Button
+              variant="solid"
+              color="blue"
+
+              onClick={() => void openFile(choices.file, choices.index, choices.accept)}
             >
-              {choices.list.map((item, i) => (
-                <option key={i} value={i}>
-                  {item.name} · {item.pointCount} {t.vertices}
-                </option>
-              ))}
-            </select>
-            {choices.list[choices.index].hasUnconfirmedHeights && (
-              <>
-                <p>{t.unconfirmed}</p>
-                <label className="check-field">
-                  <input
-                    type="checkbox"
-                    checked={choices.accept}
-                    onChange={(e) => setChoices({ ...choices, accept: e.target.checked })}
-                  />
-                  {t.acceptHeights}
-                </label>
-              </>
-            )}
-            <div className="dialog-actions">
-              <button className="button" onClick={() => setChoices(null)}>
-                {t.cancel}
-              </button>
-              <button
-                className="primary"
-                onClick={() => void openFile(choices.file, choices.index, choices.accept)}
-              >
-                <Check />
-                {t.open}
-              </button>
-            </div>
-          </section>
-        </div>
+              <Check />
+              {t.open}
+            </Button>
+          </div>
+        </Modal>
       )}
-    </div>
+    </Theme>
   );
 }

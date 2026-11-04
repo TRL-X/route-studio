@@ -1,3 +1,5 @@
+import { Choice } from './Choice';
+import { Button } from '@radix-ui/themes';
 import { automaticDeclination, type DeclinationSettings, type RouteDocument } from '../domain/model';
 import {
   declinationSettings,
@@ -56,11 +58,15 @@ export function DeclinationFields({
     <div className="declination-fields">
       <label className="field">
         <span>{t.magMode}</span>
-        <select value={settings.mode} onChange={(e) => selectMode(e.target.value)}>
-          <option value="auto">{t.magAuto}</option>
-          <option value="manual">{t.magManual}</option>
-          <option value="omit">{t.magOmit}</option>
-        </select>
+        <Choice
+          value={settings.mode}
+          onValueChange={(value) => selectMode(value)}
+          options={[
+            { value: 'auto', label: <>{t.magAuto}</> },
+            { value: 'manual', label: <>{t.magManual}</> },
+            { value: 'omit', label: <>{t.magOmit}</> },
+          ]}
+        />
       </label>
       {settings.mode === 'auto' && (
         <>
@@ -87,13 +93,15 @@ export function DeclinationFields({
                   ? t.magPending
                   : t.magNoRoute}
           </p>
-          <button
-            className="sub-action"
+          <Button
+            variant="surface"
+            color="gray"
+
             disabled={!lookup.reference || lookup.pending}
             onClick={() => set(automaticDeclination(settings.date))}
           >
             {t.magRetry}
-          </button>
+          </Button>
         </>
       )}
       {settings.mode === 'manual' && (
@@ -110,6 +118,8 @@ export function DeclinationFields({
               key={key}
               label={label}
               number
+              increment={key === 'degrees' ? 0.1 : 0.00001}
+              unit="°"
               optional
               onInvalid={() => set({ ...settings, [key]: null })}
               value={settings[key]}

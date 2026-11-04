@@ -1,5 +1,18 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import {
+  Badge,
+  Button,
+  Callout,
+  Checkbox,
+  Flex,
+  IconButton,
+  Link,
+  Popover,
+  Text,
+  TextField,
+} from '@radix-ui/themes';
+import { useId, useRef, useState } from 'react';
 import { ChevronDown, Eye, EyeOff, Layers } from 'lucide-react';
+import { Choice } from '../app/Choice';
 import { strings, type Lang } from '../app/strings';
 import type { BasemapFailure, BasemapPreferences, BasemapProvider } from '../maps/basemap';
 
@@ -23,9 +36,6 @@ export function BasemapControls({
   const [draft, setDraft] = useState(preferences);
   const [showKey, setShowKey] = useState(false);
   const [missingKey, setMissingKey] = useState(false);
-  const host = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const provider = useRef<HTMLSelectElement>(null);
   const keyInput = useRef<HTMLInputElement>(null);
   const id = useId();
   const providerName = preferences.provider === 'tianditu' ? t.tianditu : 'OpenFreeMap';
@@ -40,173 +50,180 @@ export function BasemapControls({
       }[failure]
     : null;
 
-  function close() {
-    setOpen(false);
-    trigger.current?.focus();
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    provider.current?.focus();
-    const dismiss = (event: PointerEvent) => {
-      if (!host.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', dismiss);
-    return () => document.removeEventListener('pointerdown', dismiss);
-  }, [open]);
-
   return (
-    <div
-      className="rv-basemap-tools"
-      ref={host}
-      onKeyDown={(event) => {
-        if (!open) return;
-        event.stopPropagation();
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          close();
-        }
-      }}
-      onBlur={(event) => {
-        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-      }}
-    >
-      <div className="rv-basemap-bar">
-        <button
-          type="button"
-          className="rv-basemap-trigger"
-          ref={trigger}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? id : undefined}
-          onClick={() => {
-            if (open) close();
-            else {
-              setDraft({ ...preferences });
-              setShowKey(false);
-              setMissingKey(false);
-              setOpen(true);
-            }
-          }}
-        >
-          <Layers aria-hidden="true" />
-          <span>
-            {t.basemap}: {providerName}
-            {!preferences.enabled ? ` · ${t.off}` : ''}
-          </span>
-          <ChevronDown aria-hidden="true" />
-        </button>
-        {failure && (
-          <div className="rv-basemap-status">
-            <span role="status">{t.basemapUnavailable}</span>
-            {failure !== 'key' && (
-              <button type="button" onClick={onRetry}>
-                {t.basemapRetry}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      {storageFailed && (
-        <p className="rv-basemap-warning" role="status">
-          {t.basemapStorageFailed}
-        </p>
-      )}
-      {open && (
-        <form
-          id={id}
+    <div className="rv-basemap-tools">
+      <Popover.Root
+        open={open}
+        onOpenChange={(next) => {
+          if (next) {
+            setDraft({ ...preferences });
+            setShowKey(false);
+            setMissingKey(false);
+          }
+          setOpen(next);
+        }}
+      >
+        <Flex className="rv-basemap-bar" align="center" gap="2" wrap="wrap">
+          <Popover.Trigger>
+            <Button type="button" variant="surface" color="gray" className="rv-basemap-trigger">
+              <Layers aria-hidden="true" />
+              <span>
+                {t.basemap}: {providerName}
+                {!preferences.enabled ? ` · ${t.off}` : ''}
+              </span>
+              <ChevronDown aria-hidden="true" />
+            </Button>
+          </Popover.Trigger>
+          {failure && (
+            <Flex align="center" gap="2">
+              <Badge color="amber" variant="solid" role="status">
+                {t.basemapUnavailable}
+              </Badge>
+              {failure !== 'key' && (
+                <Button type="button" size="1" variant="surface" color="gray" onClick={onRetry}>
+                  {t.basemapRetry}
+                </Button>
+              )}
+            </Flex>
+          )}
+        </Flex>
+        <Popover.Content
           className="rv-basemap-panel"
-          role="dialog"
           aria-label={t.basemapSettings}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (draft.enabled && draft.provider === 'tianditu' && !draft.tiandituKey.trim()) {
-              setMissingKey(true);
-              keyInput.current?.focus();
-              return;
-            }
-            onApply({ ...draft, tiandituKey: draft.tiandituKey.trim() });
-            close();
-          }}
+          align="start"
+          sideOffset={8}
+          collisionPadding={12}
+          width="320px"
+          maxWidth="calc(100vw - 24px)"
+          maxHeight="var(--radix-popover-content-available-height)"
         >
-          <label className="rv-basemap-field">
-            {t.basemapProvider}
-            <select
-              ref={provider}
-              value={draft.provider}
-              onChange={(event) => {
-                setDraft({ ...draft, provider: event.target.value as BasemapProvider });
-                setMissingKey(false);
+          <Flex direction="column" gap="3" asChild>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (draft.enabled && draft.provider === 'tianditu' && !draft.tiandituKey.trim()) {
+                  setMissingKey(true);
+                  keyInput.current?.focus();
+                  return;
+                }
+                onApply({ ...draft, tiandituKey: draft.tiandituKey.trim() });
+                setOpen(false);
               }}
             >
-              <option value="openfreemap">OpenFreeMap</option>
-              <option value="tianditu">{t.tianditu}</option>
-            </select>
-          </label>
-          {draft.provider === 'tianditu' && (
-            <div className="rv-basemap-field">
-              <label htmlFor={`${id}-key`}>{t.basemapApiKey}</label>
-              <div className="rv-basemap-key">
-                <input
-                  id={`${id}-key`}
-                  ref={keyInput}
-                  type={showKey ? 'text' : 'password'}
-                  autoComplete="off"
-                  spellCheck={false}
-                  autoCapitalize="none"
-                  value={draft.tiandituKey}
-                  aria-invalid={missingKey || undefined}
-                  aria-describedby={missingKey ? `${id}-error` : undefined}
-                  onChange={(event) => {
-                    setDraft({ ...draft, tiandituKey: event.target.value });
+              <Flex direction="column" gap="1">
+                <Text as="label" htmlFor={`${id}-provider`} size="2" weight="medium">
+                  {t.basemapProvider}
+                </Text>
+                <Choice
+                  id={`${id}-provider`}
+                  value={draft.provider}
+                  onValueChange={(value) => {
+                    setDraft({ ...draft, provider: value as BasemapProvider });
                     setMissingKey(false);
                   }}
+                  options={[
+                    { value: 'openfreemap', label: 'OpenFreeMap' },
+                    { value: 'tianditu', label: t.tianditu },
+                  ]}
                 />
-                <button
-                  type="button"
-                  aria-label={showKey ? t.basemapHideKey : t.basemapShowKey}
-                  onClick={() => setShowKey(!showKey)}
-                >
-                  {showKey ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                </button>
-              </div>
-              {missingKey && (
-                <p id={`${id}-error`} className="rv-basemap-error" role="alert">
-                  {t.basemapKeyRequired}
-                </p>
+              </Flex>
+              {draft.provider === 'tianditu' && (
+                <Flex direction="column" gap="1">
+                  <Text as="label" htmlFor={`${id}-key`} size="2" weight="medium">
+                    {t.basemapApiKey}
+                  </Text>
+                  <TextField.Root
+                    id={`${id}-key`}
+                    ref={keyInput}
+                    type={showKey ? 'text' : 'password'}
+                    autoComplete="off"
+                    spellCheck={false}
+                    autoCapitalize="none"
+                    value={draft.tiandituKey}
+                    aria-invalid={missingKey || undefined}
+                    aria-describedby={missingKey ? `${id}-error` : undefined}
+                    onChange={(event) => {
+                      setDraft({ ...draft, tiandituKey: event.target.value });
+                      setMissingKey(false);
+                    }}
+                  >
+                    <TextField.Slot side="right" pr="2">
+                      <IconButton
+                        size="1"
+                        variant="ghost"
+                        color="gray"
+                        type="button"
+                        aria-label={showKey ? t.basemapHideKey : t.basemapShowKey}
+                        onClick={() => setShowKey(!showKey)}
+                      >
+                        {showKey ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                      </IconButton>
+                    </TextField.Slot>
+                  </TextField.Root>
+                  {missingKey && (
+                    <Text as="p" id={`${id}-error`} size="1" color="red" role="alert">
+                      {t.basemapKeyRequired}
+                    </Text>
+                  )}
+                  <Flex align="center" justify="between" gap="2" mt="1">
+                    <Link
+                      size="1"
+                      href="https://console.tianditu.gov.cn/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {t.basemapGetKey}
+                    </Link>
+                    {draft.tiandituKey && (
+                      <Button
+                        size="1"
+                        variant="surface"
+                        color="gray"
+                        type="button"
+                        onClick={() => setDraft({ ...draft, tiandituKey: '' })}
+                      >
+                        {t.basemapClearKey}
+                      </Button>
+                    )}
+                  </Flex>
+                </Flex>
               )}
-              <div className="rv-basemap-key-actions">
-                <a href="https://console.tianditu.gov.cn/" target="_blank" rel="noopener noreferrer">
-                  {t.basemapGetKey}
-                </a>
-                {draft.tiandituKey && (
-                  <button type="button" onClick={() => setDraft({ ...draft, tiandituKey: '' })}>
-                    {t.basemapClearKey}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          <label className="rv-basemap-toggle">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) => {
-                setDraft({ ...draft, enabled: event.target.checked });
-                setMissingKey(false);
-              }}
-            />
-            {t.basemapShow}
-          </label>
-          {message && <p className="rv-basemap-error">{message}</p>}
-          <p className="rv-basemap-note">{t.basemapLocalSettings}</p>
-          <div className="rv-basemap-actions">
-            <button type="button" onClick={close}>
-              {t.cancel}
-            </button>
-            <button type="submit">{t.basemapApply}</button>
-          </div>
-        </form>
+              <Text as="label" size="2">
+                <Flex align="center" gap="2">
+                  <Checkbox
+                    checked={draft.enabled}
+                    onCheckedChange={(checked) => {
+                      setDraft({ ...draft, enabled: checked === true });
+                      setMissingKey(false);
+                    }}
+                  />
+                  {t.basemapShow}
+                </Flex>
+              </Text>
+              {message && (
+                <Text as="p" size="1" color="red">
+                  {message}
+                </Text>
+              )}
+              <Text as="p" size="1" color="gray">
+                {t.basemapLocalSettings}
+              </Text>
+              <Flex justify="end" gap="2">
+                <Popover.Close>
+                  <Button type="button" variant="surface" color="gray">
+                    {t.cancel}
+                  </Button>
+                </Popover.Close>
+                <Button type="submit">{t.basemapApply}</Button>
+              </Flex>
+            </form>
+          </Flex>
+        </Popover.Content>
+      </Popover.Root>
+      {storageFailed && (
+        <Callout.Root className="rv-basemap-warning" size="1" color="amber" role="status">
+          <Callout.Text>{t.basemapStorageFailed}</Callout.Text>
+        </Callout.Root>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { TextField, Button, IconButton } from '@radix-ui/themes';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { File, Layers, Plus, Route, Search } from 'lucide-react';
 import type { RouteDocument } from '../domain/model';
@@ -55,7 +56,9 @@ export function RouteOutline({
         <Layers size={14} />
         {t.outline}
       </div>
-      <button
+      <Button
+        variant={selected.type === 'route' ? 'soft' : 'ghost'}
+        color={selected.type === 'route' ? 'blue' : 'gray'}
         className="route-item"
         aria-pressed={selected.type === 'route'}
         onClick={() => onSelect({ type: 'route' })}
@@ -67,32 +70,56 @@ export function RouteOutline({
             {doc.vertices.length} {t.vertices}
           </small>
         </span>
-      </button>
+      </Button>
       <div className="station-heading">
         <span>{t.stations}</span>
         <b>{doc.stations.length}</b>
-        <button
-          className="icon"
+        <IconButton
+          variant="ghost"
+          color="gray"
+
           aria-label={t.addStation}
           title={t.addStation}
           disabled={doc.vertices.length < 2}
           onClick={onAddStation}
         >
           <Plus />
-        </button>
+        </IconButton>
       </div>
-      <label className="filter">
-        <Search size={14} />
-        <input
-          aria-label={t.filter}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={t.filter}
-        />
-      </label>
-      <div className="station-list" ref={listRef}>
+      <TextField.Root
+        className="filter"
+        aria-label={t.filter}
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder={t.filter}
+      >
+        <TextField.Slot>
+          <Search size={14} />
+        </TextField.Slot>
+      </TextField.Root>
+      <div
+        className="station-list"
+        ref={listRef}
+        onKeyDown={(event) => {
+          if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+          const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.station-row'));
+          const index = rows.indexOf(event.target as HTMLButtonElement);
+          if (index < 0) return;
+          event.preventDefault();
+          const next =
+            event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? rows.length - 1
+                : Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
+          rows[next].focus();
+          onSelect({ type: 'station', id: stationList[next].station.id });
+        }}
+      >
         {stationList.map(({ station, meters }) => (
-          <button
+          <Button
+            variant={selected.type === 'station' && selected.id === station.id ? 'soft' : 'ghost'}
+            color={selected.type === 'station' && selected.id === station.id ? 'blue' : 'gray'}
             key={station.id}
             ref={selected.type === 'station' && selected.id === station.id ? selectedRow : undefined}
             className="station-row"
@@ -109,7 +136,7 @@ export function RouteOutline({
                 <span>{meters === null ? t.noAnchor : (meters / 1000).toFixed(2) + ' km'}</span>
               </small>
             </span>
-          </button>
+          </Button>
         ))}
         {!stationList.length && <p className="hint">{filter ? t.noStations : t.emptyStations}</p>}
       </div>

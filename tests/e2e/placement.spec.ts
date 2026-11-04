@@ -20,6 +20,10 @@ test('station placement previews, ignores empty space and commits one undoable e
   const bounds = (await map.boundingBox())!;
   const far = { x: bounds.width / 2, y: 18 };
   await add.click();
+  const mode = (await page.locator('.rv-mode').boundingBox())!;
+  expect(mode.y).toBeGreaterThan(bounds.y + bounds.height / 2);
+  expect(mode.y + mode.height).toBeLessThanOrEqual(bounds.y + bounds.height);
+  expect(Math.abs(mode.x + mode.width / 2 - (bounds.x + bounds.width / 2))).toBeLessThan(2);
   await map.click({ position: far });
   await expect(map.locator('.rv-snap-preview')).toHaveCount(0);
   await expect(markers).toHaveCount(4);
@@ -36,7 +40,7 @@ test('station placement previews, ignores empty space and commits one undoable e
   await undo.click();
   await expect(markers).toHaveCount(4);
   await expect(undo).toBeDisabled();
-  await page.getByRole('button', { name: 'Insert point', exact: true }).click();
+  await page.getByRole('radio', { name: 'Insert point', exact: true }).click();
   await map.click({ position: far });
   await expect(undo).toBeDisabled();
 });
@@ -72,6 +76,13 @@ test('a shared track asks which pass to use before creating the checkpoint', asy
   await add.click();
   await map.click({ position: hit });
   await expect(options).toHaveCount(2);
+  const bounds = (await map.boundingBox())!;
+  const panel = (await page.locator('.rv-pass-panel').boundingBox())!;
+  expect(panel.x).toBeGreaterThanOrEqual(bounds.x);
+  expect(panel.x + panel.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+  expect(panel.y).toBeGreaterThanOrEqual(bounds.y);
+  expect(panel.y).toBeLessThan(bounds.y + bounds.height / 2);
+  expect(panel.y + panel.height).toBeLessThanOrEqual(bounds.y + bounds.height);
   await expect(options.nth(0)).toContainText('Start → Turn');
   await expect(options.nth(1)).toContainText('Turn → Finish');
   await expect(markers).toHaveCount(3);

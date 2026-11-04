@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron';
 import { readFile, open, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -102,14 +102,14 @@ function createWindow() {
     show: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#233244',
-      symbolColor: '#f7faff',
+      color: nativeTheme.shouldUseDarkColors ? '#111113' : '#ffffff',
+      symbolColor: nativeTheme.shouldUseDarkColors ? '#ededed' : '#242424',
       height: 48,
     },
     ...(process.platform === 'darwin'
       ? { trafficLightPosition: { x: 16, y: 17 } }
       : { autoHideMenuBar: true }),
-    backgroundColor: '#f4f6f3',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111113' : '#ffffff',
     icon: path.join(app.getAppPath(), 'build/icons/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -272,6 +272,24 @@ ipcMain.handle('desktop:save', async (event, file: DesktopFile): Promise<boolean
   } finally {
     fileDialogOpen = false;
   }
+});
+
+function updateAppearance() {
+  if (!window || window.isDestroyed()) return;
+  const color = nativeTheme.shouldUseDarkColors ? '#111113' : '#ffffff';
+  window.setBackgroundColor(color);
+  if (process.platform !== 'darwin') {
+    window.setTitleBarOverlay({
+      color,
+      symbolColor: nativeTheme.shouldUseDarkColors ? '#ededed' : '#242424',
+    });
+  }
+}
+nativeTheme.on('updated', updateAppearance);
+ipcMain.on('desktop:theme', (event, theme) => {
+  if (!trustedSender(event) || !['system', 'light', 'dark'].includes(theme)) return;
+  nativeTheme.themeSource = theme;
+  updateAppearance();
 });
 
 ipcMain.on('desktop:state', (event, state) => {

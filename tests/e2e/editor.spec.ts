@@ -1,3 +1,4 @@
+import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
 import { strings } from '../../src/app/strings';
 import { loadProject } from '../../src/files/project';
@@ -20,11 +21,11 @@ const gpx = `<gpx version="1.1">
 
 test('desktop editor switches languages and retains the preference', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Interface language').selectOption('zh');
+  await selectOption(page.getByLabel('Interface language'), 'zh');
   await expect(page.getByRole('button', { name: strings.zh.save, exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: strings.zh.export, exact: true })).toBeVisible();
-  await page.getByLabel(strings.zh.lang).selectOption('en');
+  await selectOption(page.getByLabel(strings.zh.lang), 'en');
   await expect(page.getByRole('button', { name: strings.en.export, exact: true })).toBeVisible();
 });
 
@@ -110,7 +111,7 @@ test('opens a selected KML line with altitude values enabled by default', async 
   const useAltitude = dialog.getByRole('checkbox', { name: 'Use the altitude values in this KML' });
   await expect(useAltitude).toBeChecked();
   await useAltitude.uncheck();
-  await dialog.getByRole('combobox', { name: 'Route', exact: true }).selectOption('1');
+  await selectOption(dialog.getByRole('combobox', { name: 'Route', exact: true }), '1');
   await expect(useAltitude).toBeChecked();
   await dialog.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Long loop', exact: true })).toBeVisible();
@@ -149,16 +150,16 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   await page.getByRole('button', { name: strings.en.export, exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByText('Route processing options').click();
-  await dialog.getByLabel('Elevation sample spacing').selectOption('10');
-  await dialog.getByLabel('Geometry tolerance').selectOption('2');
-  await dialog.getByLabel('Smoothing window').selectOption('30');
+  await selectOption(dialog.getByLabel('Elevation sample spacing'), '10');
+  await selectOption(dialog.getByLabel('Geometry tolerance'), '2');
+  await selectOption(dialog.getByLabel('Smoothing window'), '30');
   await dialog.getByText('Compare elevation profiles').click();
   await expect(dialog.getByRole('img', { name: 'Compare elevation profiles' })).toBeVisible();
   await dialog.getByLabel('File name').fill('ridge.rte');
   await dialog.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: strings.en.export }).click();
   await dialog.getByText('Route processing options').click();
-  await expect(dialog.getByLabel('Smoothing window')).toHaveValue('30');
+  await expect(dialog.getByLabel('Smoothing window')).toHaveAttribute('data-value', '30');
   const grid = await download(page, 'Download RTE');
   expect(grid.name).toBe('ridge.rte');
   expect(readRte(grid.bytes).elevation.length).toBe(24);
@@ -167,7 +168,7 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
 test('creates and recovers an empty editable project', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'File', exact: true }).click();
-  await page.getByRole('button', { name: 'New route', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'New route', exact: true }).click();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('');
   await name.fill('Survey draft');
@@ -202,7 +203,7 @@ test('places a checkpoint and its separate landmark, inserts a vertex and edits 
   await page.getByRole('button', { name: 'Pick on map', exact: true }).click();
   await map.click({ position: { x: position.x + 12, y: position.y + 13 } });
   await expect(map.locator('.rv-connector')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Insert point', exact: true }).click();
+  await page.getByRole('radio', { name: 'Insert point', exact: true }).click();
   await map.click({ position });
   await expect(page.getByRole('button', { name: /Example route.*24 vertices/i })).toBeVisible();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -229,12 +230,12 @@ test('the export footer stays available on a narrow screen and only the chosen r
   await page.setViewportSize({ width: 360, height: 600 });
   const dialog = await openMagnetics(page);
   await dialog.getByText('Route processing options').click();
-  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveValue('10');
-  await expect(dialog.getByLabel('Geometry tolerance')).toHaveValue('2');
-  await expect(dialog.getByLabel('Smoothing window')).toHaveValue('10');
-  await dialog.getByLabel('Elevation sample spacing').selectOption('20');
-  await dialog.getByLabel('Geometry tolerance').selectOption('5');
-  await dialog.getByLabel('Smoothing window').selectOption('50');
+  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveAttribute('data-value', '10');
+  await expect(dialog.getByLabel('Geometry tolerance')).toHaveAttribute('data-value', '2');
+  await expect(dialog.getByLabel('Smoothing window')).toHaveAttribute('data-value', '10');
+  await selectOption(dialog.getByLabel('Elevation sample spacing'), '20');
+  await selectOption(dialog.getByLabel('Geometry tolerance'), '5');
+  await selectOption(dialog.getByLabel('Smoothing window'), '50');
   await dialog.getByLabel('File name').fill('bad/name');
   await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
   await dialog.getByLabel('File name').fill('Trail');
@@ -247,8 +248,8 @@ test('the export footer stays available on a narrow screen and only the chosen r
   await expect(page.getByRole('heading', { name: 'North ridge' })).toBeVisible();
   await openExport(page);
   await dialog.getByText('Route processing options').click();
-  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveValue('10');
-  await expect(dialog.getByLabel('Geometry tolerance')).toHaveValue('2');
-  await expect(dialog.getByLabel('Smoothing window')).toHaveValue('10');
+  await expect(dialog.getByLabel('Elevation sample spacing')).toHaveAttribute('data-value', '10');
+  await expect(dialog.getByLabel('Geometry tolerance')).toHaveAttribute('data-value', '2');
+  await expect(dialog.getByLabel('Smoothing window')).toHaveAttribute('data-value', '10');
   await expect(dialog.getByLabel('File name')).toHaveValue('North ridge');
 });

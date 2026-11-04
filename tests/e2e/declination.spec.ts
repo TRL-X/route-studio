@@ -1,3 +1,4 @@
+import { selectOption } from '../controls';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Route } from '@playwright/test';
 import { readRte } from '../../src/rte';
@@ -29,7 +30,10 @@ test('RTE imports preserve all three reference vectors until the user edits the 
     await open(page, id + '.rte', bytes);
     await expect(page.getByText(id + '.rte', { exact: true })).toBeVisible();
     await openMagnetics(page);
-    await expect(page.getByLabel('Declination mode')).toHaveValue(id === 'c' ? 'omit' : 'manual');
+    await expect(page.getByLabel('Declination mode')).toHaveAttribute(
+      'data-value',
+      id === 'c' ? 'omit' : 'manual',
+    );
     await disableExportProcessing(page);
     expect((await download(page, 'Download RTE')).bytes).toEqual(bytes);
   }
@@ -42,7 +46,7 @@ test('RTE imports preserve all three reference vectors until the user edits the 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await openMagnetics(page);
   await expect(angle).toHaveValue('-3.5');
-  await page.getByLabel('Declination mode').selectOption('omit');
+  await selectOption(page.getByLabel('Declination mode'), 'omit');
   expect(readRte((await download(page, 'Download RTE')).bytes).rte?.magneticDeclination).toBeUndefined();
   expect(calls).toBe(0);
 });
@@ -66,7 +70,7 @@ test('automatic lookup refreshes on date changes, retries a failure, and reopens
   await name.fill('Renamed');
   await name.press('Enter');
   await openMagnetics(page);
-  await expect(page.getByLabel('Declination mode')).toHaveValue('auto');
+  await expect(page.getByLabel('Declination mode')).toHaveAttribute('data-value', 'auto');
   await expect(page.getByText('-3.46° · BGS WMM2025')).toBeVisible();
   const referenceDate = page.getByLabel('Reference date (UTC)');
   await referenceDate.fill('2027-03-01');
@@ -100,14 +104,14 @@ test('automatic lookup refreshes on date changes, retries a failure, and reopens
   });
   expect(dates).toEqual(['2026-11-03', '2027-03-01', '2027-03-01']);
   await openMagnetics(page);
-  await page.getByLabel('Declination mode').selectOption('manual');
+  await selectOption(page.getByLabel('Declination mode'), 'manual');
   await expect(page.getByLabel('Magnetic declination (°)', { exact: true })).toHaveValue('0');
-  await expect(page.getByLabel('Reference longitude (°)')).toHaveValue('-180');
+  await expect(page.getByLabel('Reference longitude (°)', { exact: true })).toHaveValue('-180');
   await referenceDate.fill('2035-01-01');
   await referenceDate.press('Enter');
-  await page.getByLabel('Declination mode').selectOption('auto');
+  await selectOption(page.getByLabel('Declination mode'), 'auto');
   await expect(page.getByText(/WMM2025 lookup requires a date/)).toBeVisible();
-  await page.getByLabel('Declination mode').selectOption('omit');
+  await selectOption(page.getByLabel('Declination mode'), 'omit');
   expect(readRte((await download(page, 'Download RTE')).bytes).rte?.magneticDeclination).toBeUndefined();
   expect(dates).toHaveLength(3);
 });
@@ -126,7 +130,7 @@ test('an outstanding lookup cannot overwrite a manual edit or its exported value
   const pending = await requested;
   await expect(page.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
   await openMagnetics(page);
-  await page.getByLabel('Declination mode').selectOption('manual');
+  await selectOption(page.getByLabel('Declination mode'), 'manual');
   const angle = page.getByLabel('Magnetic declination (°)', { exact: true });
   await expect(angle).toHaveValue('');
   await angle.fill('-4.25');

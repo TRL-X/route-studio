@@ -1,3 +1,4 @@
+import { Heading } from '@radix-ui/themes';
 import { useEffect, useState } from 'react';
 import type { RouteDocument } from '../domain/model';
 import type { TrackFormat } from '../files/export';
@@ -52,7 +53,9 @@ export function TrackExportDialog({
         <p role="status">{t.busy}</p>
       ) : (
         <section className="track-export-preview">
-          <h3>{t.exportPreview}</h3>
+          <Heading as="h3" size="2">
+            {t.exportPreview}
+          </Heading>
           <p>
             {t.trackCounts
               .replace('{points}', preview.points.toLocaleString(controls.lang))

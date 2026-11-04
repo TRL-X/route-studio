@@ -1,3 +1,4 @@
+import { Button, IconButton, Card } from '@radix-ui/themes';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Map as LibreMap } from 'maplibre-gl';
@@ -16,6 +17,7 @@ import {
   type BasemapFailure,
   type BasemapPreferences,
 } from '../maps/basemap';
+import type { ColorScheme } from '../app/theme';
 import { BasemapControls } from './BasemapControls';
 import './views.css';
 
@@ -25,6 +27,7 @@ type Camera = XY & { zoom: number };
 interface MapViewProps {
   doc: RouteDocument;
   lang: Lang;
+  scheme: ColorScheme;
   tool: Tool;
   axis: number[];
   revealSelection: number;
@@ -141,14 +144,20 @@ function fitted(points: XY[], width: number, height: number): Camera {
 // Mercator camera, so edits and hit testing also work without a network or GPU.
 function Basemap({
   camera,
+  scheme,
   preferences,
   onFailure,
 }: {
   camera: Camera;
+  scheme: ColorScheme;
   preferences: BasemapPreferences;
   onFailure: (reason: BasemapFailure) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const customDarkStyle =
+    preferences.provider === 'openfreemap' && scheme === 'dark'
+      ? import.meta.env.VITE_MAP_DARK_STYLE_URL
+      : undefined;
   const instance = useRef<LibreMap | null>(null);
   const latestCamera = useRef(camera);
   const failure = useRef(onFailure);
@@ -171,7 +180,7 @@ function Basemap({
       const first = latestCamera.current;
       const map = new Map({
         container: host.current,
-        style: basemapStyle(preferences),
+        style: customDarkStyle || basemapStyle(preferences),
         interactive: false,
         center: [first.x * 360 - 180, unproject(first).lat],
         zoom: first.zoom,
@@ -200,7 +209,7 @@ function Basemap({
       instance.current?.remove();
       instance.current = null;
     };
-  }, [preferences.provider, preferences.tiandituKey]);
+  }, [preferences.provider, preferences.tiandituKey, customDarkStyle]);
   useEffect(() => {
     instance.current?.jumpTo({ center: [camera.x * 360 - 180, unproject(camera).lat], zoom: camera.zoom });
   }, [camera]);
@@ -575,9 +584,27 @@ export function MapView(props: MapViewProps) {
   const scaleMetres = niceStep(40 * metresPerPixel);
   const displayPos = hover ? unproject(toWorld(hover)) : center;
   return (
-    <div className={'rv-map' + (showBase ? ' rv-has-base' : '')} ref={container}>
+    <div
+      className={
+        'rv-map' +
+        (showBase ? ' rv-has-base' : '') +
+        (showBase &&
+        (basemap.provider === 'tianditu' ||
+          ((props.scheme === 'dark' && import.meta.env.VITE_MAP_DARK_STYLE_URL) || basemapStyle(basemap)) ===
+            'https://tiles.openfreemap.org/styles/liberty')
+          ? ' rv-colored-base'
+          : '')
+      }
+      ref={container}
+    >
       {showBase && (
-        <Basemap key={baseAttempt} camera={camera} preferences={basemap} onFailure={setBaseFailure} />
+        <Basemap
+          scheme={props.scheme}
+          key={baseAttempt}
+          camera={camera}
+          preferences={basemap}
+          onFailure={setBaseFailure}
+        />
       )}
       <svg
         ref={svg}
@@ -674,7 +701,7 @@ export function MapView(props: MapViewProps) {
         )}
       </svg>
       {tool !== 'select' && (
-        <div className="rv-mode">
+        <Card className="rv-mode">
           <div>
             <b>
               {
@@ -689,13 +716,19 @@ export function MapView(props: MapViewProps) {
             </b>
             <span>{snapping ? t.snapHint : tool === 'append' ? t.drawing : t.locating}</span>
           </div>
-          <button type="button" onClick={props.onCancelTool} aria-label={t.cancel}>
+          <Button
+            variant="surface"
+            color="gray"
+            type="button"
+            onClick={props.onCancelTool}
+            aria-label={t.cancel}
+          >
             Esc
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
       {snapping && passes && (
-        <div className="rv-pass-panel" ref={passPanel}>
+        <Card className="rv-pass-panel" ref={passPanel}>
           <StationPassOptions
             candidates={passes}
             positions={orderedStations(doc, props.axis)}
@@ -704,21 +737,42 @@ export function MapView(props: MapViewProps) {
             t={t}
             onPick={props.onPickAnchor}
           />
-        </div>
+        </Card>
       )}
-      <div className="rv-zoom" aria-label={t.mapView}>
-        <button type="button" aria-label={t.zoomIn} title={t.zoomIn} onClick={() => zoomBy(1)}>
+      <Card className="rv-zoom" aria-label={t.mapView} size="1">
+        <IconButton
+          variant="surface"
+          color="gray"
+          type="button"
+          aria-label={t.zoomIn}
+          title={t.zoomIn}
+          onClick={() => zoomBy(1)}
+        >
           +
-        </button>
-        <button type="button" aria-label={t.zoomOut} title={t.zoomOut} onClick={() => zoomBy(-1)}>
+        </IconButton>
+        <IconButton
+          variant="surface"
+          color="gray"
+          type="button"
+          aria-label={t.zoomOut}
+          title={t.zoomOut}
+          onClick={() => zoomBy(-1)}
+        >
           −
-        </button>
-        <button type="button" aria-label={t.fitRoute} title={t.fitRoute} onClick={() => setCamera(null)}>
+        </IconButton>
+        <IconButton
+          variant="surface"
+          color="gray"
+          type="button"
+          aria-label={t.fitRoute}
+          title={t.fitRoute}
+          onClick={() => setCamera(null)}
+        >
           <svg viewBox="0 0 18 18" aria-hidden="true">
             <path d="M2 7V2h5m4 0h5v5m0 4v5h-5m-4 0H2v-5" />
           </svg>
-        </button>
-      </div>
+        </IconButton>
+      </Card>
       <BasemapControls
         lang={lang}
         preferences={basemap}

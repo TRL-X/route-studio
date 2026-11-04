@@ -17,6 +17,7 @@ export interface PairingRequest {
 export interface DesktopAPI {
   readonly platform: string;
   getZoomFactor: () => number;
+  setTheme: (theme: 'system' | 'light' | 'dark') => void;
   openFile: () => Promise<DesktopFile | null>;
   saveFile: (file: DesktopFile) => Promise<boolean>;
   setDocumentState: (dirty: boolean, language: 'en' | 'zh') => void;

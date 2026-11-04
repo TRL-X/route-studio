@@ -1,3 +1,5 @@
+import { Modal } from './Modal';
+import { Button } from '@radix-ui/themes';
 import { useLayoutEffect, useMemo, useState } from 'react';
 import { planFullTerrain } from '../domain/elevation-repair';
 import type { RouteDocument } from '../domain/model';
@@ -57,78 +59,68 @@ export function ElevationRepair({
   const hasOriginal = doc.elevation.some((s) => s.height !== null);
   const attention = preview?.sections ?? plan?.sections;
   return (
-    <div className="overlay">
-      <section
-        className="dialog terrain-dialog replace-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="replace-title"
-      >
-        <h2 id="replace-title">{copy.title}</h2>
-        {initialSummary && (
-          <p className="replace-summary" role="status">
-            {initialSummary}
-          </p>
-        )}
-        {plan?.points.length ? (
-          <>
-            <p className="replace-datum">
-              {hasOriginal && (
-                <span>
-                  {copy.originalDatum} {[t.unknown, t.msl, t.wgs][doc.elevationReference]} →{' '}
-                </span>
-              )}
-              <strong>GLO-30 · EGM2008</strong>
-              {hasOriginal && <span className="replace-hint">{copy.datumHint}</span>}
-            </p>
-            <RepairProfile
-              original={plan.original}
-              hasOriginal={hasOriginal}
-              lang={lang}
-              preview={preview?.readings}
-              attention={
-                hasOriginal ? attention : attention?.filter((section) => section.kind === 'uncovered')
-              }
-            />
-            {result === 'error' ? (
-              <p className="terrain-error" role="alert">
-                {t.terrainNetworkError}
-              </p>
-            ) : preview?.missing ? (
-              <p className="terrain-error" role="alert">
-                {copy.missing.replace('{missing}', String(preview.missing))}
-              </p>
-            ) : (
-              <p className="replace-status" role="status">
-                {preview ? copy.coverage.replace('{total}', String(plan.points.length)) : copy.reading}
-              </p>
+    <Modal className="replace-dialog" title={copy.title} onClose={onClose}>
+      {initialSummary && (
+        <p className="replace-summary" role="status">
+          {initialSummary}
+        </p>
+      )}
+      {plan?.points.length ? (
+        <>
+          <p className="replace-datum">
+            {hasOriginal && (
+              <span>
+                {copy.originalDatum} {[t.unknown, t.msl, t.wgs][doc.elevationReference]} →{' '}
+              </span>
             )}
-          </>
-        ) : (
-          <p className="terrain-error" role="alert">
-            {plan ? t.noVertices : t.terrainLimit}
+            <strong>GLO-30 · EGM2008</strong>
+            {hasOriginal && <span className="replace-hint">{copy.datumHint}</span>}
           </p>
+          <RepairProfile
+            original={plan.original}
+            hasOriginal={hasOriginal}
+            lang={lang}
+            preview={preview?.readings}
+            attention={hasOriginal ? attention : attention?.filter((section) => section.kind === 'uncovered')}
+          />
+          {result === 'error' ? (
+            <p className="terrain-error" role="alert">
+              {t.terrainNetworkError}
+            </p>
+          ) : preview?.missing ? (
+            <p className="terrain-error" role="alert">
+              {copy.missing.replace('{missing}', String(preview.missing))}
+            </p>
+          ) : (
+            <p className="replace-status" role="status">
+              {preview ? copy.coverage.replace('{total}', String(plan.points.length)) : copy.reading}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="terrain-error" role="alert">
+          {plan ? t.noVertices : t.terrainLimit}
+        </p>
+      )}
+      <details className="replace-credit">
+        <summary>{copy.sourceDetails}</summary>
+        <TerrainCredit />
+      </details>
+      <footer>
+        <Button variant="surface" color="gray" autoFocus onClick={onClose}>
+          {t.cancel}
+        </Button>
+        {candidate && (
+          <Button variant="solid" color="blue" onClick={() => onApply(candidate)}>
+            {copy.replace}
+          </Button>
         )}
-        <details className="replace-credit">
-          <summary>{copy.sourceDetails}</summary>
-          <TerrainCredit />
-        </details>
-        <footer>
-          <button className="button" autoFocus onClick={onClose}>
-            {t.cancel}
-          </button>
-          {candidate && (
-            <button className="primary" onClick={() => onApply(candidate)}>
-              {copy.replace}
-            </button>
-          )}
-          {canRetry && (
-            <button className="primary" onClick={() => setAttempt((n) => n + 1)}>
-              {copy.retry}
-            </button>
-          )}
-        </footer>
-      </section>
-    </div>
+        {canRetry && (
+          <Button variant="solid" color="blue" onClick={() => setAttempt((n) => n + 1)}>
+            {copy.retry}
+          </Button>
+        )}
+      </footer>
+    </Modal>
   );
 }

@@ -1,3 +1,4 @@
+import { IconButton, Button } from '@radix-ui/themes';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import type { ProfileReading } from '../domain/terrain-comparison';
@@ -224,32 +225,38 @@ export function RepairProfile({
           )}
         </div>
         <div className="profile-preview-zoom">
-          <button
+          <IconButton
+            variant="ghost"
+            color="gray"
             type="button"
-            className="icon"
+
             aria-label={t.zoomOut}
             disabled={view.span >= total}
             onClick={() => zoom(1.6)}
           >
             <Minus size={15} />
-          </button>
-          <button
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            color="gray"
             type="button"
-            className="icon"
+
             aria-label={t.zoomIn}
             disabled={view.span <= Math.min(1, total)}
             onClick={() => zoom(1 / 1.6)}
           >
             <Plus size={15} />
-          </button>
-          <button
+          </IconButton>
+          <Button
+            variant="surface"
+            color="gray"
             type="button"
-            className="button"
+
             disabled={view.span >= total}
             onClick={() => setCamera(null)}
           >
             {t.fitRoute}
-          </button>
+          </Button>
         </div>
       </div>
       <svg

@@ -1,3 +1,5 @@
+import { Choice } from './Choice';
+import { Table, Button, Heading } from '@radix-ui/themes';
 import { useEffect, useRef, useState } from 'react';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { declinationSettings } from '../domain/declination';
@@ -133,36 +135,36 @@ export function ExportDialog({
         <div className="export-options">
           <label>
             {t.profileSampling}
-            <select value={options.intervalM} onChange={(e) => changeOption('intervalM', e.target.value)}>
-              <option value={0}>{t.keepSamples}</option>
-              {exportChoices.intervalM.slice(1).map((n) => (
-                <option key={n} value={n}>
-                  {n} m
-                </option>
-              ))}
-            </select>
+            <Choice
+              value={options.intervalM}
+              onValueChange={(value) => changeOption('intervalM', value)}
+              options={[
+                { value: 0, label: <>{t.keepSamples}</> },
+                ...exportChoices.intervalM.slice(1).map((n) => ({ value: n, label: <>{n} m</> })),
+              ]}
+            />
           </label>
           <label>
             {t.geomSimplify}
-            <select value={options.toleranceM} onChange={(e) => changeOption('toleranceM', e.target.value)}>
-              <option value={0}>{t.off}</option>
-              {exportChoices.toleranceM.slice(1).map((n) => (
-                <option key={n} value={n}>
-                  {n} m
-                </option>
-              ))}
-            </select>
+            <Choice
+              value={options.toleranceM}
+              onValueChange={(value) => changeOption('toleranceM', value)}
+              options={[
+                { value: 0, label: <>{t.off}</> },
+                ...exportChoices.toleranceM.slice(1).map((n) => ({ value: n, label: <>{n} m</> })),
+              ]}
+            />
           </label>
           <label>
             {t.smoothWindow}
-            <select value={options.smoothingM} onChange={(e) => changeOption('smoothingM', e.target.value)}>
-              <option value={0}>{t.off}</option>
-              {exportChoices.smoothingM.slice(1).map((n) => (
-                <option key={n} value={n}>
-                  {n} m
-                </option>
-              ))}
-            </select>
+            <Choice
+              value={options.smoothingM}
+              onValueChange={(value) => changeOption('smoothingM', value)}
+              options={[
+                { value: 0, label: <>{t.off}</> },
+                ...exportChoices.smoothingM.slice(1).map((n) => ({ value: n, label: <>{n} m</> })),
+              ]}
+            />
           </label>
         </div>
         {options.smoothingM > 0 && <small>{t.smoothingNote}</small>}
@@ -186,15 +188,17 @@ export function ExportDialog({
         <div className="field-issue" role="alert">
           <p>{error[lang]}</p>
           {error.target && error.target.type !== 'declination' && (
-            <button
-              className="sub-action"
+            <Button
+              variant="surface"
+              color="gray"
+
               onClick={() => {
                 const target = error.target;
                 if (target && target.type !== 'declination') onLocate({ ...error, target });
               }}
             >
               {t.showIssue}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -202,21 +206,23 @@ export function ExportDialog({
         <>
           <section className="export-preview">
             <header>
-              <h3>{t.exportPreview}</h3>
+              <Heading as="h3" size="2">
+                {t.exportPreview}
+              </Heading>
               <small>
                 {(preview.totalM / 1000).toLocaleString(lang, { maximumFractionDigits: 4 })} km ·{' '}
                 {t.stageCount.replace('{count}', display(preview.stages))}
               </small>
             </header>
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.metric}</th>
-                  <th>{t.currentProject}</th>
-                  <th>{t.outputRte}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table.Root size="1" variant="surface">
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeaderCell>{t.metric}</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>{t.currentProject}</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>{t.outputRte}</Table.ColumnHeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {[
                   [t.geometryPoints, display(doc.vertices.length), display(preview.vertices)],
                   [t.profileSamples, display(doc.elevation.length), display(preview.samples)],
@@ -226,14 +232,14 @@ export function ExportDialog({
                     display(preview.ascentM) + ' m',
                   ],
                 ].map(([label, project, out]) => (
-                  <tr key={label}>
-                    <th scope="row">{label}</th>
-                    <td>{project}</td>
-                    <td>{out}</td>
-                  </tr>
+                  <Table.Row key={label}>
+                    <Table.RowHeaderCell scope="row">{label}</Table.RowHeaderCell>
+                    <Table.Cell>{project}</Table.Cell>
+                    <Table.Cell>{out}</Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table.Root>
           </section>
           <details open={showPlot} onToggle={(e) => setShowPlot(e.currentTarget.open)}>
             <summary>{t.compareProfiles}</summary>
@@ -251,9 +257,14 @@ export function ExportDialog({
                 ))}
               </ul>
               {limit < preview.shared.length && (
-                <button className="sub-action" onClick={() => setLimit(limit + 20)}>
+                <Button
+                  variant="surface"
+                  color="gray"
+
+                  onClick={() => setLimit(limit + 20)}
+                >
                   {t.showMore}
-                </button>
+                </Button>
               )}
             </details>
           )}
