@@ -20,7 +20,11 @@ export function manualRelease(
   if (!semver.gt(version, currentVersion)) return null;
   if (!['x64', 'arm64'].includes(arch)) throw new Error('Unsupported architecture');
   const suffix =
-    platform === 'darwin' ? `mac-${arch}.dmg` : platform === 'linux' ? `linux-${arch}.deb` : null;
+    platform === 'darwin'
+      ? `mac-${arch}.dmg`
+      : platform === 'linux'
+        ? `linux-${arch === 'x64' ? 'amd64' : arch}.deb`
+        : null;
   if (!suffix || !Array.isArray(release.assets)) throw new Error('Installer unavailable');
   const name = `Route-Studio-${version}-${suffix}`;
   const expectedURL = `https://github.com/${releaseRepository}/releases/download/${encodeURIComponent(release.tag_name)}/${name}`;

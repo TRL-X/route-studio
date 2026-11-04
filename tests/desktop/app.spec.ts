@@ -259,7 +259,8 @@ test('packaged manual updater selects the matching asset and persists its prefer
   const page = await launch({ updates: true });
   const expectedURL = await desktop.evaluate(({ app, net, shell }) => {
     const arch = process.platform === 'darwin' && app.runningUnderARM64Translation ? 'arm64' : process.arch;
-    const suffix = process.platform === 'darwin' ? `mac-${arch}.dmg` : `linux-${arch}.deb`;
+    const suffix =
+      process.platform === 'darwin' ? `mac-${arch}.dmg` : `linux-${arch === 'x64' ? 'amd64' : arch}.deb`;
     const name = `Route-Studio-99.0.0-${suffix}`;
     const url = `https://github.com/TRL-X/route-studio/releases/download/v99.0.0/${name}`;
     net.fetch = async () =>
@@ -303,6 +304,19 @@ test('packaged manual updater selects the matching asset and persists its prefer
   );
 });
 
+test('packaged app includes automatic updater dependencies', async () => {
+  test.skip(!process.env.DESKTOP_EXECUTABLE, 'Requires a packaged app');
+  await launch();
+  const available = await desktop.evaluate(({ app }) => {
+    const { createRequire } = process.getBuiltinModule('node:module');
+    const path = process.getBuiltinModule('node:path');
+    const require = createRequire(path.join(app.getAppPath(), 'package.json'));
+    const { NsisUpdater, AppImageUpdater } = require('electron-updater');
+    return [typeof NsisUpdater, typeof AppImageUpdater];
+  });
+  expect(available).toEqual(['function', 'function']);
+});
+
 test('packaged automatic updater preserves install guards and saves before invoking the installer', async () => {
   test.skip(
     !process.env.DESKTOP_EXECUTABLE || process.platform === 'darwin',
@@ -318,9 +332,10 @@ test('packaged automatic updater preserves install guards and saves before invok
   }, source);
   await nativeCommand('open');
   await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
-  await desktop.evaluate(async ({ app }) => {
-    const { createRequire } = await import('node:module');
-    const path = await import('node:path');
+  await desktop.evaluate(({ app }) => {
+    // Playwright evaluates this callback without a dynamic-import hook.
+    const { createRequire } = process.getBuiltinModule('node:module');
+    const path = process.getBuiltinModule('node:path');
     const require = createRequire(path.join(app.getAppPath(), 'package.json'));
     const { NsisUpdater, AppImageUpdater } = require('electron-updater') as typeof import('electron-updater');
     const prototype = process.platform === 'win32' ? NsisUpdater.prototype : AppImageUpdater.prototype;

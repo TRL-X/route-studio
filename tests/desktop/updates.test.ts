@@ -204,9 +204,13 @@ describe('manual release selection', () => {
     expect(manualRelease(published('0.2.0', 'mac', 'x64'), '0.1.0', 'darwin', 'x64')?.downloadURL).toContain(
       'mac-x64.dmg',
     );
-    expect(manualRelease(published('0.2.0', 'linux', 'x64'), '0.1.0', 'linux', 'x64')?.downloadURL).toContain(
-      'linux-x64.deb',
-    );
+    expect(
+      manualRelease(published('0.2.0', 'linux', 'amd64'), '0.1.0', 'linux', 'x64')?.downloadURL,
+    ).toContain('linux-amd64.deb');
+    expect(
+      manualRelease(published('0.2.0', 'linux', 'arm64'), '0.1.0', 'linux', 'arm64')?.downloadURL,
+    ).toContain('linux-arm64.deb');
+    expect(() => manualRelease(published('0.2.0', 'linux', 'arm64'), '0.1.0', 'linux', 'x64')).toThrow();
     expect(manualRelease(published('0.1.0'), '0.2.0', 'darwin', 'arm64')).toBeNull();
     expect(manualRelease(published('0.2.0'), '0.2.0', 'darwin', 'arm64')).toBeNull();
     expect(() => manualRelease(published('0.2.0'), '0.1.0', 'darwin', 'x64')).toThrow();
