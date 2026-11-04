@@ -8,6 +8,15 @@ import { orderedStations, stationPassages, type StationPassage } from '../domain
 import type { Tool } from '../app/Inspector';
 import { StationPassOptions } from '../app/StationPassOptions';
 import { strings, type Lang } from '../app/strings';
+import {
+  basemapStyle,
+  classifyBasemapFailure,
+  loadBasemapPreferences,
+  saveBasemapPreferences,
+  type BasemapFailure,
+  type BasemapPreferences,
+} from '../maps/basemap';
+import { BasemapControls } from './BasemapControls';
 import './views.css';
 
 type Point = { lat: number; lon: number };
@@ -128,11 +137,17 @@ function fitted(points: XY[], width: number, height: number): Camera {
   return { x: (left + right) / 2, y: (top + bottom) / 2, zoom: clamp(Math.log2(scale / 512), 0, 16) };
 }
 
-const styleURL = import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty';
-
 // The editor owns its 2D camera. A basemap is an optional underlay using the same
 // Mercator camera, so edits and hit testing also work without a network or GPU.
-function Basemap({ camera, onFailure }: { camera: Camera; onFailure: () => void }) {
+function Basemap({
+  camera,
+  preferences,
+  onFailure,
+}: {
+  camera: Camera;
+  preferences: BasemapPreferences;
+  onFailure: (reason: BasemapFailure) => void;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const instance = useRef<LibreMap | null>(null);
   const latestCamera = useRef(camera);
@@ -142,6 +157,10 @@ function Basemap({ camera, onFailure }: { camera: Camera; onFailure: () => void 
   useEffect(() => {
     let cancelled = false;
     let observer: ResizeObserver | undefined;
+    const fail = (reason: BasemapFailure) => {
+      if (!cancelled) failure.current(reason);
+    };
+    const timeout = setTimeout(() => fail('timeout'), 20000);
     (async () => {
       const [{ Map, setWorkerUrl }, worker] = await Promise.all([
         import('maplibre-gl'),
@@ -152,7 +171,7 @@ function Basemap({ camera, onFailure }: { camera: Camera; onFailure: () => void 
       const first = latestCamera.current;
       const map = new Map({
         container: host.current,
-        style: styleURL,
+        style: basemapStyle(preferences),
         interactive: false,
         center: [first.x * 360 - 180, unproject(first).lat],
         zoom: first.zoom,
@@ -160,24 +179,28 @@ function Basemap({ camera, onFailure }: { camera: Camera; onFailure: () => void 
         attributionControl: { compact: true },
       });
       instance.current = map;
-      map.on('error', () => {
-        if (!cancelled && !map.isStyleLoaded()) failure.current();
+      map.once('load', () => clearTimeout(timeout));
+      map.on('error', ({ error }) => {
+        // Inline raster styles can load before their tiles fail. Handle tile errors too,
+        // and never surface the raw error URL, which may contain the user's Key.
+        fail(classifyBasemapFailure(error));
       });
       map.on('webglcontextlost', () => {
-        if (!cancelled) failure.current();
+        fail('graphics');
       });
       observer = new ResizeObserver(() => map.resize());
       observer.observe(host.current);
     })().catch(() => {
-      if (!cancelled) failure.current();
+      fail('unavailable');
     });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       observer?.disconnect();
       instance.current?.remove();
       instance.current = null;
     };
-  }, []);
+  }, [preferences.provider, preferences.tiandituKey]);
   useEffect(() => {
     instance.current?.jumpTo({ center: [camera.x * 360 - 180, unproject(camera).lat], zoom: camera.zoom });
   }, [camera]);
@@ -191,8 +214,16 @@ export function MapView(props: MapViewProps) {
   const svg = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 800, height: 450 });
   const [manualCamera, setCamera] = useState<Camera | null>(null);
-  const [showBase, setShowBase] = useState(true);
-  const [baseFailed, setBaseFailed] = useState(false);
+  const [basemap, setBasemap] = useState(loadBasemapPreferences);
+  const [baseFailure, setBaseFailure] = useState<BasemapFailure | null>(null);
+  const [baseAttempt, setBaseAttempt] = useState(0);
+  const [baseStorageFailed, setBaseStorageFailed] = useState(false);
+  const missingBaseKey = basemap.provider === 'tianditu' && !basemap.tiandituKey;
+  const showBase = basemap.enabled && !baseFailure && !missingBaseKey;
+  const retryBase = () => {
+    setBaseFailure(null);
+    setBaseAttempt((attempt) => attempt + 1);
+  };
   const [hover, setHover] = useState<(XY & { onRoute: boolean }) | null>(null);
   const [mapProbe, setMapProbe] = useState<(XY & { meters: number }) | null>(null);
   const [passes, setPasses] = useState<StationPassage[] | null>(null);
@@ -546,13 +577,7 @@ export function MapView(props: MapViewProps) {
   return (
     <div className={'rv-map' + (showBase ? ' rv-has-base' : '')} ref={container}>
       {showBase && (
-        <Basemap
-          camera={camera}
-          onFailure={() => {
-            setBaseFailed(true);
-            setShowBase(false);
-          }}
-        />
+        <Basemap key={baseAttempt} camera={camera} preferences={basemap} onFailure={setBaseFailure} />
       )}
       <svg
         ref={svg}
@@ -694,22 +719,18 @@ export function MapView(props: MapViewProps) {
           </svg>
         </button>
       </div>
-      <div className="rv-basemap-tools">
-        {baseFailed && <span role="status">{t.basemapUnavailable}</span>}
-        <button
-          type="button"
-          aria-pressed={showBase}
-          onClick={() => {
-            setBaseFailed(false);
-            setShowBase(!showBase);
-          }}
-        >
-          <svg viewBox="0 0 18 18" aria-hidden="true">
-            <path d="m2 6 7-4 7 4-7 4zm0 4 7 4 7-4" />
-          </svg>
-          {t.basemap}
-        </button>
-      </div>
+      <BasemapControls
+        lang={lang}
+        preferences={basemap}
+        failure={basemap.enabled ? (missingBaseKey ? 'key' : baseFailure) : null}
+        storageFailed={baseStorageFailed}
+        onApply={(preferences) => {
+          setBaseStorageFailed(!saveBasemapPreferences(preferences));
+          setBasemap(preferences);
+          retryBase();
+        }}
+        onRetry={retryBase}
+      />
       <div className="rv-scale">
         <span style={{ width: scaleMetres / metresPerPixel }} />
         {scaleMetres >= 1000 ? scaleMetres / 1000 + ' km' : scaleMetres + ' m'}

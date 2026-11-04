@@ -280,3 +280,32 @@ test('quitting with unsaved edits confirms once and exits without a destroyed-wi
   });
   await expect.poll(() => child.exitCode).toBe(0);
 });
+
+test('saves personal basemap settings across desktop restarts without including the Key in projects', async () => {
+  let page = await launch();
+  const tiles = /https:\/\/t[0-7]\.tianditu\.gov\.cn\//;
+  await page.route(tiles, (route) => route.fulfill({ status: 403, body: 'Denied' }));
+  await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
+  let panel = page.getByRole('dialog', { name: 'Basemap settings' });
+  await panel.getByLabel('Map provider').selectOption('tianditu');
+  await panel.getByLabel('API Key', { exact: true }).fill('desktop-personal-test-key');
+  const request = page.waitForRequest(tiles);
+  await panel.getByRole('button', { name: 'Apply', exact: true }).click();
+  expect(new URL((await request).url()).searchParams.get('tk')).toBe('desktop-personal-test-key');
+  await expect(page.getByText('Basemap unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Basemap: Tianditu', exact: true })).toBeVisible();
+  const project = path.join(directory, 'map-settings.routeproj');
+  await desktop.evaluate(({ dialog }, filename) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
+  }, project);
+  await page.getByRole('button', { name: 'Save project', exact: true }).click();
+  await expect(page.getByText('Project saved.', { exact: true })).toBeVisible();
+  expect(await readFile(project, 'utf8')).not.toContain('desktop-personal-test-key');
+  await desktop.close();
+  page = await launch();
+  await page.getByRole('button', { name: 'Basemap: Tianditu', exact: true }).click();
+  panel = page.getByRole('dialog', { name: 'Basemap settings' });
+  await expect(panel.getByLabel('API Key', { exact: true })).toHaveValue('desktop-personal-test-key');
+  await expect(panel.getByLabel('API Key', { exact: true })).toHaveAttribute('type', 'password');
+  await expect(panel.getByLabel('Show basemap')).toBeChecked();
+});

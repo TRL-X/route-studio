@@ -213,30 +213,141 @@
   position: absolute;
   top: var(--map-tool-top);
   left: var(--pane-inset);
+  right: calc(var(--pane-inset) + 42px);
+  bottom: 40px;
+  z-index: 4;
+  pointer-events: none;
+}
+.rv-basemap-bar {
   display: flex;
-  flex-direction: row-reverse;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+}
+.rv-basemap-bar > *,
+.rv-basemap-panel,
+.rv-basemap-warning {
+  pointer-events: auto;
 }
 .rv-basemap-tools button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  height: 28px;
+  min-height: 28px;
   padding: 0 9px;
   font-size: 11px;
   font-weight: 550;
 }
-.rv-basemap-tools button[aria-pressed='true'] {
+.rv-basemap-trigger {
+  max-width: 100%;
+}
+.rv-basemap-trigger span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.rv-basemap-tools svg {
+  flex-shrink: 0;
+}
+.rv-basemap-trigger[aria-expanded='true'] {
   color: var(--action);
   border-color: var(--action);
 }
-.rv-basemap-tools span {
+.rv-basemap-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rv-basemap-status > span,
+.rv-basemap-warning {
   font-size: 11px;
   background: #fffcf1ee;
   color: #5e503b;
   padding: 3px 5px;
   border-radius: 3px;
+}
+.rv-basemap-warning {
+  width: fit-content;
+  max-width: 320px;
+  margin: 5px 0 0;
+}
+.rv-basemap-panel {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  width: min(320px, 100%);
+  max-height: calc(100% - 36px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 4px 16px #172d4826;
+  color: var(--ink);
+  font-size: 12px;
+}
+.rv-basemap-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.rv-basemap-field select,
+.rv-basemap-key input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  padding: 0 8px;
+  font: inherit;
+  color: var(--ink);
+}
+.rv-basemap-key {
+  display: flex;
+  gap: 5px;
+}
+.rv-basemap-key-actions,
+.rv-basemap-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rv-basemap-key-actions a {
+  color: var(--action);
+}
+.rv-basemap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rv-basemap-toggle input {
+  margin: 0;
+  accent-color: var(--action);
+}
+.rv-basemap-panel p {
+  margin: 0;
+  line-height: 1.5;
+}
+.rv-basemap-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+.rv-basemap-error {
+  color: #9b352d;
+}
+.rv-basemap-actions {
+  justify-content: flex-end;
+}
+.rv-basemap-actions button[type='submit'] {
+  color: white;
+  background: var(--action);
+  border-color: var(--action);
 }
 .rv-scale,
 .rv-coords {
