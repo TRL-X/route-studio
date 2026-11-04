@@ -1,4 +1,5 @@
-import { Button, IconButton, Card } from '@radix-ui/themes';
+import { Button, IconButton, Card, Flex, Text } from '@radix-ui/themes';
+import { Maximize, Minus, Plus } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Map as LibreMap } from 'maplibre-gl';
@@ -702,29 +703,33 @@ export function MapView(props: MapViewProps) {
       </svg>
       {tool !== 'select' && (
         <Card className="rv-mode">
-          <div>
-            <b>
-              {
+          <Flex align="center" gap="3">
+            <Flex direction="column">
+              <Text size="2" weight="bold">
                 {
-                  append: t.append,
-                  insert: t.insert,
-                  newStation: t.addStation,
-                  stationAnchor: t.pickRoutePosition,
-                  stationLocation: t.location,
-                }[tool]
-              }
-            </b>
-            <span>{snapping ? t.snapHint : tool === 'append' ? t.drawing : t.locating}</span>
-          </div>
-          <Button
-            variant="surface"
-            color="gray"
-            type="button"
-            onClick={props.onCancelTool}
-            aria-label={t.cancel}
-          >
-            Esc
-          </Button>
+                  {
+                    append: t.append,
+                    insert: t.insert,
+                    newStation: t.addStation,
+                    stationAnchor: t.pickRoutePosition,
+                    stationLocation: t.location,
+                  }[tool]
+                }
+              </Text>
+              <Text size="2" color="gray">
+                {snapping ? t.snapHint : tool === 'append' ? t.drawing : t.locating}
+              </Text>
+            </Flex>
+            <Button
+              variant="surface"
+              color="gray"
+              type="button"
+              onClick={props.onCancelTool}
+              aria-label={t.cancel}
+            >
+              Esc
+            </Button>
+          </Flex>
         </Card>
       )}
       {snapping && passes && (
@@ -740,38 +745,38 @@ export function MapView(props: MapViewProps) {
         </Card>
       )}
       <Card className="rv-zoom" aria-label={t.mapView} size="1">
-        <IconButton
-          variant="surface"
-          color="gray"
-          type="button"
-          aria-label={t.zoomIn}
-          title={t.zoomIn}
-          onClick={() => zoomBy(1)}
-        >
-          +
-        </IconButton>
-        <IconButton
-          variant="surface"
-          color="gray"
-          type="button"
-          aria-label={t.zoomOut}
-          title={t.zoomOut}
-          onClick={() => zoomBy(-1)}
-        >
-          −
-        </IconButton>
-        <IconButton
-          variant="surface"
-          color="gray"
-          type="button"
-          aria-label={t.fitRoute}
-          title={t.fitRoute}
-          onClick={() => setCamera(null)}
-        >
-          <svg viewBox="0 0 18 18" aria-hidden="true">
-            <path d="M2 7V2h5m4 0h5v5m0 4v5h-5m-4 0H2v-5" />
-          </svg>
-        </IconButton>
+        <Flex direction="column" gap="1">
+          <IconButton
+            variant="soft"
+            color="gray"
+            type="button"
+            aria-label={t.zoomIn}
+            title={t.zoomIn}
+            onClick={() => zoomBy(1)}
+          >
+            <Plus />
+          </IconButton>
+          <IconButton
+            variant="soft"
+            color="gray"
+            type="button"
+            aria-label={t.zoomOut}
+            title={t.zoomOut}
+            onClick={() => zoomBy(-1)}
+          >
+            <Minus />
+          </IconButton>
+          <IconButton
+            variant="soft"
+            color="gray"
+            type="button"
+            aria-label={t.fitRoute}
+            title={t.fitRoute}
+            onClick={() => setCamera(null)}
+          >
+            <Maximize />
+          </IconButton>
+        </Flex>
       </Card>
       <BasemapControls
         lang={lang}

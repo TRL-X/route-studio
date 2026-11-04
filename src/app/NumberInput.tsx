@@ -48,7 +48,6 @@ export function NumberInput({ label, increment = 1, unit, onStep, onKeyDown, ...
           <IconButton
             size="1"
             variant="ghost"
-            m="0"
             color="gray"
             key={direction}
             type="button"

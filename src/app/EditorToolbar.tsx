@@ -1,18 +1,6 @@
 import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import {
-  ArrowDownToLine,
-  FilePlus2,
-  FolderOpen,
-  Globe2,
-  Mountain,
-  Monitor,
-  Moon,
-  Sun,
-  Redo2,
-  Save,
-  Undo2,
-} from 'lucide-react';
+import { ArrowDownToLine, FilePlus2, FolderOpen, Mountain, Redo2, Save, Undo2 } from 'lucide-react';
 import type { ExportFormat } from '../files/export';
 import { strings, type Lang } from './strings';
 import type { Theme } from './theme';
@@ -122,7 +110,7 @@ export function EditorToolbar({
         <div className="file-menu">
           <DropdownMenu.Root open={menu === 'file'} onOpenChange={(open) => setMenu(open ? 'file' : null)}>
             <DropdownMenu.Trigger>
-              <Button variant="ghost" m="0" color="gray">
+              <Button variant="ghost" color="gray">
                 {t.file}
                 <DropdownMenu.TriggerIcon />
               </Button>
@@ -151,7 +139,7 @@ export function EditorToolbar({
         <div className="history-tools">
           <IconButton
             variant="ghost"
-            m="0"
+
             color="gray"
             title={t.undo + ' (⌘/Ctrl Z)'}
             aria-label={t.undo}
@@ -162,7 +150,7 @@ export function EditorToolbar({
           </IconButton>
           <IconButton
             variant="ghost"
-            m="0"
+
             color="gray"
             title={t.redo + ' (⌘/Ctrl Shift Z)'}
             aria-label={t.redo}
@@ -177,10 +165,9 @@ export function EditorToolbar({
         </div>
         <div className="top-actions">
           <label className="theme-picker" title={t.theme}>
-            {theme === 'system' ? <Monitor /> : theme === 'dark' ? <Moon /> : <Sun />}
             <Choice
               variant="ghost"
-              m="0"
+
               aria-label={t.theme}
               value={theme}
               onValueChange={(v) => onTheme(v as Theme)}
@@ -192,10 +179,9 @@ export function EditorToolbar({
             />
           </label>
           <label className="language">
-            <Globe2 size={16} />
             <Choice
               variant="ghost"
-              m="0"
+
               aria-label={t.lang}
               value={lang}
               onValueChange={(v) => onLanguage(v as Lang)}

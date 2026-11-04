@@ -1,4 +1,4 @@
-import { TextField, IconButton, Button } from '@radix-ui/themes';
+import { TextField, IconButton, Button, Flex, Text } from '@radix-ui/themes';
 import type { ReactNode } from 'react';
 import { Modal } from './Modal';
 import { ArrowDownToLine, X } from 'lucide-react';
@@ -42,6 +42,7 @@ export function ExportFrame({
   return (
     <Modal
       className="export-dialog"
+      maxWidth="560px"
       title={t.exportFormatTitle.replace('{format}', format.toUpperCase())}
       onClose={onClose}
       busy={saving}
@@ -56,9 +57,11 @@ export function ExportFrame({
       >
         <X />
       </IconButton>
-      <div className="export-body">
-        <label className="export-field">
-          {t.exportFilename}
+      <Flex direction="column" gap="4" minHeight="0" overflowY="auto" pb="4">
+        <label>
+          <Text as="div" size="2" color="gray" mb="1">
+            {t.exportFilename}
+          </Text>
           <TextField.Root
             value={name}
             onChange={(e) => onName(e.target.value)}
@@ -70,34 +73,35 @@ export function ExportFrame({
           </TextField.Root>
         </label>
         {invalidName && (
-          <small id="export-filename-error" role="alert">
+          <Text size="2" color="red" id="export-filename-error" role="alert">
             {t.invalidExportName}
-          </small>
+          </Text>
         )}
         {children}
         {saveError && <p role="alert">{saveError}</p>}
-      </div>
-      <footer>
-        <small>
-          {t.fileSize} ·{' '}
-          {bytes
-            ? (bytes.byteLength / 1024).toLocaleString(lang, { maximumFractionDigits: 1 }) + ' KiB'
-            : '—'}
-        </small>
-        <Button
-          variant="surface"
-          color="gray"
-
-          disabled={!bytes || invalidName || saving}
-          onClick={() => {
-            if (bytes) onDownload(bytes, baseName);
-          }}
-        >
-          <ArrowDownToLine />
-          {t.downloadFormat.replace('{format}', format.toUpperCase())}
-        </Button>
-        {extraAction}
-      </footer>
+      </Flex>
+      <Flex asChild justify="end" align="center" wrap="wrap" gap="3" pt="3" flexShrink="0">
+        <footer>
+          <Text size="2" color="gray" mr="auto">
+            {t.fileSize} ·{' '}
+            {bytes
+              ? (bytes.byteLength / 1024).toLocaleString(lang, { maximumFractionDigits: 1 }) + ' KiB'
+              : '—'}
+          </Text>
+          <Button
+            variant="surface"
+            color="gray"
+            disabled={!bytes || invalidName || saving}
+            onClick={() => {
+              if (bytes) onDownload(bytes, baseName);
+            }}
+          >
+            <ArrowDownToLine />
+            {t.downloadFormat.replace('{format}', format.toUpperCase())}
+          </Button>
+          {extraAction}
+        </footer>
+      </Flex>
     </Modal>
   );
 }

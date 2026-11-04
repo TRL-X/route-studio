@@ -139,7 +139,6 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
         className="inspect-content"
         key={selected.type === 'sample' ? selected.index : selected.type === 'route' ? 'route' : selected.id}
       >
-        <div className="eyebrow">{t.attributes}</div>
         <h2>{title}</h2>
         {!sample && diagnostic}
         {v ? (
@@ -196,12 +195,10 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                       });
                     } else patchStation({ kind });
                   }}
-                  options={[
-                    ...(['start', 'finish', 'cp', 'poi'] as const).map((k) => ({
-                      value: k,
-                      label: <>{t[k]}</>,
-                    })),
-                  ]}
+                  options={(['start', 'finish', 'cp', 'poi'] as const).map((k) => ({
+                    value: k,
+                    label: t[k],
+                  }))}
                 />
               </label>
               <label className="check-field">
@@ -329,9 +326,9 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                     change({ ...doc, elevationReference: Number(value) as 0 | 1 | 2 })
                   }
                   options={[
-                    { value: 0, label: <>{t.unknown}</> },
-                    { value: 1, label: <>{t.msl}</> },
-                    { value: 2, label: <>{t.wgs}</> },
+                    { value: 0, label: t.unknown },
+                    { value: 1, label: t.msl },
+                    { value: 2, label: t.wgs },
                   ]}
                 />
               </label>

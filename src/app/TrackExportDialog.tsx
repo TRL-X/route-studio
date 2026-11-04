@@ -1,4 +1,4 @@
-import { Heading } from '@radix-ui/themes';
+import { Callout, Heading } from '@radix-ui/themes';
 import { useEffect, useState } from 'react';
 import type { RouteDocument } from '../domain/model';
 import type { TrackFormat } from '../files/export';
@@ -46,9 +46,9 @@ export function TrackExportDialog({
   return (
     <ExportFrame {...controls} format={format} bytes={file?.bytes}>
       {error ? (
-        <div className="field-issue" role="alert">
-          {error}
-        </div>
+        <Callout.Root color="red" role="alert">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
       ) : !preview ? (
         <p role="status">{t.busy}</p>
       ) : (

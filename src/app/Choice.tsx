@@ -7,11 +7,10 @@ type Props = Omit<Select.TriggerProps, 'value' | 'onChange' | 'children'> & {
   options: { value: string | number; label: ReactNode; disabled?: boolean }[];
 };
 
-/** Shared option data for the editor's Radix selectors. */
 export function Choice({ value, onValueChange, options, disabled, ...trigger }: Props) {
   return (
     <Select.Root value={String(value)} onValueChange={onValueChange} disabled={disabled}>
-      <Select.Trigger variant="surface" data-value={value} {...trigger} />
+      <Select.Trigger data-value={value} {...trigger} />
       <Select.Content position="popper">
         {options.map((option) => (
           <Select.Item

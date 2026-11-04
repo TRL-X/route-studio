@@ -2,7 +2,6 @@ import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
-  // Keep appearance checks independent of map and terrain service availability.
   await page.route('https://**/*', (route) => route.abort());
 });
 
@@ -29,7 +28,7 @@ test('follows system changes, persists overrides and preserves the current selec
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
-test('themes dialogs and charts, including when preference storage is unavailable', async ({ page }) => {
+test('changes appearance and opens dialogs when preference storage is unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => {
       throw new Error('Storage disabled');
@@ -43,31 +42,11 @@ test('themes dialogs and charts, including when preference storage is unavailabl
   for (const theme of ['dark', 'light']) {
     await selectOption(appearance, theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(page.getByRole('button', { name: 'Export RTE…', exact: true })).toHaveCSS(
-      'background-color',
-      'rgb(0, 122, 255)',
-    );
     await page.getByRole('button', { name: 'Choose export format' }).click();
     await page.getByRole('menuitem', { name: 'Export GPX…', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Export GPX', exact: true });
     await expect(dialog).toBeVisible();
-    const surfaces = await page.evaluate(() => {
-      const palette = document.createElement('span');
-      palette.style.color = 'var(--blue-11)';
-      document.querySelector('.radix-themes')!.append(palette);
-      const accent = getComputedStyle(palette).color;
-      palette.remove();
-      return {
-        dialog: getComputedStyle(document.querySelector('.export-dialog')!).backgroundColor,
-        chart: getComputedStyle(document.querySelector('.rv-profile')!).backgroundColor,
-        scheme: getComputedStyle(document.documentElement).colorScheme,
-        route: getComputedStyle(document.querySelector('.rv-profile-line')!).stroke,
-        accent,
-      };
-    });
-    expect(surfaces.scheme).toBe(theme);
-    expect(surfaces.dialog).toBe(surfaces.chart);
-    expect(surfaces.route).toBe(surfaces.accent);
+    await expect(dialog).toHaveCSS('color-scheme', theme);
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Choose export format' })).toBeFocused();
   }

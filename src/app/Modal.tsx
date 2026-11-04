@@ -6,12 +6,14 @@ export function Modal({
   onClose,
   busy,
   className,
+  maxWidth,
   children,
 }: {
   title: string;
   onClose: () => void;
   busy?: boolean;
   className?: string;
+  maxWidth?: Dialog.ContentProps['maxWidth'];
   children: ReactNode;
 }) {
   const [invoker] = useState(() => {
@@ -29,6 +31,7 @@ export function Modal({
     >
       <Dialog.Content
         className={className}
+        maxWidth={maxWidth}
         aria-describedby={undefined}
         onPointerDownOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => {

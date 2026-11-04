@@ -1,5 +1,5 @@
 import { Choice } from './Choice';
-import { Table, Button, Heading } from '@radix-ui/themes';
+import { Table, Button, Heading, Callout, Flex, Text } from '@radix-ui/themes';
 import { useEffect, useRef, useState } from 'react';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { declinationSettings } from '../domain/declination';
@@ -139,8 +139,8 @@ export function ExportDialog({
               value={options.intervalM}
               onValueChange={(value) => changeOption('intervalM', value)}
               options={[
-                { value: 0, label: <>{t.keepSamples}</> },
-                ...exportChoices.intervalM.slice(1).map((n) => ({ value: n, label: <>{n} m</> })),
+                { value: 0, label: t.keepSamples },
+                ...exportChoices.intervalM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
               ]}
             />
           </label>
@@ -150,8 +150,8 @@ export function ExportDialog({
               value={options.toleranceM}
               onValueChange={(value) => changeOption('toleranceM', value)}
               options={[
-                { value: 0, label: <>{t.off}</> },
-                ...exportChoices.toleranceM.slice(1).map((n) => ({ value: n, label: <>{n} m</> })),
+                { value: 0, label: t.off },
+                ...exportChoices.toleranceM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
               ]}
             />
           </label>
@@ -161,8 +161,8 @@ export function ExportDialog({
               value={options.smoothingM}
               onValueChange={(value) => changeOption('smoothingM', value)}
               options={[
-                { value: 0, label: <>{t.off}</> },
-                ...exportChoices.smoothingM.slice(1).map((n) => ({ value: n, label: <>{n} m</> })),
+                { value: 0, label: t.off },
+                ...exportChoices.smoothingM.slice(1).map((n) => ({ value: n, label: `${n} m` })),
               ]}
             />
           </label>
@@ -180,18 +180,19 @@ export function ExportDialog({
         </summary>
         <DeclinationFields lang={lang} doc={doc} t={t} change={change} lookup={lookup} />
       </details>
-      <div className="export-state" role="status" data-error={!!error}>
-        {error ? <ShieldAlert size={16} /> : ready ? <CircleCheck size={16} /> : null}
-        {error ? t.needsRepair : ready ? t.exportReady : lookup.pending ? t.magPending : t.busy}
-      </div>
+      <Text size="2" weight="medium" color={error ? 'red' : 'blue'} asChild>
+        <Flex align="center" gap="2" role="status">
+          {error ? <ShieldAlert size={16} /> : ready ? <CircleCheck size={16} /> : null}
+          {error ? t.needsRepair : ready ? t.exportReady : lookup.pending ? t.magPending : t.busy}
+        </Flex>
+      </Text>
       {error && (
-        <div className="field-issue" role="alert">
-          <p>{error[lang]}</p>
+        <Callout.Root color="red" role="alert">
+          <Callout.Text>{error[lang]}</Callout.Text>
           {error.target && error.target.type !== 'declination' && (
             <Button
-              variant="surface"
+              variant="soft"
               color="gray"
-
               onClick={() => {
                 const target = error.target;
                 if (target && target.type !== 'declination') onLocate({ ...error, target });
@@ -200,7 +201,7 @@ export function ExportDialog({
               {t.showIssue}
             </Button>
           )}
-        </div>
+        </Callout.Root>
       )}
       {preview && (
         <>
@@ -214,7 +215,7 @@ export function ExportDialog({
                 {t.stageCount.replace('{count}', display(preview.stages))}
               </small>
             </header>
-            <Table.Root size="1" variant="surface">
+            <Table.Root size="1">
               <Table.Header>
                 <Table.Row>
                   <Table.ColumnHeaderCell>{t.metric}</Table.ColumnHeaderCell>
@@ -257,12 +258,7 @@ export function ExportDialog({
                 ))}
               </ul>
               {limit < preview.shared.length && (
-                <Button
-                  variant="surface"
-                  color="gray"
-
-                  onClick={() => setLimit(limit + 20)}
-                >
+                <Button variant="soft" color="gray" onClick={() => setLimit(limit + 20)}>
                   {t.showMore}
                 </Button>
               )}

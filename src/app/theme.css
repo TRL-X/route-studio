@@ -1,4 +1,3 @@
-/* Application surfaces and chart semantics inherit Radix's color scales. */
 :root {
   color-scheme: light;
   background: #fff;
@@ -7,56 +6,23 @@
   color-scheme: dark;
   background: #111113;
 }
-/* AppKit's default blue control accent; retain Radix's semantic scales and states. */
 .radix-themes {
-  --macos-control-blue: #007aff;
-  --blue-9: var(--macos-control-blue);
-  --blue-10: color-mix(in srgb, var(--macos-control-blue) 90%, black);
-  --blue-11: #0066d6;
-  --blue-3: color-mix(in srgb, var(--macos-control-blue) 8%, var(--color-background));
-  --blue-4: color-mix(in srgb, var(--macos-control-blue) 14%, var(--color-background));
-  --blue-5: color-mix(in srgb, var(--macos-control-blue) 20%, var(--color-background));
-  --blue-8: color-mix(in srgb, var(--macos-control-blue) 60%, var(--color-background));
-  --blue-a3: color-mix(in srgb, var(--macos-control-blue) 8%, transparent);
-  --blue-a4: color-mix(in srgb, var(--macos-control-blue) 14%, transparent);
-  --blue-a5: color-mix(in srgb, var(--macos-control-blue) 20%, transparent);
-  --blue-a8: color-mix(in srgb, var(--macos-control-blue) 60%, transparent);
-  --blue-a9: var(--blue-9);
-  --blue-a10: var(--blue-10);
-  --blue-a11: var(--blue-11);
-
   --ink: var(--gray-12);
   --muted: var(--gray-11);
   --line: var(--gray-5);
   --surface: var(--color-background);
   --paper: var(--color-panel-solid);
-  --sidebar: var(--color-background);
   --chrome: var(--gray-2);
-  --group-heading: var(--gray-2);
-  --hover: var(--gray-3);
   --strong-line: var(--gray-8);
   --action: var(--accent-11);
   --selection: var(--accent-3);
   --route: var(--blue-11);
   --warning: var(--amber-11);
-  --warning-bg: var(--amber-3);
   --error: var(--red-11);
   --error-bg: var(--red-3);
   --map: var(--gray-2);
   --grid: var(--gray-5);
   --map-halo: var(--color-background);
   --floating: var(--color-panel-solid);
-  --shadow: var(--black-a5);
   --scrim: var(--color-overlay);
-}
-
-.radix-themes.dark {
-  --blue-10: color-mix(in srgb, var(--macos-control-blue) 90%, white);
-  --blue-11: #70b2ff;
-  --blue-3: color-mix(in srgb, var(--macos-control-blue) 22%, var(--color-background));
-  --blue-4: color-mix(in srgb, var(--macos-control-blue) 30%, var(--color-background));
-  --blue-5: color-mix(in srgb, var(--macos-control-blue) 38%, var(--color-background));
-  --blue-a3: color-mix(in srgb, var(--macos-control-blue) 22%, transparent);
-  --blue-a4: color-mix(in srgb, var(--macos-control-blue) 30%, transparent);
-  --blue-a5: color-mix(in srgb, var(--macos-control-blue) 38%, transparent);
 }

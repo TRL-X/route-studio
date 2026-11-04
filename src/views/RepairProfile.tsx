@@ -1,4 +1,4 @@
-import { IconButton, Button } from '@radix-ui/themes';
+import { IconButton, Button, Flex } from '@radix-ui/themes';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import type { ProfileReading } from '../domain/terrain-comparison';
@@ -105,7 +105,7 @@ function trace(
   return path.join('');
 }
 
-/** A single read-only overlay. All elevations share a scale, including when their references differ. */
+// Compare both profiles on the same scale even when their height references differ.
 export function RepairProfile({
   original: samples,
   hasOriginal,
@@ -203,7 +203,7 @@ export function RepairProfile({
   const ticks = total > 0 ? Math.max(1, Math.min(6, Math.floor(width / 104))) : 0;
   return (
     <div className="repair-profile">
-      <div className="profile-preview-tools">
+      <Flex align="center" justify="between" gap="2" wrap="wrap" py="1">
         <div className="profile-preview-key">
           {hasOriginal && (
             <span>
@@ -224,12 +224,11 @@ export function RepairProfile({
             </span>
           )}
         </div>
-        <div className="profile-preview-zoom">
+        <Flex align="center" gap="2">
           <IconButton
             variant="ghost"
             color="gray"
             type="button"
-
             aria-label={t.zoomOut}
             disabled={view.span >= total}
             onClick={() => zoom(1.6)}
@@ -240,7 +239,6 @@ export function RepairProfile({
             variant="ghost"
             color="gray"
             type="button"
-
             aria-label={t.zoomIn}
             disabled={view.span <= Math.min(1, total)}
             onClick={() => zoom(1 / 1.6)}
@@ -251,14 +249,13 @@ export function RepairProfile({
             variant="surface"
             color="gray"
             type="button"
-
             disabled={view.span >= total}
             onClick={() => setCamera(null)}
           >
             {t.fitRoute}
           </Button>
-        </div>
-      </div>
+        </Flex>
+      </Flex>
       <svg
         ref={svg}
         className="repair-plot"

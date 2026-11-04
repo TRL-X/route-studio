@@ -1,4 +1,4 @@
-import { TextField, Button, IconButton } from '@radix-ui/themes';
+import { Badge, TextField, Button, IconButton } from '@radix-ui/themes';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { File, Layers, Plus, Route, Search } from 'lucide-react';
 import type { RouteDocument } from '../domain/model';
@@ -73,7 +73,7 @@ export function RouteOutline({
       </Button>
       <div className="station-heading">
         <span>{t.stations}</span>
-        <b>{doc.stations.length}</b>
+        <Badge color="gray">{doc.stations.length}</Badge>
         <IconButton
           variant="ghost"
           color="gray"

@@ -2,12 +2,10 @@
 @import './theme.css';
 
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-synthesis: none;
   --shell-gutter: 12px;
-  --command-height: 29px;
-  --pane-inset: 14px;
-  --pane-heading-height: 36px;
+  --pane-inset: 12px;
+  --pane-heading-height: 44px;
 }
 * {
   box-sizing: border-box;
@@ -15,7 +13,6 @@
 button svg.lucide {
   width: 16px;
   height: 16px;
-  stroke-width: 1.65;
   flex-shrink: 0;
 }
 h1,
@@ -26,7 +23,7 @@ p {
 }
 .studio {
   min-width: 960px;
-  font-size: 13px;
+  font-size: var(--font-size-2);
 }
 .shell {
   height: 100dvh;
@@ -125,29 +122,29 @@ p {
   align-items: center;
   gap: 8px;
 }
+.topbar button,
+.number-control button {
+  margin: 0;
+}
 .export-actions {
   display: flex;
-  position: relative;
+  gap: 4px;
 }
 .history-tools {
   display: flex;
   align-items: center;
-  height: var(--command-height);
   gap: 4px;
   border-left: 1px solid var(--line);
   padding-left: 8px;
 }
-.language {
+.language,
+.theme-picker {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-right: 0;
-  color: var(--muted);
 }
 .workspace {
   display: grid;
-  /* Keep signed coordinates readable beside units and steppers, including with a scrollbar. */
-  grid-template-columns: clamp(190px, 16vw, 240px) minmax(0, 1fr) clamp(256px, 19vw, 310px);
+  grid-template-columns: clamp(208px, 17vw, 256px) minmax(0, 1fr) clamp(280px, 21vw, 320px);
   min-height: 0;
 }
 .sidebar,
@@ -160,19 +157,16 @@ p {
 }
 .sidebar {
   border-right: 1px solid var(--line);
-  background: var(--sidebar);
+  background: var(--chrome);
 }
 .inspector {
   border-left: 1px solid var(--line);
-  background: var(--surface);
 }
 .panel-heading,
 .station-heading,
-.eyebrow,
 .inspector-foot {
-  font-size: 11px;
-  letter-spacing: 0;
-  font-weight: 550;
+  font-size: var(--font-size-1);
+  font-weight: 500;
   color: var(--muted);
 }
 .panel-heading {
@@ -186,7 +180,7 @@ p {
   background: var(--chrome);
 }
 .route-item {
-  margin: 0 6px 4px;
+  margin: 8px 8px 4px;
   padding-block: 7px;
 }
 .route-item > span {
@@ -194,8 +188,8 @@ p {
   gap: 3px;
 }
 .route-item strong {
-  font-weight: 600;
-  font-size: 12px;
+  font-weight: 500;
+  font-size: var(--font-size-2);
 }
 .route-item small,
 .station-row small {
@@ -204,23 +198,14 @@ p {
   font-variant-numeric: tabular-nums;
 }
 .station-heading {
-  margin: 6px 13px 5px;
+  margin: 12px 12px 8px;
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.station-heading b {
-  min-width: 18px;
-  height: 16px;
-  padding: 1px 4px;
-  text-align: center;
-  background: var(--hover);
-  color: var(--muted);
-  border-radius: 4px;
-  letter-spacing: 0;
-}
 .station-heading button {
   margin-left: auto;
+  flex-shrink: 0;
 }
 .filter {
   margin: 0 12px 8px;
@@ -232,9 +217,9 @@ p {
   min-height: 0;
 }
 .station-row {
-  width: calc(100% - 12px);
-  margin: 0 6px;
-  padding-block: 6px;
+  width: calc(100% - 16px);
+  margin: 2px 8px;
+  padding-block: 8px;
 }
 .route-item,
 .station-row {
@@ -245,7 +230,7 @@ p {
   gap: 8px;
   height: auto;
   flex-shrink: 0;
-  padding-inline: 11px;
+  padding-inline: 10px;
   text-align: left;
 }
 
@@ -268,8 +253,8 @@ p {
   white-space: nowrap;
 }
 .station-row strong {
-  font-size: 12px;
-  font-weight: 550;
+  font-size: var(--font-size-2);
+  font-weight: 500;
 }
 .station-symbol {
   --symbol-color: var(--route);
@@ -330,7 +315,7 @@ h1 {
 .course-totals {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   margin-left: auto;
   white-space: nowrap;
   font-size: 12px;
@@ -356,10 +341,10 @@ h1 {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
   background: var(--chrome);
-  padding: 0 var(--pane-inset);
+  padding: 6px var(--pane-inset);
   border-bottom: 1px solid var(--line);
 }
 .pane-title {
@@ -367,7 +352,7 @@ h1 {
   align-items: center;
   gap: 7px;
   font-size: 12px;
-  font-weight: 630;
+  font-weight: 500;
   white-space: nowrap;
 }
 .map-frame,
@@ -406,27 +391,11 @@ h1 {
   outline: 2px solid var(--action);
   outline-offset: -2px;
 }
-.profile-head {
-  min-height: 35px;
-  background: var(--chrome);
-  flex-wrap: wrap;
-  row-gap: 2px;
-}
 .profile-head .sample-count {
   margin-right: auto;
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-.profile-head .terrain-action {
-  margin: 0;
-}
-.terrain-dialog {
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.terrain-dialog a {
-  color: var(--action);
 }
 .terrain-credit {
   display: block;
@@ -434,39 +403,30 @@ h1 {
   color: var(--muted);
   line-height: 1.4;
 }
-.terrain-error {
-  color: var(--error);
-}
 .inspect-content {
-  padding: 10px 0;
+  padding: 12px;
   overflow: auto;
 }
-.inspect-content > :not(.property-group) {
-  margin-inline: 10px;
-}
 .inspect-content > h2 {
-  font-size: 12px;
-  margin-block: 1px 10px;
+  font-size: var(--font-size-2);
+  margin: 0 0 12px;
 }
 .property-group {
   border-top: 1px solid var(--line);
 }
 .property-group > summary {
-  min-height: 27px;
-  padding: 5px 10px;
-  background: var(--group-heading);
+  padding-block: 10px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
   user-select: none;
 }
 .property-body {
-  padding: 3px 10px 8px;
+  padding-bottom: 12px;
 }
 h2 {
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0;
   margin: 4px 0 16px;
 }
 .field {
@@ -500,13 +460,9 @@ h2 {
   gap: 6px;
   margin-block: 6px;
 }
-.inspector-actions > button {
-  margin: 0;
-}
 .coordinate-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1fr;
 }
 .metric-line,
 .coordinate-line {
@@ -567,7 +523,6 @@ h2 {
 }
 .coord-system {
   font-size: 11px;
-  letter-spacing: 0.8px;
   margin-left: 4px;
   border-left: 1px solid var(--line);
   padding-left: 10px;
@@ -626,22 +581,14 @@ h2 {
 }
 @media (max-width: 1120px) {
   .workspace {
-    grid-template-columns: 176px minmax(0, 1fr) 256px;
-  }
-  .topbar {
-    gap: 10px;
-  }
-  .course-totals {
-    gap: 11px;
+    grid-template-columns: 192px minmax(0, 1fr) 280px;
   }
 }
 .compact-panels {
   display: none;
 }
-/* Tool windows can be docked over the canvas in a narrow desktop window. */
 @media (max-width: 959px) {
   .studio {
-    --shell-gutter: 12px;
     min-width: 480px;
   }
   .shell {
@@ -656,11 +603,11 @@ h2 {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 34px;
+    height: 40px;
     flex-shrink: 0;
     background: var(--surface);
     border-bottom: 1px solid var(--line);
-    padding: 0 calc(var(--shell-gutter) - 6px);
+    padding: 0 var(--shell-gutter);
   }
   .selection-summary {
     flex: 1;
@@ -671,25 +618,15 @@ h2 {
     font-size: 12px;
     font-variant-numeric: tabular-nums;
   }
-  .compact-panels button {
-    display: flex;
-    margin: 0;
-    gap: 6px;
-    align-items: center;
-    font-size: 11px;
-    color: var(--muted);
-    padding: 4px 6px;
-  }
-
   .workspace > .sidebar,
   .workspace > .inspector {
     display: none;
     position: absolute;
-    top: 34px;
+    top: 40px;
     bottom: 0;
     z-index: 3;
     width: min(288px, 72%);
-    box-shadow: 0 7px 14px var(--shadow);
+    box-shadow: var(--shadow-4);
   }
   .workspace[data-panel='outline'] > .sidebar {
     display: flex;
@@ -709,17 +646,9 @@ h2 {
   .history-tools {
     padding-left: 5px;
   }
-  .brand {
-    font-size: 15px;
-    gap: 5px;
-  }
   .brand-mark {
     width: 52px;
     height: 22px;
-  }
-  .language {
-    margin: 0;
-    gap: 1px;
   }
   .draft-status {
     max-width: 160px;
@@ -730,13 +659,13 @@ h2 {
 
 @media (max-width: 760px) {
   .shell {
-    grid-template-rows: var(--topbar-height, 82px) minmax(0, 1fr) 25px;
+    grid-template-rows: var(--topbar-height, 88px) minmax(0, 1fr) 25px;
   }
   .topbar {
     display: grid;
     grid-template-columns: auto auto auto minmax(0, 1fr);
     align-content: center;
-    gap: 2px 8px;
+    gap: 8px;
   }
   .top-actions {
     grid-column: 1 / -1;
@@ -744,43 +673,6 @@ h2 {
   }
   .top-actions .language {
     margin-right: auto;
-  }
-}
-@media (max-width: 620px) {
-  .course-totals {
-    gap: 10px;
-  }
-}
-
-/* Desktop chrome uses its unzoomed width for compact controls. */
-@container (max-width: 1000px) {
-  .studio[data-desktop] .top-actions > .file-action span {
-    display: none;
-  }
-  .studio[data-desktop] .top-actions > .file-action {
-    padding: 0 7px;
-  }
-}
-@container (max-width: 959px) {
-  .studio[data-desktop] .brand-mark {
-    width: 52px;
-    height: 22px;
-  }
-  .studio[data-desktop] :is(.file-menu, .history-tools) {
-    padding-left: 5px;
-  }
-  .studio[data-desktop] .top-actions {
-    gap: 4px;
-  }
-  .studio[data-desktop] .language {
-    margin: 0;
-    gap: 1px;
-  }
-  .studio[data-desktop] .language > svg {
-    display: none;
-  }
-  .studio[data-desktop] .language [role='combobox'] {
-    max-width: 72px;
   }
 }
 .station-passes {
@@ -832,6 +724,9 @@ h2 {
   width: min(560px, calc(100vw - 24px));
   max-height: min(90dvh, 800px);
 }
+.export-dialog footer {
+  border-top: 1px solid var(--line);
+}
 .export-preview header,
 .curve-legend,
 .plot-axis {
@@ -840,34 +735,11 @@ h2 {
   justify-content: space-between;
   gap: 10px;
 }
-.export-dialog footer {
-  flex: none;
-  padding-top: 12px;
-}
 
 .export-dialog small {
   font-size: 12px;
   color: var(--muted);
 }
-.export-dialog footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid var(--line);
-}
-.export-body {
-  min-height: 0;
-  overflow: auto;
-  display: grid;
-  gap: 16px;
-  padding: 4px 2px 16px;
-}
-.export-body summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-.export-field,
 .export-options label {
   display: grid;
   gap: 5px;
@@ -879,25 +751,6 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 10px;
   margin: 10px 0;
-}
-.device-upload {
-  grid-column: 1 / -1;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-.device-upload form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 8px;
-}
-.device-upload label {
-  flex: 1 1 160px;
-}
-.device-upload [role='status']:not(:empty) {
-  display: block;
-  margin-top: 8px;
-  overflow-wrap: anywhere;
 }
 .export-preview header {
   flex-wrap: wrap;
@@ -913,16 +766,6 @@ h2 {
 }
 .track-export-preview li + li {
   margin-top: 6px;
-}
-.export-state {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--route);
-  font-weight: 600;
-}
-.export-state[data-error='true'] {
-  color: var(--error);
 }
 .shared-records summary {
   color: var(--route);
@@ -974,15 +817,6 @@ h2 {
   }
 }
 
-@media (max-width: 420px) {
-  .export-dialog footer {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .export-dialog footer > small {
-    grid-column: 1 / -1;
-  }
-}
-
 .mag-export summary small {
   font-weight: 400;
   margin-left: 6px;
@@ -994,53 +828,19 @@ h2 {
   margin: 7px 0;
 }
 
-.desktop-device-dialog {
-  width: min(480px, calc(100vw - 40px));
-}
-
-.desktop-device-dialog p {
-  line-height: 1.5;
-}
-
-/* Compact workbench layout around Radix controls. */
-.theme-picker {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--muted);
-}
-.theme-picker > svg {
-  width: 15px;
-  height: 15px;
-}
-.map-tools {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  row-gap: 4px;
-  padding-block: 3px;
-}
 @container (max-width: 640px) {
   .map-tools > .pane-title {
     display: none;
   }
 }
-.inspect-content > .eyebrow {
-  display: none;
-}
 .inspect-content .field {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
   align-items: center;
   gap: 6px;
-  margin-block: 5px;
-}
-.coordinate-fields {
-  grid-template-columns: 1fr;
-  gap: 0;
+  margin-block: 8px;
 }
 @container (max-width: 1120px) {
-  .studio[data-desktop] .top-actions > .file-action span,
-  .studio[data-desktop] .language > svg,
-  .studio[data-desktop] .theme-picker > svg {
+  .studio[data-desktop] .top-actions > .file-action span {
     display: none;
   }
   .studio[data-desktop] .top-actions > .file-action {
@@ -1059,12 +859,7 @@ h2 {
   }
 }
 
-/* Layout adapters only; Radix owns control colors, borders and interaction states. */
-.export-actions {
-  gap: 3px;
-}
-.language [role='combobox'],
-.theme-picker [role='combobox'] {
+.language [role='combobox'] {
   max-width: 104px;
 }
 .theme-picker [role='combobox'] {
@@ -1082,20 +877,13 @@ h2 {
 .tools [aria-disabled='true'] {
   opacity: 0.4;
 }
-.field > .rt-TextFieldRoot,
-.field > .rt-SelectTrigger {
+.field > :last-child {
   width: 100%;
   min-width: 0;
 }
 .number-control input::-webkit-inner-spin-button,
 .number-control input::-webkit-outer-spin-button {
   appearance: none;
-  margin: 0;
-}
-.number-control .rt-TextFieldSlot {
-  gap: 2px;
-}
-.number-control button {
   margin: 0;
 }
 .number-control button svg.lucide {
@@ -1111,19 +899,8 @@ h2 {
   padding-right: 32px;
   flex: none;
 }
-.desktop-device-dialog .rt-SelectTrigger,
-.desktop-device-dialog .rt-TextFieldRoot {
-  width: 100%;
-  margin-block: 12px;
-}
 @media (max-width: 1000px) {
   .top-actions > .file-action span {
     display: none;
   }
-}
-
-/* Ghost controls normally bleed into surrounding text; toolbar hit areas must not overlap. */
-.topbar .rt-BaseButton,
-.topbar .rt-SelectTrigger {
-  margin: 0;
 }

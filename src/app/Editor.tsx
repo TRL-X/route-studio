@@ -400,10 +400,7 @@ export function Editor({
     <Theme
       appearance={scheme}
       accentColor="blue"
-      grayColor="slate"
-      radius="medium"
-      scaling="90%"
-      panelBackground="solid"
+      grayColor="gray"
       className="studio"
       data-desktop={window.routeStudioDesktop?.platform}
       onDragOver={(e) => e.preventDefault()}
@@ -479,7 +476,7 @@ export function Editor({
                 </span>
                 <SegmentedControl.Root
                   className="tools"
-                  size="2"
+                  size="1"
                   value={tool}
                   aria-label={t.tools}
                   onValueChange={(value) => {
@@ -553,12 +550,7 @@ export function Editor({
                     <PanelsTopLeft size={25} />
                     <h2>{t.empty}</h2>
                     <p>{t.emptyHelp}</p>
-                    <Button
-                      variant="solid"
-                      color="blue"
-
-                      onClick={() => setTool('append')}
-                    >
+                    <Button onClick={() => setTool('append')}>
                       <Plus />
                       {t.append}
                     </Button>

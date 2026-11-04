@@ -1,164 +1,109 @@
 # Route Studio
 
-Route Studio is a desktop browser editor for preparing routes for TRL-X devices. Open a FIT, GPX, KML, or RTE file, edit the course and its elevation profile, then export the edited route as RTE, GPX, KML, or FIT. The interface is available in English and Simplified Chinese.
+A route editor for TRL-X devices, available on the web and as an Electron desktop app. Import FIT, GPX, KML or RTE, edit geometry, stations and elevations, then export RTE, GPX, KML or FIT. The interface supports English and Simplified Chinese.
 
-## Run locally
+## Development
 
-Use Node.js 24 and npm to install dependencies and start the dev server from the repository root.
+Use Node.js 24 and npm:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open the local URL printed in the terminal. The editor opens with an editable example unless there is a draft to recover. To build for deployment, run `npm run build` and serve the contents of `dist/` from a static web host. Use `npm run preview` to check the production build locally.
+The editor opens with an example or a recovered draft. `npm run build` produces a static website in `dist/`; `npm run preview` serves that build locally. Vercel uses these same build settings and skips the Electron binary download.
 
-## Desktop application
-
-The Electron application shares the React editor, import/export worker, and route algorithms with the website. It bundles its frontend locally and does not require a running web server after installation. Online maps, terrain and magnetic declination still need internet access. Local editing, file conversion and the coordinate grid work offline.
+For the desktop app:
 
 ```sh
-npm ci
 npx install-electron --no
 npm run desktop:dev
 ```
 
-The development command compiles the main process and preload, starts Vite on a loopback address, and opens Electron. React changes use Vite hot reload. Restart the command after changing `electron/` files. The website keeps its existing `npm run dev`, `npm run build`, and `npm run preview` commands.
+React changes reload automatically. Restart after changing `electron/` files. The installed app bundles the editor and works offline for local editing and conversion; maps, terrain and magnetic lookup require internet access.
 
-Create installers on the target operating system:
+## Editing routes
+
+1. Open or drop a file, or choose **File → New route**. For files containing multiple tracks or sessions, select a route to edit.
+2. Append, insert or drag route points. Add stations on the route, choosing the intended pass when a route visits the same location more than once. A station's route distance and landmark coordinates can be edited independently.
+3. Use **Fill elevation gaps** for gaps up to 1,000 m. For remaining gaps or a new terrain profile, use **Get elevations online** and review the preview before choosing **Replace all elevations**. These edits can be undone separately.
+4. Save a `.routeproj` to preserve unfinished edits, missing heights, station settings and magnetic data. Recovery drafts are saved locally; use project files for backups and transfer between computers.
+5. Open **Export RTE…**, resolve blocking issues and review the output before downloading. The adjacent menu exports GPX, KML or FIT. RTE processing defaults to 10 m elevation spacing, 2 m geometry tolerance and 10 m smoothing; these settings affect the export, not the project.
+
+The interface uses Radix Themes with system fonts, neutral surfaces and a blue accent. **Appearance** follows the system by default and remembers explicit light or dark choices. The inspector groups related properties, and narrow windows provide **Route outline** and **Edit selection** panels. Drag the profile divider, or focus it and use arrow keys, to resize the chart.
+
+Numeric fields support **Enter** to commit, **Escape** to cancel and **↑ / ↓** to step. The station list supports **↑ / ↓** and **Home / End**. File and export menus support keyboard navigation and return focus when closed.
+
+| Shortcut             | Action                                   |
+| -------------------- | ---------------------------------------- |
+| `Ctrl/⌘ + O`         | Open                                     |
+| `Ctrl/⌘ + S`         | Save project                             |
+| `Ctrl/⌘ + Z`         | Undo                                     |
+| `Ctrl/⌘ + Shift + Z` | Redo                                     |
+| `Esc`                | Close a menu or dialog; cancel placement |
+
+### Format support
+
+FIT Course and GPS Activity sessions are supported. Enhanced altitude takes precedence over standard altitude; missing heights remain editable. Training measurements are not retained, and distances are calculated from geometry. Station matching uses recorded timestamps and distances where available to distinguish repeated visits.
+
+GPX waypoints become checkpoints; KML points are matched to nearby routes and otherwise remain unassigned. Endpoint markers can supply start/finish names. KML heights without a declared altitude mode require confirmation on import.
+
+| Export     | Contents and limits                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RTE        | Device route, stations, elevation and optional magnetic declination. Processing preserves endpoints and stage boundaries.                        |
+| GPX 1.1    | Track vertices, elevation samples and named station waypoints. Waypoints cannot distinguish repeated visits.                                     |
+| KML 2.2    | Route line and named station points. Absolute altitude requires a complete mean-sea-level profile; otherwise the preview explains the 2D export. |
+| FIT Course | Distance, available heights and anchored course points linked to the intended visit. Synthetic timestamps order records one second apart.        |
+
+Previews report stations that cannot be exported. Keep the project file to preserve all editor-specific information.
+
+RTE support targets the **November 1, 2026 draft of TRL-X Route 1.0**: [pinned specification and reference vectors](https://github.com/TRL-X/route-specification/tree/6918eb7aa438186589a516f8caccb03b960c6c0e). Unknown noncritical sections and META extension keys are dropped; unknown critical sections are rejected. Reader limits are 64 MiB, 256 sections, one million GEOM/ELEV/GIDX records each, and 8 MiB / 24 nesting levels / 250,000 items for META. Devices may impose lower limits.
+
+### Online services and device upload
+
+- **Maps:** OpenFreeMap is the default. The basemap menu also supports Tianditu with your own [Key](https://console.tianditu.gov.cn/), or an offline coordinate grid. Apply saves changes; Cancel discards them. Provider, visibility and Key are stored locally, separate from projects. The Key is readable in storage and requests; **Clear Key** removes it after applying. Electron requests originate from `app://route-studio/`, so check Key restrictions in the packaged app. Failures preserve settings and offer Retry.
+- **Custom maps:** `VITE_MAP_STYLE_URL` overrides OpenFreeMap. `VITE_MAP_DARK_STYLE_URL` optionally provides a dark variant. Restart or rebuild after changing either variable.
+- **Terrain:** The [Planetary Computer GLO-30 collection](https://planetarycomputer.microsoft.com/dataset/cop-dem-glo-30) supplies EGM2008 surface heights. Tile requests reveal the route's area. Nearest-grid sampling may include treetops or terrain above tunnels; review before replacement. [Copernicus attribution](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
+- **Magnetic declination:** Automatic RTE export lookup sends the route's distance midpoint and selected UTC date to BGS WMM2025. Results are saved in the project for offline use. Retry, enter a manual value (east positive), or omit declination if unavailable. Imported RTE magnetic metadata stays unchanged until edited.
+- **Bluetooth:** From the RTE preview, choose **Bluetooth upload…**, enter a new full destination such as `/SD:/ROUTES/TEST.RTE`, then select the device. The directory must exist. Length and IEEE CRC32 are verified; an existing different file requires another filename. Interrupted uploads may leave partial files. Web use requires HTTPS or localhost and Web Bluetooth support; desktop use requires OS permission and a working adapter. Physical-device acceptance testing is still required on each platform.
+
+## Desktop packaging
 
 ```sh
-npm run desktop:pack                       # Current platform and architecture
-npm run desktop:pack -- --mac --arm64       # macOS Apple Silicon: DMG and ZIP
-npm run desktop:pack -- --mac --x64         # macOS Intel: DMG and ZIP
-npm run desktop:pack -- --win --x64         # Windows: NSIS installer
-npm run desktop:pack -- --linux --x64       # Linux: AppImage and Debian package
+npm run desktop:pack                       # Current platform
+npm run desktop:pack -- --mac --arm64       # macOS Apple Silicon
+npm run desktop:pack -- --mac --x64         # macOS Intel
+npm run desktop:pack -- --win --x64         # Windows NSIS
+npm run desktop:pack -- --linux --x64       # Linux AppImage and Debian
 ```
 
-Outputs go to `release/`. Use `npm run desktop:pack:dir` for an unpacked application. The source logo is in `src/assets/logo.svg`; the toolbar uses its original proportions and inherits the theme's foreground color. App icons are checked in; `node scripts/generate-icons.mjs` regenerates `build/icon.svg`, the favicon, and the PNG, ICO and ICNS versions using electron-builder's icon tools (downloaded on first use). The desktop and favicon versions place the mark on a neutral dark plate for contrast in either appearance.
+Outputs go to `release/`; `desktop:pack:dir` creates an unpacked app. `node scripts/generate-icons.mjs` regenerates icons from `src/assets/logo.svg` using electron-builder's icon tools.
 
-Desktop **Open** uses a native file picker. **Save project** and format exports use native save dialogs; cancelling leaves the document or export preview open. Native file reads and writes are limited to 64 MiB. A close or quit request warns when the document has changes that have not been saved as a project. Recovery drafts use Electron's local IndexedDB profile, separately from browser drafts. Exporting a device file does not mark a project as saved.
+Native open/save dialogs limit files to 64 MiB. Cancelling a save preserves edits. Closing warns about changes not saved as a project; exporting a route does not mark the project saved. Desktop drafts use a separate Electron profile. Drag empty toolbar space to move the window; Windows/Linux reveal the application menu with **Alt**.
 
-The desktop window integrates its native window buttons into the editor toolbar. Drag the toolbar's empty space to move the window, or drag its edges to resize it. On Windows and Linux, press **Alt** to reveal the application menu; macOS keeps its system menu bar. View zoom changes the editor while the toolbar stays aligned with the native window buttons.
+The renderer uses context isolation, sandboxing, disabled Node integration and a restricted `app://route-studio/` protocol with CSP. Only the main frame can use the file bridge, and it cannot supply filesystem paths. HTTP/HTTPS links open in the system browser.
 
-The interface uses **Radix Themes** for buttons, fields, selectors, menus, dialogs, tables and selection controls. The slate palette and component density are configured in `Editor.tsx`; `theme.css` applies the macOS blue button accent (`#007AFF`) and maps map/chart colors to the same tokens. Project CSS is reserved for workbench layout, domain graphics and compact numeric editing.
+The **Desktop packages** workflow builds and tests packages on native runners. Pull requests and manual runs produce artifacts; version tags create a GitHub Release draft. Publishing remains a maintainer action. Signing secrets:
 
-Choose **Appearance → System, Light, or Dark** in the toolbar. System follows the OS appearance; explicit choices are remembered on this device. Light mode uses white content panels with pale gray for grouped controls and section headers. Panels, dialogs and elevation charts share the selected theme, as do the desktop title bar and native dialogs. The default basemap retains OpenFreeMap Liberty's colors in both appearances; switching the interface theme preserves the loaded map, camera and readable map labels. A custom `VITE_MAP_STYLE_URL` is retained in both modes unless `VITE_MAP_DARK_STYLE_URL` is also configured.
+| Platform           | Secrets                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| macOS signing      | `MAC_CSC_LINK` (base64 P12), `MAC_CSC_KEY_PASSWORD`                 |
+| macOS notarization | `APPLE_API_KEY` (base64 P8), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` |
+| Windows signing    | `WIN_CSC_LINK` (base64 PFX), `WIN_CSC_KEY_PASSWORD`                 |
 
-Controls use a macOS-inspired neutral palette, blue selection highlights and compact rounded buttons in both appearances. The inspector uses collapsible property groups and aligned numeric fields. Press **Enter** to commit a typed value, **Escape** to cancel, or **↑ / ↓** to step (coordinates: 0.00001°, route distance: 0.01 km, elevation: 1 m). The adjacent arrow stepper performs the same operation; each step can be undone once, including a pending typed value. Manual input keeps its precision. In the station list, **↑ / ↓** select adjacent rows and **Home / End** select the first or last visible station. File and export command popups support the same navigation keys; **Escape** closes the popup and returns focus to its button.
+Without certificates, packages are unsigned. Check signing/notarization before distribution. Updates are manual; file associations are not enabled. Keep application ID `org.trlx.route-studio` unchanged to preserve profiles.
 
-Bluetooth upload uses the existing Web Bluetooth/MCUmgr implementation with a desktop device chooser. Windows and Linux pairing requests can confirm a PIN or request PIN entry; macOS handles pairing through the operating system. Allow Bluetooth access when macOS prompts. Linux requires a working BlueZ adapter and desktop session; Chromium's experimental web platform feature switch is enabled on Linux for Web Bluetooth. Availability and transfers still need acceptance testing with physical devices on each platform.
+## Contributing and verification
 
-The renderer runs with context isolation, sandboxing and Node integration disabled. Production assets are served from a restricted `app://route-studio/` protocol with a Content Security Policy. Only the application main frame can invoke the file bridge, and renderer code cannot supply filesystem paths. Ordinary HTTP/HTTPS links open in the system browser.
-
-### Website and Vercel
-
-`vercel.json` explicitly keeps the Vite framework, `npm run build`, and `dist/` output. Its install command skips the Electron binary download. Desktop main/preload bundles and installers go to `dist-electron/` and `release/`, outside the web deployment output. Continue configuring `VITE_MAP_STYLE_URL` through the Vercel project's environment settings and rebuild when it changes.
-
-### Desktop verification and releases
-
-```sh
-npm run desktop:build
-npm run desktop:typecheck
-npm run test:desktop
-```
-
-Desktop Playwright tests cover the secure renderer, import/export worker, native file dialogs with Unicode paths, cancelled and failed saves, the unsaved-close prompt, Bluetooth device discovery/cancellation, and draft recovery after restarting. Dialog responses and discovery events are simulated; tests do not use a physical Bluetooth device. Every test uses a temporary profile. To test an unpacked application, set `DESKTOP_EXECUTABLE` to the full executable path before running `npm run test:desktop`. On Linux CI, use `xvfb-run --auto-servernum npm run test:desktop` after installing Chromium's OS dependencies. Desktop traces are written to `desktop-test-results/`, separately from web traces.
-
-The **Desktop packages** workflow checks the website, builds macOS ARM64 and x64, Windows x64, and Linux x64 installers on their native runners, then runs the desktop tests against the packaged executables. Pull requests and manual runs upload downloadable workflow artifacts. Pushing a tag matching the package version, such as `v0.1.0`, also collects all successful builds in a GitHub Release **draft**. Publishing the release remains a separate maintainer action.
-
-For signed tag builds, configure these repository secrets:
-
-| Platform           | Secrets                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| macOS signing      | `MAC_CSC_LINK` (base64 P12), `MAC_CSC_KEY_PASSWORD`                                   |
-| macOS notarization | `APPLE_API_KEY` (base64 App Store Connect P8), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` |
-| Windows signing    | `WIN_CSC_LINK` (base64 PFX), `WIN_CSC_KEY_PASSWORD`                                   |
-
-Without certificates, the workflow produces unsigned test packages. Check signing and notarization before publishing for external distribution. Automatic updates and file associations are not enabled in this first desktop implementation; install new releases manually. The stable application ID is `org.trlx.route-studio`; keep it unchanged to preserve the desktop profile across releases.
-
-## Prepare a route
-
-1. Choose **Open**, drop a file onto the editor, or start drawing with **File → New route**. If a FIT activity contains several GPS sessions, a GPX contains multiple tracks or segments, or a KML contains several lines, select the course you want to edit. A GPX waypoint or KML point named for the start or finish within 100 m of a matching endpoint supplies that station's name and landmark coordinates. On a closed course, a shared start/finish marker can supply both stations. Other GPX waypoints become checkpoints with **Stage boundary** enabled. KML points can become checkpoints on a nearby route within 250 m; folder context breaks ties between nearby routes. Points associated with other KML routes, or too far from any route, remain unassigned points of interest. You can edit their settings and route positions in the station inspector.
-2. Use **Append point** or **Insert point** to change the geometry. Drag a point with **Select**, or edit its coordinates in the inspector. To add a station, choose **Add station**, move near the route to preview its distance, and click to place it. Press **Esc** to cancel the preview. If the route passes the same place twice, choose the distance and neighboring stations for the intended pass. You can also adjust an existing station's **Route distance (km)** independently of its landmark coordinates.
-3. Choose **Fill elevation gaps** above the profile to fill gaps up to 1,000 m long. Interior gaps use linear interpolation. A gap at the start or finish takes the nearest known height along the route. If gaps remain or the route has no heights, the editor fetches a GLO-30 preview for the whole route. Local gap filling is a separate undoable edit. When a KML supplies heights without an altitude mode, choose whether to use them on import. An altitude mode declared on a KML MultiTrack applies to its child tracks.
-4. Choose **Save project** to download a `.routeproj` file. Projects preserve unfinished edits, including missing heights. The editor also saves a recovery draft in the browser's IndexedDB. Use the project file for backups or to continue on another computer.
-5. Choose **Export RTE…** to check the route, review the output, set the filename and download the previewed bytes. Blocking errors can be opened in the inspector. For GPX, KML, or FIT, choose the arrow beside **Export RTE…**, select the format, review the preview and download the file.
-6. Under **Route processing options**, the defaults are **10 m** for elevation sample spacing, **2 m** for geometry tolerance, and **10 m** for the smoothing window. Compare the profiles, node counts, ascent and file size as you adjust the settings. Endpoints and stage boundaries stay at their original distances. To preserve the project samples and geometry, choose **Keep project samples** and switch geometry tolerance and smoothing off. If samples share a 0.1 m device position, expand the processing record to see which height was used. These settings apply only to the device file and are remembered while editing this route in the current session.
-
-When **Export RTE…** opens, new routes and FIT/GPX/KML imports in **Magnetic declination → Automatic lookup** query BGS WMM2025 using the route’s distance midpoint, zero ellipsoid height, and an editable UTC date. Only that coordinate and date are shared with BGS. A successful result is saved with the project for offline export. Change the midpoint or date to refresh it. If lookup fails, retry, enter a manual value in degrees (east positive, west negative), or choose **Omit** to export without declination. Imported RTE files keep their original value, dates, and reference location, including an absent value, until you edit them.
-
-To send the previewed RTE to an Arcap device, open the editor over HTTPS or localhost in a browser with Web Bluetooth. Open **Export RTE…** and choose **Bluetooth upload…** next to **Download RTE**. Enter the full device path including a new filename, for example `/SD:/ROUTES/TEST.RTE`. The directory must already exist. Put the device into pairing mode if needed, then choose **Select device and upload**. Route Studio checks the device file's length and IEEE CRC32 against the preview bytes. An identical file at the chosen path also passes verification. If another file occupies that path, choose a different filename. An interrupted upload can leave a partial file at the destination.
-
-Select a station or sample to keep its position marked while you inspect nearby points. In a narrow window, select an object and choose **Edit selection** to open its inspector. Drag the divider above the elevation profile to change its height, or focus the divider and use the arrow keys.
-
-Choose **Get elevations online** to fetch a GLO-30 profile. The chart overlays the current and proposed elevations and highlights stretches worth checking.
-
-When every sample has terrain data, choose **Replace all elevations** to apply the EGM2008 heights in one undoable edit. Cancel to keep the current profile.
-
-| Shortcut             | Action                                                  |
-| -------------------- | ------------------------------------------------------- |
-| `Ctrl/⌘ + O`         | Open a file                                             |
-| `Ctrl/⌘ + S`         | Save a project file                                     |
-| `Ctrl/⌘ + Z`         | Undo                                                    |
-| `Ctrl/⌘ + Shift + Z` | Redo                                                    |
-| `Esc`                | Close a menu or dialog and return to the selection tool |
-
-Route editing and file conversion run in the browser. OpenFreeMap is the default online basemap. Open **Basemap: OpenFreeMap** at the top left of the map to choose **Tianditu**, enter your own Key, or turn off **Show basemap**. Click **Apply** to save; **Cancel**, Escape, or clicking outside discards unapplied changes. Tianditu uses its Web Mercator road and label tiles. Switching providers preserves the map view and route edits. No Key is supplied by the application, and it never chooses a provider based on language, location, or network failures.
-
-The provider, Key, and visibility preference are saved in local storage for the current browser origin or Electron profile. They are separate from route documents, recovery drafts, and exports. The Key is masked in the input but is readable in local storage and outgoing map requests. To remove it, choose Tianditu, click **Clear Key**, turn off **Show basemap** (or select OpenFreeMap), and apply. Clearing browser/app data also removes these settings. If local storage is unavailable, settings work for the current session and a warning is shown.
-
-Both the website and Electron use the same controls and request map tiles directly. Obtain a Key from the [Tianditu console](https://console.tianditu.gov.cn/) with application restrictions appropriate to the calling environment. Desktop requests originate from `app://route-studio/`, so website Referer restrictions may not work; verify your Key with the packaged application. The app does not spoof a website Referer or relax Electron web security. Live service access depends on your Key, permissions, quota, and network. A failed basemap leaves the selected provider and saved settings intact, shows the coordinate grid, and offers **Retry**. Editing and file conversion remain available.
-
-Deployments that already use `VITE_MAP_STYLE_URL` retain that override for the OpenFreeMap option. Changing it requires restarting the dev server or rebuilding.
-
-Online terrain lookup requests one-degree tiles and byte ranges from the [Microsoft Planetary Computer GLO-30 collection](https://planetarycomputer.microsoft.com/dataset/cop-dem-glo-30). The editor samples the nearest grid point in the browser, adding samples about every 60 m on long intervals. The model measures surface heights and may represent treetops or the hillside above a tunnel. See the [Copernicus dataset and attribution](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM).
-
-## Code and format support
-
-The application uses TypeScript, React, Vite, and MapLibre GL JS.
-
-Write code, comments, and documentation in English. Keep user-facing translations in the locale resources under `src/i18n/`.
-
-| Directory     | Responsibility                                                                          |
-| ------------- | --------------------------------------------------------------------------------------- |
-| `src/domain/` | Route geometry, independent elevation samples, station anchors, and editing operations  |
-| `src/files/`  | FIT, GPX and KML import, versioned project files, and local draft recovery              |
-| `src/rte/`    | Binary RTE parsing and validation, plus compilation from an editable route              |
-| `src/app/`    | Desktop controls, undo and redo, language selection, and the file-processing Web Worker |
-| `src/i18n/`   | English and Simplified Chinese interface text and RTE diagnostics                       |
-| `src/views/`  | Map interaction and the linked elevation profile                                        |
-
-FIT import accepts Course files and Activity files with GPS records. Activity imports use each recorded session as a separate route and omit records without GPS coordinates. Session time windows use the start time plus elapsed time, independently of when summaries were written; files missing elapsed time retain the summary-timestamp fallback. The editor uses enhanced altitude when present, falls back to altitude, and leaves missing heights editable. Heart rate, timing and other training measurements are not stored in the project. Distances in the editor are calculated from the imported geometry and can differ from the device's recorded distance.
-
-FIT course points become stations. A checkpoint becomes a stage boundary, and other cues become points of interest. Route Studio uses matching record timestamps, then recorded distance, to place a station on the intended pass. If only its coordinates identify it and the route passes there twice, the station keeps its landmark coordinates for manual placement.
-
-| Export format | Route information                                                                                                                                                                                                                                                                                 |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GPX 1.1       | One track with the project vertices and independent elevation samples. Each known height is written in metres. Stations become named waypoints at their landmark coordinates, falling back to their position on the route.                                                                        |
-| KML 2.2       | One line and named point placemarks. A complete mean-sea-level profile is written with absolute altitude. Other profiles are exported in 2D, with the reason shown before download.                                                                                                               |
-| FIT Course    | Route records include cumulative distance and available heights. Each anchored station has a course point linked to the record for that visit, even on a loop or an out-and-back. Unassigned stations are listed before download. Generated timestamps order the course records one second apart. |
-
-GPX and KML waypoints do not identify which visit to a location was intended. All three previews indicate which stations cannot be written. Save a `.routeproj` to keep custom stage boundaries, short labels, magnetic settings and the original independent sampling. RTE processing options, magnetic lookup and Bluetooth upload apply only to RTE.
-
-Elevation samples and stations attach to route segments using stable vertex IDs and fractional positions. A Web Worker handles file import and RTE compilation. During export, the compiler establishes the device's reference distance axis, computes stage statistics, and writes the geometry index. For imported RTE files, it reuses valid distance mappings so an unrelated edit, such as renaming a route, can preserve the original sampling.
-
-The implementation targets the **November 1, 2026 draft of TRL-X Route 1.0**. RTE round trips preserve the information defined by that revision. The importer drops unknown noncritical sections and META extension keys, and rejects unknown critical sections. [Pinned specification and reference vectors](https://github.com/TRL-X/route-specification/tree/6918eb7aa438186589a516f8caccb03b960c6c0e)
-
-The desktop RTE reader accepts files up to 64 MiB with at most 256 sections. GEOM, ELEV, and GIDX each support up to one million records. META is limited to 8 MiB, 24 levels of CBOR nesting, and 250,000 CBOR items. A target device may impose lower limits.
-
-## Contribute with GitHub Flow
-
-1. Start each change on a short-lived branch from the latest `main`. Open a pull request targeting `main`.
-2. Request a review when you want another maintainer's feedback. Before merging, bring the branch up to date with `main`, resolve review conversations, and wait for the `verify` job in **Check editor** to pass.
-3. A member of the [Route Studio mergers team](https://github.com/orgs/TRL-X/teams/route-studio-mergers) uses **Squash and merge**. The PR title becomes the commit title on `main`, and GitHub deletes the merged branch.
-
-## Verify changes
+Use short-lived branches and pull requests targeting `main`. Resolve reviews and pass **Check editor / verify** before a [mergers team](https://github.com/orgs/TRL-X/teams/route-studio-mergers) member squash-merges. Write code, comments and documentation in English; translations belong in `src/i18n/`.
 
 ```sh
 npm run check
 npx playwright install chromium
 npm run test:e2e
+npm run desktop:build
+npm run desktop:typecheck
+npm run test:desktop
 ```
 
-`check` runs formatting checks, unit tests, type checks, and a production build. Playwright tests exercise file selection and download in desktop Chromium, including project recovery, elevation correction, and RTE export. Local acceptance checks used eight GPX and KML fixtures kept outside the repository. All eight routes passed round-trip checks after their height conflicts and gaps were resolved.
+`check` covers formatting, unit tests, type checks and production build. Browser tests cover editing, recovery and file conversion. Desktop tests use temporary profiles and simulated dialogs/Bluetooth; set `DESKTOP_EXECUTABLE` to test a packaged executable. Linux CI requires Chromium's OS dependencies and `xvfb-run --auto-servernum npm run test:desktop`. Desktop traces go to `desktop-test-results/`.

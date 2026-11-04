@@ -23,6 +23,7 @@ async function launch({ disableWebGL = false } = {}) {
     ),
   ) as Record<string, string>;
   desktop = await _electron.launch({
+    colorScheme: null,
     ...(process.env.DESKTOP_EXECUTABLE ? { executablePath: process.env.DESKTOP_EXECUTABLE } : {}),
     args: [
       ...(process.env.DESKTOP_EXECUTABLE ? [] : [root]),
