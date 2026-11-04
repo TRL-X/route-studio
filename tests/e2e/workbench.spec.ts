@@ -186,3 +186,43 @@ test('navigates command menus, outline rows and property groups from the keyboar
   await properties.locator('summary').press('Enter');
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Valley Gate');
 });
+
+for (const commitBeforeClose of [false, true]) {
+  test(`menu exit preserves date input focus after editing${commitBeforeClose ? ' and committing' : ''}`, async ({
+    page,
+  }) => {
+    await page.goto('/');
+    // Make the menu's exit overlap the next editor interaction deterministically.
+    await page.addStyleTag({
+      content: '.rt-DropdownMenuContent[data-state="closed"] { animation-duration: 1s !important; }',
+    });
+    await page.locator('.magnetic-properties summary').click();
+    const date = page.getByLabel('Reference date (UTC)');
+    const trigger = page.getByRole('button', { name: 'Menu', exact: true });
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Route', exact: true }).click();
+    const menu = await page.getByRole('menu', { name: 'Menu', exact: true }).elementHandle();
+    const restored = menu!.evaluate(
+      (element) =>
+        new Promise<void>((resolve) => {
+          element.addEventListener(
+            'focusScope.autoFocusOnUnmount',
+            () => requestAnimationFrame(() => resolve()),
+            { once: true },
+          );
+        }),
+    );
+    await page.getByRole('menuitem', { name: 'Route properties', exact: true }).click();
+    await date.fill('2026-11-03');
+    if (commitBeforeClose) await date.press('Enter');
+    await restored;
+    if (!commitBeforeClose) {
+      await expect(date).toBeFocused();
+      await date.press('Enter');
+    }
+    await expect(trigger).not.toBeFocused();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await page.locator('.magnetic-properties summary').click();
+    await expect(date).toBeHidden();
+  });
+}
