@@ -13,6 +13,13 @@ import {
   validFilename,
 } from './security.js';
 import type { BluetoothChoice, DesktopFile, PairingRequest } from './contracts.js';
+import {
+  commandDefinitions,
+  commandGroups,
+  commandIds,
+  type CommandId,
+  type DesktopCommandState,
+} from './commands.js';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
@@ -36,6 +43,95 @@ let bluetoothCallback: ((id: string) => void) | undefined;
 let pairingCallback: ((response: { confirmed: boolean; pin?: string }) => void) | undefined;
 let bluetoothTimer: ReturnType<typeof setTimeout> | undefined;
 let pairingTimer: ReturnType<typeof setTimeout> | undefined;
+let commandState: DesktopCommandState = {
+  language,
+  enabled: Object.fromEntries(commandIds.map((id) => [id, false])) as Record<CommandId, boolean>,
+};
+let menuVersion = 0;
+
+async function updateCommandMenu() {
+  const version = ++menuVersion;
+  const labels: Record<string, string> = JSON.parse(
+    await readFile(
+      path.join(
+        app.getAppPath(),
+        'src/i18n',
+        `${commandState.language === 'zh' ? 'zh-CN' : 'en'}.commands.desktop.json`,
+      ),
+      'utf8',
+    ),
+  );
+  if (version !== menuVersion) return;
+  const item = (id: CommandId): Electron.MenuItemConstructorOptions => ({
+    id: `command:${id}`,
+    label: labels[id],
+    accelerator: commandDefinitions.find((command) => command.id === id)?.accelerator,
+    enabled: commandState.enabled[id],
+    click: () => {
+      if (
+        !commandState.enabled[id] ||
+        fileDialogOpen ||
+        !window ||
+        window.isDestroyed() ||
+        window.webContents.isDestroyed() ||
+        !trustedURL(window.webContents.getURL())
+      )
+        return;
+      window.webContents.send('desktop:command', id);
+    },
+  });
+  const groups: Electron.MenuItemConstructorOptions[] = commandGroups.map((group) => {
+    const submenu: Electron.MenuItemConstructorOptions[] = commandDefinitions
+      .filter((command) => command.group === group)
+      .map(({ id }) => item(id));
+    if (group === 'file' && process.platform !== 'darwin')
+      submenu.push({ type: 'separator' }, item('settings'));
+    if (group === 'edit')
+      submenu.push(
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      );
+    if (group === 'view')
+      submenu.push(
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'togglefullscreen' },
+        ...(!app.isPackaged ? [{ role: 'toggleDevTools' as const }] : []),
+      );
+    return { label: labels[group], submenu };
+  });
+  if (process.platform === 'darwin')
+    groups.unshift({
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        item('settings'),
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([...groups, { role: 'windowMenu' }]));
+}
+
+function disableCommands() {
+  commandState = {
+    language,
+    enabled: Object.fromEntries(commandIds.map((id) => [id, false])) as Record<CommandId, boolean>,
+  };
+  void updateCommandMenu().catch(console.error);
+}
 
 function trustedURL(value: string) {
   if (isAppURL(value)) return true;
@@ -153,6 +249,7 @@ function createWindow() {
   current.on('closed', () => {
     window = null;
     cancelBluetooth();
+    disableCommands();
   });
   current.webContents.on('will-navigate', (event, url) => {
     if (!trustedURL(url)) {
@@ -169,7 +266,10 @@ function createWindow() {
   });
   current.webContents.on('will-attach-webview', (event) => event.preventDefault());
   current.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) cancelBluetooth();
+    if (isMainFrame && !isInPlace) {
+      cancelBluetooth();
+      disableCommands();
+    }
   });
   // Bluetooth is granted by the explicit device chooser below, not the generic permission handlers.
   current.webContents.session.setPermissionCheckHandler(() => false);
@@ -304,6 +404,19 @@ ipcMain.on('desktop:state', (event, state) => {
   language = state.language;
   window!.setDocumentEdited(dirty);
 });
+ipcMain.on('desktop:commands', (event, state: DesktopCommandState) => {
+  if (
+    !trustedSender(event) ||
+    !state ||
+    !['en', 'zh'].includes(state.language) ||
+    !state.enabled ||
+    commandIds.some((id) => typeof state.enabled[id] !== 'boolean') ||
+    Object.keys(state.enabled).length !== commandIds.length
+  )
+    return;
+  commandState = { language: state.language, enabled: { ...state.enabled } };
+  void updateCommandMenu().catch(console.error);
+});
 ipcMain.on('desktop:bluetooth-select', (event, id) => {
   if (!trustedSender(event) || typeof id !== 'string' || !bluetoothCallback) return;
   if (id && !bluetoothDevices.some((device) => device.deviceId === id)) return;
@@ -352,26 +465,7 @@ app
         return new Response('Not found', { status: 404 });
       }
     });
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
-        {
-          role: 'editMenu',
-          submenu: [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }],
-        },
-        {
-          role: 'viewMenu',
-          submenu: [
-            { role: 'resetZoom' },
-            { role: 'zoomIn' },
-            { role: 'zoomOut' },
-            { role: 'togglefullscreen' },
-            ...(!app.isPackaged ? [{ role: 'toggleDevTools' as const }] : []),
-          ],
-        },
-        { role: 'windowMenu' },
-      ]),
-    );
+    disableCommands();
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

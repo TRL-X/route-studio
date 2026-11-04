@@ -3,8 +3,10 @@ import { TextField, Checkbox, Button, IconButton } from '@radix-ui/themes';
 import { useId } from 'react';
 import { Check, ChevronLeft, ChevronRight, MapPin, Trash2 } from 'lucide-react';
 import { anchorDistance, type Point, type RouteDocument, type Sample, type Station } from '../domain/model';
-import { deleteVertex, moveVertex, updateStation } from '../domain/edit';
-import type { Copy } from './strings';
+import { moveVertex, updateStation } from '../domain/edit';
+import type { Copy, Lang } from './strings';
+import { DeclinationFields } from './DeclinationFields';
+import type { LookupState } from './useDeclinationLookup';
 import { Field } from './Field';
 import { StationPosition } from './StationPosition';
 import { PropertyGroup } from './PropertyGroup';
@@ -14,6 +16,12 @@ export type Selection =
 export type Tool = 'select' | 'append' | 'insert' | 'newStation' | 'stationAnchor' | 'stationLocation';
 interface Props {
   issue?: string;
+  lang: Lang;
+  lookup: LookupState;
+  magneticExpanded: boolean;
+  onMagneticExpanded: (expanded: boolean) => void;
+  onDelete: () => void;
+  canDelete: boolean;
   doc: RouteDocument;
   t: Copy;
   selected: Selection;
@@ -74,7 +82,22 @@ function Stepper({
     </div>
   );
 }
-export function Inspector({ doc, t, selected, choose, change, setTool, status, issue }: Props) {
+export function Inspector({
+  doc,
+  t,
+  selected,
+  choose,
+  change,
+  setTool,
+  status,
+  issue,
+  lang,
+  lookup,
+  magneticExpanded,
+  onMagneticExpanded,
+  onDelete,
+  canDelete,
+}: Props) {
   const v = selected.type === 'vertex' ? doc.vertices.find((v) => v.id === selected.id) : undefined;
   const station = selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
   const sample = selected.type === 'sample' ? doc.elevation[selected.index] : undefined;
@@ -139,7 +162,6 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
         className="inspect-content"
         key={selected.type === 'sample' ? selected.index : selected.type === 'route' ? 'route' : selected.id}
       >
-        <div className="eyebrow">{t.attributes}</div>
         <h2>{title}</h2>
         {!sample && diagnostic}
         {v ? (
@@ -161,11 +183,8 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                 variant="soft"
                 color="red"
 
-                disabled={doc.vertices.length <= 2}
-                onClick={() => {
-                  change(deleteVertex(doc, v.id));
-                  choose({ type: 'route' });
-                }}
+                disabled={!canDelete}
+                onClick={onDelete}
               >
                 <Trash2 />
                 {t.delete}
@@ -196,12 +215,10 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                       });
                     } else patchStation({ kind });
                   }}
-                  options={[
-                    ...(['start', 'finish', 'cp', 'poi'] as const).map((k) => ({
-                      value: k,
-                      label: <>{t[k]}</>,
-                    })),
-                  ]}
+                  options={(['start', 'finish', 'cp', 'poi'] as const).map((k) => ({
+                    value: k,
+                    label: t[k],
+                  }))}
                 />
               </label>
               <label className="check-field">
@@ -255,10 +272,8 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                     variant="soft"
                     color="red"
 
-                    onClick={() => {
-                      change({ ...doc, stations: doc.stations.filter((s) => s.id !== station.id) });
-                      choose({ type: 'route' });
-                    }}
+                    disabled={!canDelete}
+                    onClick={onDelete}
                   >
                     <Trash2 />
                     {t.delete}
@@ -306,10 +321,8 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                   variant="soft"
                   color="red"
 
-                  onClick={() => {
-                    change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
-                    choose({ type: 'route' });
-                  }}
+                  disabled={!canDelete}
+                  onClick={onDelete}
                 >
                   <Trash2 />
                   {t.delete}
@@ -329,13 +342,25 @@ export function Inspector({ doc, t, selected, choose, change, setTool, status, i
                     change({ ...doc, elevationReference: Number(value) as 0 | 1 | 2 })
                   }
                   options={[
-                    { value: 0, label: <>{t.unknown}</> },
-                    { value: 1, label: <>{t.msl}</> },
-                    { value: 2, label: <>{t.wgs}</> },
+                    { value: 0, label: t.unknown },
+                    { value: 1, label: t.msl },
+                    { value: 2, label: t.wgs },
                   ]}
                 />
               </label>
             </PropertyGroup>
+            <details
+              className="property-group magnetic-properties"
+              open={magneticExpanded}
+              onToggle={(event) => onMagneticExpanded(event.currentTarget.open)}
+            >
+              <summary>{t.magTitle}</summary>
+              {magneticExpanded && (
+                <div className="property-body">
+                  <DeclinationFields lang={lang} doc={doc} t={t} change={change} lookup={lookup} />
+                </div>
+              )}
+            </details>
             <PropertyGroup title={t.geometry}>
               <p className="metric-line">
                 {t.geometry}

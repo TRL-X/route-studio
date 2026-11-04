@@ -1,10 +1,12 @@
 import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
 import { strings } from '../../src/app/strings';
+import { commandStrings } from '../../src/app/commands';
+import { setPreference } from '../preferences';
 import { loadProject } from '../../src/files/project';
 import { prepareRte, readRte } from '../../src/rte';
 
-import { open, download, openExport, openMagnetics, disableExportProcessing, setSurveyDate } from './files';
+import { open, download, openExport, disableExportProcessing, setSurveyDate } from './files';
 import { bgsRequests, answerBgs } from './bgs';
 
 test.beforeEach(async ({ page }) => {
@@ -21,12 +23,12 @@ const gpx = `<gpx version="1.1">
 
 test('desktop editor switches languages and retains the preference', async ({ page }) => {
   await page.goto('/');
-  await selectOption(page.getByLabel('Interface language'), 'zh');
+  await setPreference(page, 'Interface language', 'zh');
   await expect(page.getByRole('button', { name: strings.zh.save, exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: strings.zh.export, exact: true })).toBeVisible();
-  await selectOption(page.getByLabel(strings.zh.lang), 'en');
-  await expect(page.getByRole('button', { name: strings.en.export, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: commandStrings.zh.export, exact: true })).toBeVisible();
+  await setPreference(page, strings.zh.lang, 'en');
+  await expect(page.getByRole('button', { name: commandStrings.en.export, exact: true })).toBeVisible();
 });
 
 test('imports, edits, undoes, recovers a draft and downloads project and device files', async ({ page }) => {
@@ -133,12 +135,16 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   await page.goto('/');
   await open(page, 'close.gpx', Buffer.from(source));
   await setSurveyDate(page);
+  await page.getByRole('button', { name: 'Elevation tools…', exact: true }).click();
   const fill = page.getByRole('button', { name: 'Fill elevation gaps', exact: true });
   await fill.click();
-  await expect(page.getByText('Filled 1 · 0 remaining', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Filled 1 · 0 remaining', { exact: true })).toBeVisible();
   await expect(fill).toBeDisabled();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await page.getByRole('button', { name: 'Elevation tools…', exact: true }).click();
   await expect(fill).toBeEnabled();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await disableExportProcessing(page);
   await page.getByText('Resolved shared elevation positions: 1').click();
@@ -147,7 +153,7 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   expect(exported.elevation.map((s) => s.height)).toEqual([0, 5, 10, 30]);
   const project = loadProject((await download(page, 'Save project')).bytes.toString('utf8'));
   expect(project.elevation.map((s) => s.height)).toEqual([0, expect.closeTo(5), 10, 15, 30]);
-  await page.getByRole('button', { name: strings.en.export, exact: true }).click();
+  await page.getByRole('button', { name: commandStrings.en.export, exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByText('Route processing options').click();
   await selectOption(dialog.getByLabel('Elevation sample spacing'), '10');
@@ -157,7 +163,7 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   await expect(dialog.getByRole('img', { name: 'Compare elevation profiles' })).toBeVisible();
   await dialog.getByLabel('File name').fill('ridge.rte');
   await dialog.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: strings.en.export }).click();
+  await page.getByRole('button', { name: commandStrings.en.export }).click();
   await dialog.getByText('Route processing options').click();
   await expect(dialog.getByLabel('Smoothing window')).toHaveAttribute('data-value', '30');
   const grid = await download(page, 'Download RTE');
@@ -167,7 +173,8 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
 
 test('creates and recovers an empty editable project', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'File', exact: true }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
   await page.getByRole('menuitem', { name: 'New route', exact: true }).click();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toHaveValue('');
@@ -228,7 +235,7 @@ test('the export footer stays available on a narrow screen and only the chosen r
 }) => {
   await page.goto('/');
   await page.setViewportSize({ width: 360, height: 600 });
-  const dialog = await openMagnetics(page);
+  const dialog = await openExport(page);
   await dialog.getByText('Route processing options').click();
   await expect(dialog.getByLabel('Elevation sample spacing')).toHaveAttribute('data-value', '10');
   await expect(dialog.getByLabel('Geometry tolerance')).toHaveAttribute('data-value', '2');

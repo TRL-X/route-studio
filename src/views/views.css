@@ -15,8 +15,7 @@
 .rv-map.rv-has-base {
   --map-tool-top: 12px;
 }
-/* The default color map stays light in both UI themes. Keep its SVG labels and
-   route contrast independent of the surrounding panels and map controls. */
+/* Online basemaps stay light, including in dark mode. */
 .rv-colored-base > .rv-map-svg {
   --ink: #25303b;
   --muted: #646e79;
@@ -36,7 +35,6 @@
 .rv-map-svg {
   touch-action: none;
   user-select: none;
-  outline-offset: -2px;
 }
 .rv-map-svg:focus-visible,
 .rv-profile > svg:focus-visible {
@@ -175,23 +173,9 @@
   position: absolute;
   right: var(--pane-inset);
   top: var(--map-tool-top);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
-.rv-map .rv-zoom svg,
-.rv-basemap-tools svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.45;
-  stroke-linejoin: round;
-}
-.rv-basemap-tools .rv-basemap-trigger {
+.rv-basemap-trigger {
   max-width: 100%;
-  background: var(--color-panel-solid);
 }
 .rv-basemap-trigger span {
   overflow: hidden;
@@ -240,7 +224,6 @@
   right: var(--pane-inset);
 }
 .rv-has-base .rv-coords {
-  top: auto;
   bottom: 30px;
 }
 .rv-base .maplibregl-control-container {
@@ -251,29 +234,6 @@
 .rv-base .maplibregl-ctrl-bottom-right {
   z-index: 2;
 }
-.rv-map .rv-mode {
-  position: absolute;
-  bottom: 36px;
-  left: 50%;
-  width: max-content;
-  max-width: calc(100% - 20px);
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--ink);
-  font-size: 12px;
-  pointer-events: none;
-}
-.rv-map .rv-mode div {
-  display: grid;
-}
-.rv-map .rv-mode span {
-  color: var(--muted);
-}
-.rv-map .rv-mode button {
-  pointer-events: auto;
-}
 .rv-map .rv-pass-panel {
   position: absolute;
   left: var(--pane-inset);
@@ -281,7 +241,6 @@
   width: min(276px, calc(100% - 2 * var(--pane-inset)));
   max-height: calc(100% - var(--map-tool-top) - 46px);
   overflow: auto;
-  padding: 0 12px;
 }
 .rv-snap-preview {
   pointer-events: none;

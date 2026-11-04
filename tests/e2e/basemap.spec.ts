@@ -38,7 +38,7 @@ test('applies a personal Key, preserves the view, restores settings and excludes
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const routeBefore = await page.locator('.rv-route').getAttribute('d');
   await trigger.click();
-  const panel = page.getByRole('dialog', { name: 'Basemap settings' });
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
   await selectOption(panel.getByLabel('Map provider'), 'tianditu');
   const input = panel.getByLabel('API Key', { exact: true });
   await expect(input).toBeEmpty();
@@ -47,7 +47,13 @@ test('applies a personal Key, preserves the view, restores settings and excludes
   await panel.getByRole('button', { name: 'Show Key', exact: true }).click();
   await expect(input).toHaveAttribute('type', 'text');
   expect(requests).toHaveLength(0);
+  const scheme = await page.locator('html').getAttribute('data-theme');
+  await panel.getByRole('tab', { name: 'General', exact: true }).click();
+  await selectOption(panel.getByLabel('Interface language'), 'zh');
+  await selectOption(panel.getByLabel('Appearance', { exact: true }), 'dark');
   await panel.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', scheme!);
   await expect(trigger).toBeVisible();
   await trigger.click();
   await expect(panel.getByLabel('Map provider')).toHaveAttribute('data-value', 'openfreemap');
@@ -100,7 +106,7 @@ test('keeps the selected provider after tile errors and retries only on request'
   );
   await page.goto('/');
   await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
-  const panel = page.getByRole('dialog', { name: 'Basemap settings' });
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
   await selectOption(panel.getByLabel('Map provider'), 'tianditu');
   await panel.getByLabel('API Key', { exact: true }).fill('test-personal-key');
   const loadedTile = page.waitForResponse(tileURLs);
@@ -113,7 +119,10 @@ test('keeps the selected provider after tile errors and retries only on request'
   await expect(page.locator('.rv-graticule')).toBeVisible();
   const requestsAfterFailure = freeMapRequests;
   await page.getByRole('button', { name: 'Basemap: Tianditu', exact: true }).click();
-  await expect(panel).toContainText('Map access was denied.');
+  await expect(page.getByText('Basemap unavailable', { exact: true })).toHaveAttribute(
+    'aria-description',
+    /Map access was denied/,
+  );
   await expect(panel.getByLabel('Show basemap')).toBeChecked();
   await panel.press('Escape');
   await expect(page.getByRole('button', { name: 'Basemap: Tianditu', exact: true })).toBeFocused();
@@ -129,12 +138,10 @@ test('keeps the selected provider after tile errors and retries only on request'
   expect(freeMapRequests).toBe(requestsAfterFailure);
 });
 
-test('requires a Key, cancels on Escape or outside click, and fits narrow layouts in Chinese', async ({
-  page,
-}, testInfo) => {
+test('requires a Key, cancels on Escape, and fits narrow layouts in Chinese', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
-  const panel = page.getByRole('dialog', { name: 'Basemap settings' });
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
   await selectOption(panel.getByLabel('Map provider'), 'tianditu');
   await panel.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(panel.getByRole('alert')).toContainText('Enter your Tianditu Key');
@@ -142,13 +149,14 @@ test('requires a Key, cancels on Escape or outside click, and fits narrow layout
   await panel.press('Escape');
   await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
   await expect(panel.getByLabel('Map provider')).toHaveAttribute('data-value', 'openfreemap');
-  await page.locator('.brand').click();
+  await panel.getByRole('tab', { name: 'General', exact: true }).click();
+  await selectOption(panel.getByLabel('Interface language'), 'zh');
+  await panel.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(panel).not.toBeVisible();
-  await selectOption(page.getByLabel('Interface language'), 'zh');
   for (const width of [1440, 800, 480]) {
     await page.setViewportSize({ width, height: 900 });
     await page.getByRole('button', { name: '底图: OpenFreeMap', exact: true }).click();
-    const chinese = page.getByRole('dialog', { name: '底图设置' });
+    const chinese = page.getByRole('dialog', { name: '设置', exact: true });
     await selectOption(chinese.getByLabel('地图提供商'), 'tianditu');
     await expect(chinese.getByRole('button', { name: '应用', exact: true })).toBeInViewport();
     const bounds = await chinese.boundingBox();
@@ -170,7 +178,7 @@ test('keeps session settings usable when local storage cannot be written', async
   });
   await page.goto('/');
   await page.getByRole('button', { name: 'Basemap: OpenFreeMap', exact: true }).click();
-  const panel = page.getByRole('dialog', { name: 'Basemap settings' });
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
   await panel.getByLabel('Show basemap').uncheck();
   await panel.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page.getByText(/Settings apply for this session/)).toBeVisible();

@@ -1,16 +1,27 @@
-import { TextField, Button } from '@radix-ui/themes';
+import { TextField, Button, Flex, Text, Separator } from '@radix-ui/themes';
 import { useEffect, useRef, useState } from 'react';
 import { Bluetooth } from 'lucide-react';
 import { UploadError, withBluetoothFs } from '../device/mcumgr';
 import { uploadFile, validDevicePath } from '../device/upload';
 import type { Copy } from './strings';
 
-export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
+export function DeviceUpload({
+  bytes,
+  t,
+  onBusyChange,
+}: {
+  bytes?: Uint8Array;
+  t: Copy;
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const current = useRef<AbortController | null>(null);
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
   const supported = window.isSecureContext && !!navigator.bluetooth?.requestDevice;
   const name = path.trim();
   const valid = validDevicePath(name);
@@ -62,7 +73,7 @@ export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
     <>
       <Button
         variant={expanded ? 'surface' : 'solid'}
-        color={expanded ? 'gray' : 'blue'}
+        color={expanded ? 'gray' : undefined}
         type="button"
         aria-expanded={expanded}
         aria-controls={expanded ? 'device-upload' : undefined}
@@ -73,42 +84,47 @@ export function DeviceUpload({ bytes, t }: { bytes?: Uint8Array; t: Copy }) {
         {t.bluetoothUpload}
       </Button>
       {expanded && (
-        <div id="device-upload" className="device-upload">
+        <Flex id="device-upload" direction="column" gap="2" width="100%">
+          <Separator size="4" />
           {supported ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void send();
-              }}
-            >
-              <label className="export-field">
-                {t.uploadPath}
-                <TextField.Root
-                  value={path}
-                  onChange={(e) => {
-                    setPath(e.target.value);
-                    setMessage('');
-                  }}
-                  autoFocus
-                  disabled={busy}
-                  aria-invalid={!!name && !valid}
-                />
-              </label>
-              <Button
-                variant="solid"
-                color="blue"
-                type="submit"
-
-                disabled={!bytes || !valid || busy}
+            <Flex asChild wrap="wrap" align="end" gap="2">
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void send();
+                }}
               >
-                {t.uploadSend}
-              </Button>
-            </form>
+                <Flex asChild direction="column" gap="1" flexGrow="1">
+                  <label>
+                    <Text size="2" color="gray">
+                      {t.uploadPath}
+                    </Text>
+                    <TextField.Root
+                      value={path}
+                      onChange={(e) => {
+                        setPath(e.target.value);
+                        setMessage('');
+                      }}
+                      autoFocus
+                      disabled={busy}
+                      aria-invalid={!!name && !valid}
+                    />
+                  </label>
+                </Flex>
+                <Button type="submit" disabled={!bytes || !valid || busy}>
+                  {t.uploadSend}
+                </Button>
+              </form>
+            </Flex>
           ) : (
-            <small>{t.uploadUnsupported}</small>
+            <Text size="2" color="gray">
+              {t.uploadUnsupported}
+            </Text>
           )}
-          <small role="status">{message}</small>
-        </div>
+          <Text size="2" color="gray" role="status">
+            {message}
+          </Text>
+        </Flex>
       )}
     </>
   );

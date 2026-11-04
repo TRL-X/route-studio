@@ -1,14 +1,18 @@
-import { TextField, IconButton, Button } from '@radix-ui/themes';
+import { TextField, IconButton, Button, Flex, Text } from '@radix-ui/themes';
 import type { ReactNode } from 'react';
 import { Modal } from './Modal';
 import { ArrowDownToLine, X } from 'lucide-react';
 import type { ExportFormat } from '../files/export';
 import { strings, type Lang } from './strings';
+import { Choice } from './Choice';
+import en from '../i18n/en.export.json';
+import zh from '../i18n/zh-CN.export.json';
 
 export interface ExportControls {
   lang: Lang;
   name: string;
   onName: (name: string) => void;
+  onFormat: (format: ExportFormat) => void;
   onClose: () => void;
   onDownload: (bytes: Uint8Array<ArrayBuffer>, name: string) => void;
   saving?: boolean;
@@ -20,6 +24,7 @@ export function ExportFrame({
   lang,
   name,
   onName,
+  onFormat,
   onClose,
   onDownload,
   bytes,
@@ -34,18 +39,14 @@ export function ExportFrame({
   extraAction?: ReactNode;
 }) {
   const t = strings[lang];
+  const copy = { en, zh }[lang];
   const baseName = name
     .trim()
     .replace(/\.(rte|fit|gpx|kml)$/i, '')
     .trim();
   const invalidName = !baseName || /[\\/:*?"<>|\u0000-\u001f]/.test(baseName);
   return (
-    <Modal
-      className="export-dialog"
-      title={t.exportFormatTitle.replace('{format}', format.toUpperCase())}
-      onClose={onClose}
-      busy={saving}
-    >
+    <Modal className="export-dialog" maxWidth="560px" title={copy.title} onClose={onClose} busy={saving}>
       <IconButton
         variant="ghost"
         color="gray"
@@ -56,11 +57,29 @@ export function ExportFrame({
       >
         <X />
       </IconButton>
-      <div className="export-body">
-        <label className="export-field">
-          {t.exportFilename}
+      <Flex direction="column" gap="4" minHeight="0" overflowY="auto" pb="4">
+        <label>
+          <Text as="div" size="2" color="gray" mb="1">
+            {t.exportFormat}
+          </Text>
+          <Choice
+            aria-label={t.exportFormat}
+            value={format}
+            disabled={saving}
+            onValueChange={(next) => onFormat(next as ExportFormat)}
+            options={(['rte', 'gpx', 'kml', 'fit'] as const).map((value) => ({
+              value,
+              label: value.toUpperCase(),
+            }))}
+          />
+        </label>
+        <label>
+          <Text as="div" size="2" color="gray" mb="1">
+            {t.exportFilename}
+          </Text>
           <TextField.Root
             value={name}
+            disabled={saving}
             onChange={(e) => onName(e.target.value)}
             maxLength={100}
             aria-invalid={invalidName}
@@ -70,34 +89,35 @@ export function ExportFrame({
           </TextField.Root>
         </label>
         {invalidName && (
-          <small id="export-filename-error" role="alert">
+          <Text size="2" color="red" id="export-filename-error" role="alert">
             {t.invalidExportName}
-          </small>
+          </Text>
         )}
         {children}
         {saveError && <p role="alert">{saveError}</p>}
-      </div>
-      <footer>
-        <small>
-          {t.fileSize} ·{' '}
-          {bytes
-            ? (bytes.byteLength / 1024).toLocaleString(lang, { maximumFractionDigits: 1 }) + ' KiB'
-            : '—'}
-        </small>
-        <Button
-          variant="surface"
-          color="gray"
-
-          disabled={!bytes || invalidName || saving}
-          onClick={() => {
-            if (bytes) onDownload(bytes, baseName);
-          }}
-        >
-          <ArrowDownToLine />
-          {t.downloadFormat.replace('{format}', format.toUpperCase())}
-        </Button>
-        {extraAction}
-      </footer>
+      </Flex>
+      <Flex asChild justify="end" align="center" wrap="wrap" gap="3" pt="3" flexShrink="0">
+        <footer>
+          <Text size="2" color="gray" mr="auto">
+            {t.fileSize} ·{' '}
+            {bytes
+              ? (bytes.byteLength / 1024).toLocaleString(lang, { maximumFractionDigits: 1 }) + ' KiB'
+              : '—'}
+          </Text>
+          <Button
+            variant="surface"
+            color="gray"
+            disabled={!bytes || invalidName || saving}
+            onClick={() => {
+              if (bytes) onDownload(bytes, baseName);
+            }}
+          >
+            <ArrowDownToLine />
+            {t.downloadFormat.replace('{format}', format.toUpperCase())}
+          </Button>
+          {extraAction}
+        </footer>
+      </Flex>
     </Modal>
   );
 }

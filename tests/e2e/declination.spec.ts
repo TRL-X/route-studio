@@ -76,14 +76,16 @@ test('automatic lookup refreshes on date changes, retries a failure, and reopens
   await referenceDate.fill('2027-03-01');
   await referenceDate.press('Enter');
   await expect(page.getByText(/BGS is unavailable/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
-  await expect(page.getByRole('alert')).toContainText(
+  const failedExport = await openExport(page);
+  await expect(failedExport.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
+  await expect(failedExport.getByRole('alert')).toContainText(
     'No magnetic declination result for this location and date',
   );
-  await expect(page.getByRole('button', { name: 'Show in inspector' })).toHaveCount(0);
+  await expect(failedExport.getByLabel('Declination mode')).toHaveCount(0);
+  await failedExport.getByRole('button', { name: 'Show in inspector' }).click();
   await page.getByRole('button', { name: 'Repeat lookup' }).click();
   await expect(page.getByText('0.00° · BGS WMM2025')).toBeVisible();
-  await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
+  await page.locator('.magnetic-properties summary').click();
   const saved = loadProject((await download(page, 'Save project')).bytes.toString('utf8'));
   expect(saved.declination).toMatchObject({
     mode: 'auto',
@@ -128,6 +130,7 @@ test('an outstanding lookup cannot overwrite a manual edit or its exported value
   await open(page, 'pending.routeproj', crossingProject());
   await openMagnetics(page);
   const pending = await requested;
+  await openExport(page);
   await expect(page.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
   await openMagnetics(page);
   await selectOption(page.getByLabel('Declination mode'), 'manual');

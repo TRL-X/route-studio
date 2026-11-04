@@ -1,15 +1,9 @@
-.profile-preview-tools,
 .profile-preview-key,
-.profile-preview-zoom,
 .profile-preview-key span {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-}
-.profile-preview-tools {
-  justify-content: space-between;
-  padding: 4px 0;
 }
 .profile-preview-key {
   gap: 5px 14px;

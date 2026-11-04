@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { strings } from '../../src/app/strings';
 import { open } from './files';
+import { openOnlineTerrain } from './elevation';
 import { mockOnlineTerrain } from './fixtures/online-terrain';
 
 const t = strings.en;
@@ -22,7 +23,7 @@ test('overlays both profiles on the same scale and inspecting the chart does not
     Buffer.from(`<gpx><trk><name>Two profiles</name><trkseg>${points}</trkseg></trk></gpx>`),
   );
   await expect(page.getByRole('heading', { name: 'Two profiles' })).toBeVisible();
-  await page.getByRole('button', { name: t.fetchElevations, exact: true }).click();
+  await openOnlineTerrain(page);
   const dialog = page.getByRole('dialog');
   const graph = dialog.getByRole('img', { name: t.profile, exact: true });
   await expect(graph.locator('.proposed')).toHaveAttribute('d', /^M/);

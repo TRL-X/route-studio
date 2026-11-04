@@ -10,21 +10,23 @@ export function ProfilePanel({
   children,
   t,
   count,
-  canFill,
-  canFetch,
-  onFill,
-  onFetch,
+  actionLabel,
+  disabled,
+  onProcess,
+  collapsed,
+  onCollapsedChange,
 }: {
   children: ReactNode;
   t: Copy;
   count: number;
-  canFill: boolean;
-  canFetch: boolean;
-  onFill: () => void;
-  onFetch: () => void;
+  actionLabel: string;
+  disabled: boolean;
+  onProcess: () => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }) {
   const [height, setHeight] = useState(27);
-  const [collapsed, setCollapsed] = useState(false);
+  const setCollapsed = onCollapsedChange;
   function resize(next: number) {
     setHeight(Math.max(minimum, Math.min(maximum, Math.round(next))));
     setCollapsed(false);
@@ -82,20 +84,10 @@ export function ProfilePanel({
           variant="surface"
           color="gray"
 
-          title={t.interpolationHint}
-          disabled={!canFill}
-          onClick={onFill}
+          disabled={disabled}
+          onClick={onProcess}
         >
-          {t.interpolateGaps}
-        </Button>
-        <Button
-          variant="surface"
-          color="gray"
-          className="terrain-action"
-          disabled={!canFetch}
-          onClick={onFetch}
-        >
-          {t.fetchElevations}
+          {actionLabel}
         </Button>
         <IconButton
           variant="ghost"

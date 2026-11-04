@@ -6,18 +6,22 @@ export function Modal({
   onClose,
   busy,
   className,
+  maxWidth,
   children,
 }: {
   title: string;
   onClose: () => void;
   busy?: boolean;
   className?: string;
+  maxWidth?: Dialog.ContentProps['maxWidth'];
   children: ReactNode;
 }) {
   const [invoker] = useState(() => {
     const active = document.activeElement as HTMLElement | null;
     // Menu commands unmount after selection; restore focus to their persistent trigger.
-    const trigger = active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
+    const trigger =
+      active?.closest('[data-focus-return]')?.getAttribute('data-focus-return') ??
+      active?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
     return (trigger && document.getElementById(trigger)) || active;
   });
   return (
@@ -29,6 +33,7 @@ export function Modal({
     >
       <Dialog.Content
         className={className}
+        maxWidth={maxWidth}
         aria-describedby={undefined}
         onPointerDownOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => {

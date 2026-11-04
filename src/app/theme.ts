@@ -53,8 +53,9 @@ export function useTheme() {
     setTheme(next);
     try {
       localStorage.setItem(preferenceKey, next);
+      return true;
     } catch {
-      // Saving preferences is optional; the current session still changes theme.
+      return false;
     }
   }
   return { theme, scheme, changeTheme };

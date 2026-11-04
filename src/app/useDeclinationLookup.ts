@@ -13,6 +13,7 @@ export interface LookupState {
 export function useDeclinationLookup(
   doc: RouteDocument,
   dispatch: (action: { type: 'lookup'; settings: AutomaticDeclination; value: MagneticDeclination }) => void,
+  enabled = true,
 ): LookupState {
   const settings = doc.declination?.mode === 'auto' ? doc.declination : undefined;
   const date = settings?.date;
@@ -30,7 +31,7 @@ export function useDeclinationLookup(
   } | null>(null);
 
   useEffect(() => {
-    if (!settings || ready || lat === undefined || lon === undefined) return;
+    if (!enabled || !settings || ready || lat === undefined || lon === undefined) return;
     const controller = new AbortController();
     const current = { referenceLatE7: lat, referenceLonE7: lon, referenceDate: settings.date };
     setFailure(null);
@@ -40,11 +41,11 @@ export function useDeclinationLookup(
       else dispatch({ type: 'lookup', settings, value: result.value });
     });
     return () => controller.abort();
-  }, [settings, lat, lon, ready, dispatch]);
+  }, [settings, lat, lon, ready, dispatch, enabled]);
 
   const error =
     failure?.settings === settings && sameReference(failure?.reference, reference)
       ? failure?.error
       : undefined;
-  return { reference, error, pending: !!reference && !ready && !error };
+  return { reference, error, pending: enabled && !!reference && !ready && !error };
 }

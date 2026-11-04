@@ -1,5 +1,5 @@
 import { Modal } from './Modal';
-import { Button } from '@radix-ui/themes';
+import { Button, Callout, Flex, Text } from '@radix-ui/themes';
 import { useLayoutEffect, useMemo, useState } from 'react';
 import { planFullTerrain } from '../domain/elevation-repair';
 import type { RouteDocument } from '../domain/model';
@@ -9,7 +9,7 @@ import zh from '../i18n/zh-CN.repair.json' with { type: 'json' };
 import { runIO } from './io';
 import { strings, type Lang } from './strings';
 import { TerrainCredit } from './TerrainCredit';
-import './elevation-repair.css';
+import { workflowStrings } from './ElevationTools';
 
 const replacementCopy = { en, zh } satisfies Record<Lang, typeof en>;
 type Preview = ReturnType<ReturnType<typeof planFullTerrain>['preview']>;
@@ -20,12 +20,14 @@ export function ElevationRepair({
   initialSummary,
   onApply,
   onClose,
+  onBack,
 }: {
   doc: RouteDocument;
   lang: Lang;
   initialSummary?: string;
   onApply: (next: RouteDocument) => void;
   onClose: () => void;
+  onBack: () => void;
 }) {
   const t = strings[lang];
   const copy = replacementCopy[lang];
@@ -58,69 +60,71 @@ export function ElevationRepair({
   const canRetry = result === 'error' || Boolean(preview?.missing);
   const hasOriginal = doc.elevation.some((s) => s.height !== null);
   const attention = preview?.sections ?? plan?.sections;
+  const error = !plan
+    ? t.terrainLimit
+    : !plan.points.length
+      ? t.noVertices
+      : result === 'error'
+        ? t.terrainNetworkError
+        : preview?.missing
+          ? copy.missing.replace('{missing}', String(preview.missing))
+          : null;
   return (
-    <Modal className="replace-dialog" title={copy.title} onClose={onClose}>
-      {initialSummary && (
-        <p className="replace-summary" role="status">
-          {initialSummary}
-        </p>
-      )}
-      {plan?.points.length ? (
-        <>
-          <p className="replace-datum">
-            {hasOriginal && (
-              <span>
-                {copy.originalDatum} {[t.unknown, t.msl, t.wgs][doc.elevationReference]} →{' '}
-              </span>
-            )}
-            <strong>GLO-30 · EGM2008</strong>
-            {hasOriginal && <span className="replace-hint">{copy.datumHint}</span>}
-          </p>
-          <RepairProfile
-            original={plan.original}
-            hasOriginal={hasOriginal}
-            lang={lang}
-            preview={preview?.readings}
-            attention={hasOriginal ? attention : attention?.filter((section) => section.kind === 'uncovered')}
-          />
-          {result === 'error' ? (
-            <p className="terrain-error" role="alert">
-              {t.terrainNetworkError}
-            </p>
-          ) : preview?.missing ? (
-            <p className="terrain-error" role="alert">
-              {copy.missing.replace('{missing}', String(preview.missing))}
-            </p>
-          ) : (
-            <p className="replace-status" role="status">
-              {preview ? copy.coverage.replace('{total}', String(plan.points.length)) : copy.reading}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="terrain-error" role="alert">
-          {plan ? t.noVertices : t.terrainLimit}
-        </p>
-      )}
-      <details className="replace-credit">
-        <summary>{copy.sourceDetails}</summary>
-        <TerrainCredit />
-      </details>
-      <footer>
-        <Button variant="surface" color="gray" autoFocus onClick={onClose}>
-          {t.cancel}
-        </Button>
-        {candidate && (
-          <Button variant="solid" color="blue" onClick={() => onApply(candidate)}>
-            {copy.replace}
-          </Button>
+    <Modal maxWidth="880px" title={copy.title} onClose={onClose}>
+      <Flex direction="column" gap="3">
+        {initialSummary && (
+          <Text as="p" size="2" color="blue" role="status">
+            {initialSummary}
+          </Text>
         )}
-        {canRetry && (
-          <Button variant="solid" color="blue" onClick={() => setAttempt((n) => n + 1)}>
-            {copy.retry}
-          </Button>
+        {!!plan?.points.length && (
+          <>
+            <Text as="p" size="2" color="gray">
+              {hasOriginal && (
+                <>
+                  {copy.originalDatum} {[t.unknown, t.msl, t.wgs][doc.elevationReference]} →{' '}
+                </>
+              )}
+              <Text weight="medium">GLO-30 · EGM2008</Text>
+              {hasOriginal && <> · {copy.datumHint}</>}
+            </Text>
+            <RepairProfile
+              original={plan.original}
+              hasOriginal={hasOriginal}
+              lang={lang}
+              preview={preview?.readings}
+              attention={
+                hasOriginal ? attention : attention?.filter((section) => section.kind === 'uncovered')
+              }
+            />
+          </>
         )}
-      </footer>
+        {error ? (
+          <Callout.Root color="red" role="alert">
+            <Callout.Text>{error}</Callout.Text>
+          </Callout.Root>
+        ) : (
+          <Text as="p" size="2" color="gray" role="status">
+            {preview ? copy.coverage.replace('{total}', String(plan!.points.length)) : copy.reading}
+          </Text>
+        )}
+        <Text asChild size="2" color="gray">
+          <details>
+            <summary>{copy.sourceDetails}</summary>
+            <TerrainCredit />
+          </details>
+        </Text>
+        <Flex justify="end" wrap="wrap" gap="2" mt="2">
+          <Button variant="surface" color="gray" mr="auto" onClick={onBack}>
+            {workflowStrings[lang].back}
+          </Button>
+          <Button variant="soft" color="gray" autoFocus onClick={onClose}>
+            {t.cancel}
+          </Button>
+          {candidate && <Button onClick={() => onApply(candidate)}>{copy.replace}</Button>}
+          {canRetry && <Button onClick={() => setAttempt((n) => n + 1)}>{copy.retry}</Button>}
+        </Flex>
+      </Flex>
     </Modal>
   );
 }

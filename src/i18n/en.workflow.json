@@ -1,0 +1,8 @@
+{
+  "elevationTools": "Elevation tools",
+  "fillHelp": "Interpolate gaps up to 1,000 m using existing heights. Existing values are kept. You can undo the change.",
+  "onlineHelp": "Get terrain heights and compare them with the current profile before replacing it.",
+  "noKnownHeights": "At least one known height is needed for interpolation. Use online terrain data instead.",
+  "back": "Back",
+  "settingsSaved": "Settings applied."
+}

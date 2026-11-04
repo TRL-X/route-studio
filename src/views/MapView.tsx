@@ -1,4 +1,5 @@
-import { Button, IconButton, Card } from '@radix-ui/themes';
+import { IconButton, Card, Flex } from '@radix-ui/themes';
+import { Maximize, Minus, Plus } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Map as LibreMap } from 'maplibre-gl';
@@ -12,8 +13,6 @@ import { strings, type Lang } from '../app/strings';
 import {
   basemapStyle,
   classifyBasemapFailure,
-  loadBasemapPreferences,
-  saveBasemapPreferences,
   type BasemapFailure,
   type BasemapPreferences,
 } from '../maps/basemap';
@@ -28,6 +27,10 @@ interface MapViewProps {
   doc: RouteDocument;
   lang: Lang;
   scheme: ColorScheme;
+  basemap: BasemapPreferences;
+  storageFailed: boolean;
+  onOpenSettings: () => void;
+  viewCommand?: { type: 'fit' | 'zoomIn' | 'zoomOut'; nonce: number };
   tool: Tool;
   axis: number[];
   revealSelection: number;
@@ -36,7 +39,6 @@ interface MapViewProps {
   focusAnchor?: Anchor | null;
   profileHoverAnchor?: Anchor | null;
   onProbeDistance?: (meters: number | null) => void;
-  onCancelTool: () => void;
   onSelectVertex: (id: string) => void;
   onSelectStation: (id: string) => void;
   onMoveVertex: (id: string, point: Point) => void;
@@ -217,22 +219,23 @@ function Basemap({
 }
 
 export function MapView(props: MapViewProps) {
-  const { doc, lang, tool, selectedVertexId, selectedStationId } = props;
+  const { doc, lang, tool, selectedVertexId, selectedStationId, basemap } = props;
   const t = strings[lang];
   const container = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 800, height: 450 });
   const [manualCamera, setCamera] = useState<Camera | null>(null);
-  const [basemap, setBasemap] = useState(loadBasemapPreferences);
   const [baseFailure, setBaseFailure] = useState<BasemapFailure | null>(null);
   const [baseAttempt, setBaseAttempt] = useState(0);
-  const [baseStorageFailed, setBaseStorageFailed] = useState(false);
   const missingBaseKey = basemap.provider === 'tianditu' && !basemap.tiandituKey;
   const showBase = basemap.enabled && !baseFailure && !missingBaseKey;
   const retryBase = () => {
     setBaseFailure(null);
     setBaseAttempt((attempt) => attempt + 1);
   };
+  useEffect(() => {
+    setBaseFailure(null);
+  }, [basemap.provider, basemap.tiandituKey, basemap.enabled]);
   const [hover, setHover] = useState<(XY & { onRoute: boolean }) | null>(null);
   const [mapProbe, setMapProbe] = useState<(XY & { meters: number }) | null>(null);
   const [passes, setPasses] = useState<StationPassage[] | null>(null);
@@ -344,6 +347,14 @@ export function MapView(props: MapViewProps) {
       zoom,
     });
   }
+  const lastViewCommand = useRef(props.viewCommand?.nonce);
+  useEffect(() => {
+    const command = props.viewCommand;
+    if (!command || command.nonce === lastViewCommand.current) return;
+    lastViewCommand.current = command.nonce;
+    if (command.type === 'fit') setCamera(null);
+    else zoomBy(command.type === 'zoomIn' ? 1 : -1);
+  }, [props.viewCommand]);
   const wheel = useRef(zoomBy);
   wheel.current = zoomBy;
   useEffect(() => {
@@ -700,33 +711,6 @@ export function MapView(props: MapViewProps) {
           </g>
         )}
       </svg>
-      {tool !== 'select' && (
-        <Card className="rv-mode">
-          <div>
-            <b>
-              {
-                {
-                  append: t.append,
-                  insert: t.insert,
-                  newStation: t.addStation,
-                  stationAnchor: t.pickRoutePosition,
-                  stationLocation: t.location,
-                }[tool]
-              }
-            </b>
-            <span>{snapping ? t.snapHint : tool === 'append' ? t.drawing : t.locating}</span>
-          </div>
-          <Button
-            variant="surface"
-            color="gray"
-            type="button"
-            onClick={props.onCancelTool}
-            aria-label={t.cancel}
-          >
-            Esc
-          </Button>
-        </Card>
-      )}
       {snapping && passes && (
         <Card className="rv-pass-panel" ref={passPanel}>
           <StationPassOptions
@@ -740,49 +724,45 @@ export function MapView(props: MapViewProps) {
         </Card>
       )}
       <Card className="rv-zoom" aria-label={t.mapView} size="1">
-        <IconButton
-          variant="surface"
-          color="gray"
-          type="button"
-          aria-label={t.zoomIn}
-          title={t.zoomIn}
-          onClick={() => zoomBy(1)}
-        >
-          +
-        </IconButton>
-        <IconButton
-          variant="surface"
-          color="gray"
-          type="button"
-          aria-label={t.zoomOut}
-          title={t.zoomOut}
-          onClick={() => zoomBy(-1)}
-        >
-          −
-        </IconButton>
-        <IconButton
-          variant="surface"
-          color="gray"
-          type="button"
-          aria-label={t.fitRoute}
-          title={t.fitRoute}
-          onClick={() => setCamera(null)}
-        >
-          <svg viewBox="0 0 18 18" aria-hidden="true">
-            <path d="M2 7V2h5m4 0h5v5m0 4v5h-5m-4 0H2v-5" />
-          </svg>
-        </IconButton>
+        <Flex direction="column" gap="1">
+          <IconButton
+            variant="soft"
+            color="gray"
+            type="button"
+            aria-label={t.zoomIn}
+            title={t.zoomIn}
+            onClick={() => zoomBy(1)}
+          >
+            <Plus />
+          </IconButton>
+          <IconButton
+            variant="soft"
+            color="gray"
+            type="button"
+            aria-label={t.zoomOut}
+            title={t.zoomOut}
+            onClick={() => zoomBy(-1)}
+          >
+            <Minus />
+          </IconButton>
+          <IconButton
+            variant="soft"
+            color="gray"
+            type="button"
+            aria-label={t.fitRoute}
+            title={t.fitRoute}
+            onClick={() => setCamera(null)}
+          >
+            <Maximize />
+          </IconButton>
+        </Flex>
       </Card>
       <BasemapControls
         lang={lang}
         preferences={basemap}
         failure={basemap.enabled ? (missingBaseKey ? 'key' : baseFailure) : null}
-        storageFailed={baseStorageFailed}
-        onApply={(preferences) => {
-          setBaseStorageFailed(!saveBasemapPreferences(preferences));
-          setBasemap(preferences);
-          retryBase();
-        }}
+        storageFailed={props.storageFailed}
+        onOpenSettings={props.onOpenSettings}
         onRetry={retryBase}
       />
       <div className="rv-scale">

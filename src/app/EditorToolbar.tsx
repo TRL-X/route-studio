@@ -1,75 +1,67 @@
 import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { ArrowDownToLine, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
+import type { Lang } from './strings';
 import {
-  ArrowDownToLine,
-  FilePlus2,
-  FolderOpen,
-  Globe2,
-  Mountain,
-  Monitor,
-  Moon,
-  Sun,
-  Redo2,
-  Save,
-  Undo2,
-} from 'lucide-react';
-import type { ExportFormat } from '../files/export';
-import { strings, type Lang } from './strings';
-import type { Theme } from './theme';
-import { Choice } from './Choice';
+  commandDefinitions,
+  commandGroups,
+  commandIds,
+  commandShortcut,
+  commandStrings,
+  type CommandId,
+  type EditorCommands,
+} from './commands';
 
 interface ToolbarProps {
   title: string;
-  theme: Theme;
-  onTheme: (theme: Theme) => void;
   lang: Lang;
-  onLanguage: (lang: Lang) => void;
   locked: boolean;
-  canUndo: boolean;
-  canRedo: boolean;
-  onHistory: (action: 'undo' | 'redo') => void;
-  onNew: () => void;
-  onExample: () => void;
-  onOpen: (file: File) => void;
-  onPickFile?: () => void;
-  onSave: () => void;
-  onExport: (format: ExportFormat) => void;
+  commands: EditorCommands;
 }
 
-export function EditorToolbar({
-  title,
-  theme,
-  onTheme,
-  lang,
-  onLanguage,
-  locked,
-  canUndo,
-  canRedo,
-  onHistory,
-  onNew,
-  onExample,
-  onOpen,
-  onPickFile,
-  onSave,
-  onExport,
-}: ToolbarProps) {
-  const t = strings[lang];
+function editingText() {
+  const element = document.activeElement;
+  return (
+    element instanceof HTMLTextAreaElement ||
+    (element instanceof HTMLInputElement &&
+      !['checkbox', 'radio', 'button', 'submit'].includes(element.type)) ||
+    (element instanceof HTMLElement && element.isContentEditable)
+  );
+}
+
+export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
+  const t = commandStrings[lang];
   const desktop = window.routeStudioDesktop;
   const [zoom, setZoom] = useState(() => desktop?.getZoomFactor() ?? 1);
   const [windowControlsVisible, setWindowControlsVisible] = useState(true);
-  const [menu, setMenu] = useState<'file' | 'export' | null>(null);
-  const picker = useRef<HTMLInputElement>(null);
-  const saveButton = useRef<HTMLButtonElement>(null);
-  const shortcut = /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl+';
-  const pickFile = () => {
-    setMenu(null);
-    if (onPickFile) onPickFile();
-    else picker.current?.click();
-  };
-  const returnFocus = (event: Event) => {
-    // A command may have opened a dialog; let its focus scope take over.
-    if (document.querySelector('[role="dialog"]')) event.preventDefault();
-  };
+  const [menu, setMenu] = useState(false);
+  const [textEditing, setTextEditing] = useState(false);
+  const menuTriggerId = useId();
+  const latest = useRef({ commands, locked });
+  latest.current = { commands, locked };
+  const mac = /Mac/.test(navigator.platform);
+
+  function execute(id: CommandId, native = false) {
+    if (native && (id === 'undo' || id === 'redo') && editingText()) {
+      document.execCommand(id);
+      return;
+    }
+    if (latest.current.locked) return;
+    if (latest.current.commands[id].disabled) return;
+    setMenu(false);
+    if (editingText()) {
+      const field = document.activeElement as HTMLElement;
+      field.blur();
+      // A field's blur commits its draft before the command reads the latest document.
+      queueMicrotask(() => {
+        if (!latest.current.locked && !latest.current.commands[id].disabled) {
+          if (field.isConnected) field.focus({ preventScroll: true });
+          latest.current.commands[id].run();
+        }
+      });
+    } else latest.current.commands[id].run();
+  }
+
   useEffect(() => {
     if (!desktop) return;
     const overlay = navigator.windowControlsOverlay;
@@ -86,28 +78,51 @@ export function EditorToolbar({
     };
   }, [desktop]);
   useEffect(() => {
-    if (locked) setMenu(null);
+    if (locked) setMenu(false);
   }, [locked]);
   useEffect(() => {
+    const update = () => queueMicrotask(() => setTextEditing(editingText()));
+    document.addEventListener('focusin', update);
+    document.addEventListener('focusout', update);
+    return () => {
+      document.removeEventListener('focusin', update);
+      document.removeEventListener('focusout', update);
+    };
+  }, []);
+  const enabled = Object.fromEntries(
+    commandIds.map((id) => [
+      id,
+      (textEditing && (id === 'undo' || id === 'redo')) || (!locked && !commands[id].disabled),
+    ]),
+  );
+  const commandState = JSON.stringify({ language: lang, enabled });
+  useEffect(() => {
+    desktop?.setCommandState(JSON.parse(commandState));
+  }, [desktop, commandState]);
+  useEffect(() => desktop?.onCommand((id) => execute(id, true)), [desktop]);
+  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || locked || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (
+        event.defaultPrevented ||
+        latest.current.locked ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey
+      )
+        return;
       const key = event.key.toLowerCase();
-      if (key === 'o') {
-        event.preventDefault();
-        pickFile();
-      } else if (key === 's') {
-        event.preventDefault();
-        (document.activeElement as HTMLElement)?.blur();
-        queueMicrotask(() => saveButton.current?.click());
-      } else if (key === 'z' || key === 'y') {
-        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-        event.preventDefault();
-        onHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo');
-      }
+      let command = commandDefinitions.find(({ accelerator }) => {
+        const parts = accelerator?.toLowerCase().split('+');
+        return parts?.at(-1) === key && parts.includes('shift') === event.shiftKey;
+      })?.id;
+      if (!mac && key === 'y' && !event.shiftKey) command = 'redo';
+      if (!command || ((command === 'undo' || command === 'redo') && editingText())) return;
+      event.preventDefault();
+      execute(command);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  });
+  }, [mac]);
+
   return (
     <>
       {desktop && <div aria-hidden="true" style={{ height: 48 / zoom }} />}
@@ -120,30 +135,50 @@ export function EditorToolbar({
           <span className="brand-mark" aria-hidden="true" />
         </div>
         <div className="file-menu">
-          <DropdownMenu.Root open={menu === 'file'} onOpenChange={(open) => setMenu(open ? 'file' : null)}>
+          <DropdownMenu.Root open={menu} onOpenChange={setMenu}>
             <DropdownMenu.Trigger>
-              <Button variant="ghost" m="0" color="gray">
-                {t.file}
-                <DropdownMenu.TriggerIcon />
+              <Button id={menuTriggerId} variant="ghost" color="gray" aria-label={t.menu}>
+                <Menu />
+                {t.menu}
               </Button>
             </DropdownMenu.Trigger>
-            <DropdownMenu.Content loop aria-label={t.file} onCloseAutoFocus={returnFocus}>
-              <DropdownMenu.Item onSelect={onNew}>
-                <FilePlus2 size={15} />
-                {t.new}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={pickFile} shortcut={shortcut + 'O'}>
-                <FolderOpen size={15} />
-                {t.openFile}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onExample}>
-                <Mountain size={15} />
-                {t.example}
-              </DropdownMenu.Item>
+            <DropdownMenu.Content
+              loop
+              aria-label={t.menu}
+              data-focus-return={menuTriggerId}
+              onCloseAutoFocus={(event) => {
+                if (document.querySelector('[role="dialog"]')) event.preventDefault();
+              }}
+            >
+              {commandGroups.map((group) => (
+                <DropdownMenu.Sub key={group}>
+                  <DropdownMenu.SubTrigger>{t[group]}</DropdownMenu.SubTrigger>
+                  <DropdownMenu.SubContent data-focus-return={menuTriggerId}>
+                    {commandDefinitions
+                      .filter((command) => command.group === group)
+                      .map(({ id, accelerator }) => (
+                        <DropdownMenu.Item
+                          key={id}
+                          aria-label={t[id]}
+                          disabled={locked || commands[id].disabled}
+                          shortcut={commandShortcut(accelerator, mac)}
+                          onSelect={() => execute(id)}
+                        >
+                          {t[id]}
+                        </DropdownMenu.Item>
+                      ))}
+                  </DropdownMenu.SubContent>
+                </DropdownMenu.Sub>
+              ))}
               <DropdownMenu.Separator />
-              <DropdownMenu.Item aria-label={t.save} onSelect={onSave} shortcut={shortcut + 'S'}>
-                <Save size={15} />
-                {t.save}
+              <DropdownMenu.Item
+                aria-label={t.settings}
+                shortcut={mac ? '⌘,' : 'Ctrl+,'}
+                disabled={locked || commands.settings.disabled}
+                onSelect={() => execute('settings')}
+              >
+                <Settings size={15} />
+                {t.settings}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Root>
@@ -151,23 +186,21 @@ export function EditorToolbar({
         <div className="history-tools">
           <IconButton
             variant="ghost"
-            m="0"
             color="gray"
-            title={t.undo + ' (⌘/Ctrl Z)'}
+            title={t.undo}
             aria-label={t.undo}
-            disabled={!canUndo}
-            onClick={() => onHistory('undo')}
+            disabled={locked || commands.undo.disabled}
+            onClick={() => execute('undo')}
           >
             <Undo2 />
           </IconButton>
           <IconButton
             variant="ghost"
-            m="0"
             color="gray"
-            title={t.redo + ' (⌘/Ctrl Shift Z)'}
+            title={t.redo}
             aria-label={t.redo}
-            disabled={!canRedo}
-            onClick={() => onHistory('redo')}
+            disabled={locked || commands.redo.disabled}
+            onClick={() => execute('redo')}
           >
             <Redo2 />
           </IconButton>
@@ -176,95 +209,38 @@ export function EditorToolbar({
           <h1 title={title}>{title}</h1>
         </div>
         <div className="top-actions">
-          <label className="theme-picker" title={t.theme}>
-            {theme === 'system' ? <Monitor /> : theme === 'dark' ? <Moon /> : <Sun />}
-            <Choice
-              variant="ghost"
-              m="0"
-              aria-label={t.theme}
-              value={theme}
-              onValueChange={(v) => onTheme(v as Theme)}
-              options={[
-                { value: 'system', label: t.themeSystem },
-                { value: 'light', label: t.themeLight },
-                { value: 'dark', label: t.themeDark },
-              ]}
-            />
-          </label>
-          <label className="language">
-            <Globe2 size={16} />
-            <Choice
-              variant="ghost"
-              m="0"
-              aria-label={t.lang}
-              value={lang}
-              onValueChange={(v) => onLanguage(v as Lang)}
-              options={[
-                { value: 'en', label: strings.en.languageName },
-                { value: 'zh', label: strings.zh.languageName },
-              ]}
-            />
-          </label>
-          <Button
-            variant="surface"
-            color="gray"
-            className="file-action"
-            aria-label={t.open}
-            title={t.open}
-            onClick={pickFile}
-          >
-            <FolderOpen />
-            <span>{t.open}</span>
-          </Button>
           <Button
             variant="surface"
             color="gray"
             className="file-action"
             aria-label={t.save}
             title={t.save}
-            ref={saveButton}
-            onClick={onSave}
+            disabled={locked || commands.save.disabled}
+            onClick={() => execute('save')}
           >
             <Save />
             <span>{t.save}</span>
           </Button>
-          <div className="export-actions">
-            <Button onClick={() => onExport('rte')} aria-haspopup="dialog">
-              <ArrowDownToLine />
-              {t.export}
-            </Button>
-            <DropdownMenu.Root
-              open={menu === 'export'}
-              onOpenChange={(open) => setMenu(open ? 'export' : null)}
-            >
-              <DropdownMenu.Trigger>
-                <IconButton className="export-formats" aria-label={t.exportFormat} title={t.exportFormat}>
-                  <DropdownMenu.TriggerIcon />
-                </IconButton>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="end" aria-label={t.exportFormat} onCloseAutoFocus={returnFocus}>
-                {(['rte', 'gpx', 'kml', 'fit'] as const).map((format) => (
-                  <DropdownMenu.Item key={format} onSelect={() => onExport(format)}>
-                    {t.exportFormatTitle.replace('{format}', format.toUpperCase())}…
-                  </DropdownMenu.Item>
-                ))}
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
-          </div>
+          <Button
+            aria-haspopup="dialog"
+            disabled={locked || commands.export.disabled}
+            onClick={() => execute('export')}
+          >
+            <ArrowDownToLine />
+            {t.export}
+          </Button>
+          <IconButton
+            variant="ghost"
+            color="gray"
+            aria-label={t.settings}
+            title={t.settings}
+            disabled={locked || commands.settings.disabled}
+            onClick={() => execute('settings')}
+          >
+            <Settings />
+          </IconButton>
         </div>
       </header>
-      <input
-        ref={picker}
-        type="file"
-        aria-label={t.openFile}
-        hidden
-        accept=".fit,.gpx,.kml,.rte,.routeproj"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = '';
-          if (f) onOpen(f);
-        }}
-      />
     </>
   );
 }
