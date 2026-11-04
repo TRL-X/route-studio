@@ -12,7 +12,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'npm run build && npm run preview -- --port 4173 --strictPort',
+    command: `${process.env.PLAYWRIGHT_SKIP_BUILD === '1' ? '' : 'npm run build && '}npm run preview -- --port 4173 --strictPort`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
   },

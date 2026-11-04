@@ -1,33 +1,13 @@
 name: Desktop packages
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
-  verify-web:
-    runs-on: ubuntu-latest
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
-
   package:
-    needs: verify-web
     strategy:
       fail-fast: false
       matrix:
@@ -45,6 +25,7 @@ jobs:
             platform: linux
             arch: x64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -113,38 +94,3 @@ jobs:
         with:
           name: desktop-test-results-${{ matrix.platform }}-${{ matrix.arch }}
           path: desktop-test-results
-
-  draft-release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: package
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: desktop-*
-          merge-multiple: true
-          path: installers
-      - name: Verify complete release
-        run: node scripts/verify-release.mjs installers
-      - name: Upload installers to a draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
-          else
-            gh release create "$GITHUB_REF_NAME" --draft --generate-notes
-          fi
-          gh release upload "$GITHUB_REF_NAME" installers/* --clobber
