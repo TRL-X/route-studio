@@ -2,6 +2,8 @@ import { selectOption } from '../controls';
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
 import { commandStrings } from '../../src/app/commands';
+import { saveProject } from '../../src/files/project';
+import { ridgeRoute } from '../fixtures/ridge';
 
 export async function open(page: Page, name: string, bytes: Buffer) {
   const chooser = page.waitForEvent('filechooser');
@@ -9,6 +11,16 @@ export async function open(page: Page, name: string, bytes: Buffer) {
   await page.getByRole('menuitem', { name: 'File', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Open…', exact: true }).click();
   await (await chooser).setFiles({ name, buffer: bytes, mimeType: 'application/octet-stream' });
+}
+
+export async function openRidge(page: Page) {
+  const doc = ridgeRoute();
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'ridge.routeproj',
+    mimeType: 'application/json',
+    buffer: Buffer.from(saveProject(doc)),
+  });
+  await expect(page.getByRole('heading', { name: doc.name, exact: true })).toBeVisible();
 }
 
 export async function openExport(page: Page) {

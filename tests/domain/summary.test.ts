@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import { exampleRoute } from '../../src/domain/example';
+import { ridgeRoute } from '../fixtures/ridge';
 import { ascent } from '../../src/domain/summary';
 
 test('ascent follows anchor order and is unknown for incomplete coverage', () => {
-  const route = exampleRoute();
+  const route = ridgeRoute();
   expect(ascent(route)).toBe(690);
   expect(ascent({ ...route, elevation: [...route.elevation].reverse() })).toBe(690);
   expect(ascent({ ...route, elevation: route.elevation.slice(1) })).toBeNull();

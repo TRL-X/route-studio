@@ -102,6 +102,21 @@ test.afterEach(async () => {
   expect(mainErrors).toEqual([]);
 });
 
+test('starts with a blank route and no example command', async () => {
+  const page = await launch();
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('');
+  await expect(page.locator('.rv-route')).toHaveAttribute('d', '');
+  await expect(page.locator('.rv-station')).toHaveCount(0);
+  expect(
+    await desktop.evaluate(({ Menu }) =>
+      Boolean(Menu.getApplicationMenu()?.getMenuItemById('command:example')),
+    ),
+  ).toBe(false);
+  await fileMenu(page);
+  await expect(page.getByRole('menuitem', { name: 'New route', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Open example', exact: true })).toHaveCount(0);
+});
+
 test('synchronizes the editor appearance with native window chrome and dialogs', async () => {
   const page = await launch();
   for (const theme of ['dark', 'light', 'system']) {
@@ -121,6 +136,13 @@ test('synchronizes the editor appearance with native window chrome and dialogs',
 
 test('native commands share editor history and stay disabled while a dialog is open', async () => {
   const page = await launch();
+  const source = path.join(directory, 'native-menu.gpx');
+  await writeFile(source, gpx);
+  await desktop.evaluate(({ dialog }, filename) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
+  }, source);
+  await nativeCommand('open');
+  await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   const route = page.locator('.rv-route');
   const originalPath = await route.getAttribute('d');

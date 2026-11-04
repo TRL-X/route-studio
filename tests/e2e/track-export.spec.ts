@@ -1,6 +1,6 @@
 import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
-import { download, open, openExport } from './files';
+import { download, open, openExport, openRidge } from './files';
 import { bgsRequests } from './bgs';
 import { emptyRoute } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
@@ -13,6 +13,7 @@ for (const format of ['GPX', 'KML', 'FIT']) {
       return route.abort();
     });
     await page.goto('/');
+    await openRidge(page);
     const dialog = await openExport(page);
     await selectOption(dialog.getByLabel('Choose export format'), format.toLowerCase());
     await expect(dialog).toHaveAccessibleName('Export route');

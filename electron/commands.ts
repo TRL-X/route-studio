@@ -1,7 +1,6 @@
 export const commandIds = [
   'new',
   'open',
-  'example',
   'save',
   'export',
   'undo',
@@ -32,7 +31,6 @@ export interface CommandDefinition {
 export const commandDefinitions: CommandDefinition[] = [
   { id: 'new', group: 'file', accelerator: 'CommandOrControl+N' },
   { id: 'open', group: 'file', accelerator: 'CommandOrControl+O' },
-  { id: 'example', group: 'file' },
   { id: 'save', group: 'file', accelerator: 'CommandOrControl+S' },
   { id: 'export', group: 'file', accelerator: 'CommandOrControl+Shift+E' },
   { id: 'undo', group: 'edit', accelerator: 'CommandOrControl+Z' },

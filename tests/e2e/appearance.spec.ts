@@ -1,6 +1,6 @@
 import { selectOption } from '../controls';
 import { openSettings, setPreference } from '../preferences';
-import { openExport } from './files';
+import { openExport, openRidge } from './files';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
@@ -10,6 +10,7 @@ test.beforeEach(async ({ page }) => {
 test('follows system changes, persists overrides and preserves the current selection', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
+  await openRidge(page);
   const settings = await openSettings(page);
   await expect(settings.getByLabel('Appearance', { exact: true })).toHaveAttribute('data-value', 'system');
   await settings.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -70,6 +71,7 @@ test('keeps the color basemap, labels and camera stable across appearance change
   });
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
+  await openRidge(page);
   await expect.poll(() => styles.some((url) => url.endsWith('/liberty'))).toBe(true);
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const path = await page.locator('.rv-route').getAttribute('d');

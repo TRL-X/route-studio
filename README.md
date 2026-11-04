@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-The editor opens with an example or a recovered draft. `npm run build` produces a static website in `dist/`; `npm run preview` serves that build locally. Vercel uses these same build settings and skips the Electron binary download.
+The editor opens with an empty route or a recovered draft. `npm run build` produces a static website in `dist/`; `npm run preview` serves that build locally. Vercel uses these same build settings and skips the Electron binary download.
 
 For the desktop app:
 

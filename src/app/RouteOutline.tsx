@@ -10,23 +10,13 @@ interface OutlineProps {
   doc: RouteDocument;
   axis: number[];
   selected: Selection;
-  example: boolean;
   source: string;
   t: Copy;
   onSelect: (selected: Selection) => void;
   onAddStation: () => void;
 }
 
-export function RouteOutline({
-  doc,
-  axis,
-  selected,
-  example,
-  source,
-  t,
-  onSelect,
-  onAddStation,
-}: OutlineProps) {
+export function RouteOutline({ doc, axis, selected, source, t, onSelect, onAddStation }: OutlineProps) {
   const [filter, setFilter] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const selectedRow = useRef<HTMLButtonElement>(null);
@@ -59,13 +49,14 @@ export function RouteOutline({
       <Button
         variant={selected.type === 'route' ? 'soft' : 'ghost'}
         color={selected.type === 'route' ? 'blue' : 'gray'}
+        highContrast
         className="route-item"
         aria-pressed={selected.type === 'route'}
         onClick={() => onSelect({ type: 'route' })}
       >
         <Route size={16} />
         <span>
-          <strong>{example ? t.exampleTag : t.details}</strong>
+          <strong>{t.details}</strong>
           <small>
             {doc.vertices.length} {t.vertices}
           </small>
@@ -120,6 +111,7 @@ export function RouteOutline({
           <Button
             variant={selected.type === 'station' && selected.id === station.id ? 'soft' : 'ghost'}
             color={selected.type === 'station' && selected.id === station.id ? 'blue' : 'gray'}
+            highContrast
             key={station.id}
             ref={selected.type === 'station' && selected.id === station.id ? selectedRow : undefined}
             className="station-row"
