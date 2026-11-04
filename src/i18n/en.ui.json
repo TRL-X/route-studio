@@ -61,6 +61,7 @@
   "type": "Type",
   "short": "Short label",
   "boundary": "Stage boundary",
+  "nonBoundary": "Not a stage boundary",
   "anchor": "On-route position",
   "routeDistanceKm": "Route distance (km)",
   "routeDistanceHelp": "Enter the distance from the route start and press Enter.",

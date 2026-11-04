@@ -213,7 +213,7 @@ export function Inspector({
                         boundary: true,
                         anchor: v ? { vertexId: v.id, fraction: 0 } : null,
                       });
-                    } else patchStation({ kind });
+                    } else patchStation({ kind, boundary: kind !== 'poi' });
                   }}
                   options={(['start', 'finish', 'cp', 'poi'] as const).map((k) => ({
                     value: k,

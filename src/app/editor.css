@@ -248,26 +248,13 @@ p {
   font-weight: 500;
 }
 .station-symbol {
-  --symbol-color: var(--route);
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--symbol-color);
-  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
   justify-self: center;
 }
-.station-symbol.finish {
-  background: var(--symbol-color);
-  border-radius: 1px;
-}
-.station-symbol.cp {
-  transform: rotate(45deg);
-  border-radius: 1px;
-}
-.station-symbol.poi {
-  border: 0;
-  border-radius: 0;
-  background: var(--symbol-color);
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+.station-row[aria-pressed='true'] .station-symbol {
+  color: var(--route);
 }
 .local-source,
 .inspector-foot {
