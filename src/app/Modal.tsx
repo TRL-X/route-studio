@@ -7,6 +7,7 @@ export function Modal({
   busy,
   className,
   maxWidth,
+  onOpenAutoFocus,
   children,
 }: {
   title: string;
@@ -14,6 +15,7 @@ export function Modal({
   busy?: boolean;
   className?: string;
   maxWidth?: Dialog.ContentProps['maxWidth'];
+  onOpenAutoFocus?: Dialog.ContentProps['onOpenAutoFocus'];
   children: ReactNode;
 }) {
   const [invoker] = useState(() => {
@@ -35,6 +37,7 @@ export function Modal({
         className={className}
         maxWidth={maxWidth}
         aria-describedby={undefined}
+        onOpenAutoFocus={onOpenAutoFocus}
         onPointerDownOutside={(event) => event.preventDefault()}
         onEscapeKeyDown={(event) => {
           if (busy) event.preventDefault();

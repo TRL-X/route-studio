@@ -1,6 +1,7 @@
 import { loadProject, parseRoutes, RouteFileError, type RouteChoice } from '../files';
 import { readRte, prepareRte, RteError } from '../rte';
 import type { IORequest, IOResult } from './io';
+import { assessImportedElevation } from '../domain/elevation-repair';
 async function handle(request: IORequest): Promise<IOResult> {
   if (request.type === 'terrain') {
     const { sampleCopernicus } = await import('../files/copernicus');
@@ -45,6 +46,14 @@ async function handle(request: IORequest): Promise<IOResult> {
 self.onmessage = async ({ data }: MessageEvent<IORequest>) => {
   try {
     const result = await handle(data);
+    if (result.type === 'document') {
+      // Keep diagnosis off the UI thread. Oversized projects can still be opened for editing.
+      try {
+        result.elevationAssessment = assessImportedElevation(result.doc);
+      } catch {
+        result.elevationAssessment = null;
+      }
+    }
     self.postMessage(result, {
       transfer: result.type === 'binary' || result.type === 'track-file' ? [result.bytes.buffer] : [],
     });

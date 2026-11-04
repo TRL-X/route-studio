@@ -4,6 +4,7 @@ import { download, open, openExport, openRidge } from './files';
 import { bgsRequests } from './bgs';
 import { emptyRoute } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
+import { dismissImportElevation } from './elevation';
 
 for (const format of ['GPX', 'KML', 'FIT']) {
   test(`downloads and reopens ${format} without running the RTE lookup`, async ({ page }) => {
@@ -59,6 +60,7 @@ test('previews omitted FIT cues and 2D KML while allowing an incomplete project 
   ];
   await page.goto('/');
   await open(page, 'trail.routeproj', Buffer.from(saveProject(doc)));
+  await dismissImportElevation(page);
   await expect(page.getByRole('heading', { name: doc.name, exact: true })).toBeVisible();
   const dialog = await openExport(page);
   await selectOption(dialog.getByLabel('Choose export format'), 'fit');

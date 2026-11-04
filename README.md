@@ -26,7 +26,7 @@ React changes reload automatically. Restart after changing `electron/` files. Th
 
 1. Open a file through **Menu → File**, drop a file, or choose **Menu → File → New route**. For files containing multiple tracks or sessions, select a route to edit.
 2. Append, insert or drag route points. Add stations on the route, choosing the intended pass when a route visits the same location more than once. A station's route distance and landmark coordinates can be edited independently.
-3. Open **Elevation tools…** from the profile or **Menu → Route**. **Fill elevation gaps** interpolates gaps up to 1,000 m. Online requests start only after choosing **Get elevations online**; review the preview before **Replace all elevations**. Both edits can be undone.
+3. Imports with missing elevations prompt you to fill short gaps or preview a full online replacement. Gaps up to 1,000 m can be interpolated from existing heights; longer gaps or a missing profile need terrain data. Choose **Later** to keep editing, then return via **Elevation tools…** in the profile or **Menu → Route**. Online requests start only when you choose the online preview; review it before **Replace all elevations**. Both edits can be undone.
 4. Save a `.routeproj` to preserve unfinished edits, missing heights, station settings and magnetic data. Recovery drafts are saved locally; use project files for backups and transfer between computers.
 5. Open **Export…**, select RTE, GPX, KML or FIT, then resolve blocking issues and review the output before downloading. RTE processing defaults to 10 m elevation spacing, 2 m geometry tolerance and 10 m smoothing; these settings affect the export, not the project.
 

@@ -3,6 +3,7 @@ import { setPreference } from '../preferences';
 import { expect, test } from '@playwright/test';
 import { emptyRoute } from '../../src/domain/model';
 import { saveProject } from '../../src/files/project';
+import { dismissImportElevation } from './elevation';
 
 test('keeps toolbar controls usable at desktop and compact widths in both languages', async ({ page }) => {
   await page.route('https://**/*', (route) => route.abort());
@@ -64,6 +65,7 @@ test('selecting a map station reveals its row without resetting the outline filt
     mimeType: 'application/json',
     buffer: Buffer.from(saveProject(doc)),
   });
+  await dismissImportElevation(page);
   const list = page.locator('.station-list');
   const row = list.getByRole('button', { name: /Station 23/ });
   await expect(row).not.toBeInViewport();

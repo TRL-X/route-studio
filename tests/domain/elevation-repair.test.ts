@@ -1,5 +1,9 @@
 import { expect, test } from 'vitest';
-import { fillShortElevationGaps, planFullTerrain } from '../../src/domain/elevation-repair';
+import {
+  assessImportedElevation,
+  fillShortElevationGaps,
+  planFullTerrain,
+} from '../../src/domain/elevation-repair';
 import { anchorPoint, distances, emptyRoute, type RouteDocument } from '../../src/domain/model';
 
 function route(heights: (number | null)[], longitude = heights.map((_, i) => i * 0.0005)): RouteDocument {
@@ -9,6 +13,64 @@ function route(heights: (number | null)[], longitude = heights.map((_, i) => i *
     elevation: heights.map((height, i) => ({ anchor: { vertexId: String(i), fraction: 0 }, height })),
   };
 }
+
+test('import diagnosis leaves complete, sparse and flat profiles alone, including zero and negative heights', () => {
+  const doc = route([-10, 0, 0, 0], [0, 0.002, 0.004, 0.006]);
+  expect(assessImportedElevation(doc)).toBeNull();
+  doc.elevation.splice(1, 2);
+  expect(assessImportedElevation(doc)).toBeNull();
+  expect(assessImportedElevation(emptyRoute())).toBeNull();
+  expect(assessImportedElevation(route([null]))).toBeNull();
+});
+
+test('import diagnosis recommends local fill for short gaps and omitted endpoints without mutating data', () => {
+  const doc = route([null, -5, null, 30, null]);
+  doc.elevation.pop();
+  doc.elevation.reverse();
+  const original = structuredClone(doc);
+  expect(assessImportedElevation(doc)).toEqual({
+    recommendation: 'fill',
+    gaps: 3,
+    fillableGaps: 3,
+    hasKnownHeights: true,
+  });
+  expect(doc).toEqual(original);
+  expect(assessImportedElevation(fillShortElevationGaps(doc).document)).toBeNull();
+});
+
+test.each([{ heights: [] }, { heights: [null, null, null] }])(
+  'import diagnosis recommends online terrain for a missing profile $heights',
+  ({ heights }) => {
+    const doc = route(heights, [0, 0.0005, 0.001]);
+    expect(assessImportedElevation(doc)).toEqual({
+      recommendation: 'replace',
+      gaps: 1,
+      fillableGaps: 0,
+      hasKnownHeights: false,
+    });
+  },
+);
+
+test('import diagnosis distinguishes partial repair from a complete local fill', () => {
+  const doc = route([10, null, 30, null], [0, 0.0005, 0.001, 0.02]);
+  expect(assessImportedElevation(doc)).toEqual({
+    recommendation: 'replace',
+    gaps: 2,
+    fillableGaps: 1,
+    hasKnownHeights: true,
+  });
+  expect(doc.elevation.map((s) => s.height)).toEqual([10, null, 30, null]);
+});
+
+test('import diagnosis does not promise a local fill next to conflicting observations', () => {
+  const doc = route([10, null, 30]);
+  doc.elevation.push({ ...doc.elevation[0], height: 15 });
+  expect(assessImportedElevation(doc)).toMatchObject({
+    recommendation: 'replace',
+    fillableGaps: 0,
+    hasKnownHeights: true,
+  });
+});
 
 test('quick fill extends the endpoints and interpolates a 556 m gap, leaving a 1.6 km gap for review', () => {
   const doc = route([null, 0, null, 20, null, 70, null], [0, 0.0005, 0.003, 0.0055, 0.012, 0.0195, 0.0215]);

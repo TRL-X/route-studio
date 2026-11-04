@@ -149,3 +149,24 @@ export function fillShortElevationGaps(doc: RouteDocument) {
   const remaining = document === doc ? original : gapSections(originalLevels(originalReadings(document)));
   return { document, filled: original.length - remaining.length, remaining };
 }
+
+export interface ImportElevationAssessment {
+  recommendation: 'fill' | 'replace';
+  gaps: number;
+  fillableGaps: number;
+  hasKnownHeights: boolean;
+}
+
+/** Diagnose imports with the same rules as local repair, without changing the imported profile. */
+export function assessImportedElevation(doc: RouteDocument): ImportElevationAssessment | null {
+  if (doc.vertices.length < 2) return null;
+  const { filled, remaining } = fillShortElevationGaps(doc);
+  const gaps = filled + remaining.length;
+  if (!gaps) return null;
+  return {
+    recommendation: remaining.length ? 'replace' : 'fill',
+    gaps,
+    fillableGaps: filled,
+    hasKnownHeights: doc.elevation.some((sample) => sample.height !== null),
+  };
+}
