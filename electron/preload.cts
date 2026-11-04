@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import type { DesktopAPI } from './contracts.js';
 
 function subscribe<T>(channel: string, listener: (value: T) => void) {
@@ -8,6 +8,8 @@ function subscribe<T>(channel: string, listener: (value: T) => void) {
 }
 
 const api: DesktopAPI = {
+  platform: process.platform,
+  getZoomFactor: () => webFrame.getZoomFactor(),
   openFile: () => ipcRenderer.invoke('desktop:open'),
   saveFile: (file) => ipcRenderer.invoke('desktop:save', file),
   setDocumentState: (dirty, language) => ipcRenderer.send('desktop:state', { dirty, language }),

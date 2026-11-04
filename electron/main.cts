@@ -100,6 +100,15 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     show: false,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#233244',
+      symbolColor: '#f7faff',
+      height: 48,
+    },
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 16, y: 17 } }
+      : { autoHideMenuBar: true }),
     backgroundColor: '#f4f6f3',
     icon: path.join(app.getAppPath(), 'build/icons/icon.png'),
     webPreferences: {

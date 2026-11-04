@@ -15,6 +15,8 @@ export interface PairingRequest {
 }
 
 export interface DesktopAPI {
+  readonly platform: string;
+  getZoomFactor: () => number;
   openFile: () => Promise<DesktopFile | null>;
   saveFile: (file: DesktopFile) => Promise<boolean>;
   setDocumentState: (dirty: boolean, language: 'en' | 'zh') => void;

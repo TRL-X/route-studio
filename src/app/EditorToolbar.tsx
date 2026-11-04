@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowDownToLine,
   ChevronDown,
@@ -58,6 +58,9 @@ export function EditorToolbar({
   onExport,
 }: ToolbarProps) {
   const t = strings[lang];
+  const desktop = window.routeStudioDesktop;
+  const [zoom, setZoom] = useState(() => desktop?.getZoomFactor() ?? 1);
+  const [windowControlsVisible, setWindowControlsVisible] = useState(true);
   const [menu, setMenu] = useState<'file' | 'export' | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -68,6 +71,22 @@ export function EditorToolbar({
     if (onPickFile) onPickFile();
     else picker.current?.click();
   };
+
+  useEffect(() => {
+    if (!desktop) return;
+    const overlay = navigator.windowControlsOverlay;
+    const update = () => {
+      setWindowControlsVisible(overlay?.visible ?? true);
+      setZoom(desktop.getZoomFactor());
+    };
+    update();
+    overlay?.addEventListener('geometrychange', update);
+    window.addEventListener('resize', update);
+    return () => {
+      overlay?.removeEventListener('geometrychange', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [desktop]);
 
   useEffect(() => {
     if (locked) setMenu(null);
@@ -117,8 +136,13 @@ export function EditorToolbar({
 
   return (
     <>
-      <header className="topbar">
-        <div className="brand">
+      {desktop && <div aria-hidden="true" style={{ height: 48 / zoom }} />}
+      <header
+        className="topbar"
+        data-window-controls={desktop ? (windowControlsVisible ? 'visible' : 'hidden') : undefined}
+        style={desktop ? ({ '--titlebar-scale': 1 / zoom } as CSSProperties) : undefined}
+      >
+        <div className="brand" aria-label="Route Studio">
           <BrandMark />
           <span>Route Studio</span>
         </div>
@@ -173,6 +197,7 @@ export function EditorToolbar({
             <Redo2 />
           </button>
         </div>
+        {desktop && <div className="titlebar-drag-space" aria-hidden="true" />}
         <div className="top-actions">
           <label className="language">
             <Globe2 size={16} />

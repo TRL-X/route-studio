@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadProject } from '../../src/files/project';
+import { strings } from '../../src/app/strings';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
@@ -56,6 +57,103 @@ test.afterEach(async () => {
   }
   await rm(directory, { recursive: true, force: true });
   expect(mainErrors).toEqual([]);
+});
+
+test('title bar controls remain usable beside native buttons when resizing and zooming', async () => {
+  const page = await launch();
+  for (const [width, height, zoom] of [
+    [800, 600, 0.5],
+    [800, 600, 0.8],
+    [800, 600, 1],
+    [800, 600, 1.25],
+    [800, 600, 1.5],
+    [800, 600, 3],
+    [1440, 960, 1],
+  ]) {
+    const targetWidth = await desktop.evaluate(
+      ({ BrowserWindow, screen }, size) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        const area = screen.getDisplayMatching(win.getBounds()).workAreaSize;
+        const [minWidth, minHeight] = win.getMinimumSize();
+        const width = Math.max(minWidth, Math.min(size[0], area.width));
+        const height = Math.max(minHeight, Math.min(size[1], area.height));
+        win.webContents.setZoomFactor(size[2]);
+        win.setSize(width, height);
+        return width;
+      },
+      [width, height, zoom],
+    );
+    await expect
+      .poll(() => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getSize()[0]))
+      .toBe(targetWidth);
+    for (const language of ['en', 'zh'] as const) {
+      const t = strings[language];
+      await page.locator('.language select').selectOption(language);
+      await expect(page.getByRole('button', { name: t.export, exact: true })).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const safe = navigator.windowControlsOverlay?.getTitlebarAreaRect();
+            if (!safe) return ['Native control safe area is missing'];
+            const header = document.querySelector('.topbar')!.getBoundingClientRect();
+            const drag = document.querySelector('.titlebar-drag-space')!.getBoundingClientRect();
+            const problems: string[] = [];
+            if (safe.width <= 0 || safe.height <= 0) problems.push('Native control safe area is missing');
+            if (Math.abs(header.height - safe.height) > 1)
+              problems.push('Title bar height does not match native controls');
+            if (drag.width * window.routeStudioDesktop!.getZoomFactor() < 32)
+              problems.push('No usable space to drag the window');
+            let previousRight = safe.x;
+            for (const element of document.querySelectorAll(
+              '.topbar .brand, .topbar button, .topbar select',
+            )) {
+              const rect = element.getBoundingClientRect();
+              if (!rect.width || !rect.height) continue;
+              const name = element.getAttribute('aria-label') ?? element.textContent;
+              if (rect.left < previousRight - 1) problems.push(`${name} overlaps the previous control`);
+              if (rect.right > safe.x + safe.width + 1)
+                problems.push(`${name} overlaps native window buttons`);
+              if (rect.top < safe.y - 1 || rect.bottom > safe.y + safe.height + 1)
+                problems.push(`${name} is outside the title bar`);
+              previousRight = rect.right;
+            }
+            return problems;
+          }),
+        )
+        .toEqual([]);
+
+      await page.getByRole('button', { name: t.file, exact: true }).click();
+      await expect(page.getByRole('button', { name: t.new, exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('button', { name: t.new, exact: true })).not.toBeVisible();
+      await page.getByRole('button', { name: t.exportFormat, exact: true }).click();
+      const exportTitle = t.exportFormatTitle.replace('{format}', 'GPX');
+      await page.getByRole('button', { name: `${exportTitle}…`, exact: true }).click();
+      const preview = page.getByRole('dialog', { name: exportTitle, exact: true });
+      await expect(preview).toBeVisible();
+      await preview.getByRole('button', { name: t.close, exact: true }).click();
+      await expect(preview).not.toBeVisible();
+      if (zoom === 3) {
+        await page.evaluate(() => window.scrollTo(document.body.scrollWidth, document.body.scrollHeight));
+        await expect
+          .poll(() =>
+            page.evaluate(() => {
+              const header = document.querySelector('.topbar')!.getBoundingClientRect();
+              return {
+                scrolled: scrollX > 0 && scrollY > 0,
+                left: Math.round(header.x),
+                top: Math.round(header.y),
+              };
+            }),
+          )
+          .toEqual({ scrolled: true, left: 0, top: 0 });
+        await page.getByRole('button', { name: t.file, exact: true }).click();
+        await expect(page.getByRole('button', { name: t.new, exact: true })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.scrollTo(0, 0));
+      }
+    }
+  }
 });
 
 test('loads secure bundled assets, uses the import worker, saves natively and recovers after restart', async () => {

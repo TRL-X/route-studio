@@ -61,7 +61,7 @@ p {
   height: 100dvh;
   min-height: 570px;
   display: grid;
-  grid-template-rows: 48px 48px minmax(0, 1fr) 28px;
+  grid-template-rows: var(--topbar-height, 48px) 48px minmax(0, 1fr) 28px;
 }
 .topbar {
   display: flex;
@@ -72,6 +72,60 @@ p {
   background: #233244;
   color: #f7faff;
   z-index: 4;
+}
+.studio[data-desktop] {
+  --topbar-height: auto;
+  --window-controls-left: 0px;
+  --window-controls-right: 138px;
+}
+.studio[data-desktop='darwin'] {
+  --window-controls-left: 88px;
+  --window-controls-right: 0px;
+}
+.studio[data-desktop] .topbar {
+  --titlebar-left: calc(env(titlebar-area-x, var(--window-controls-left)) / var(--titlebar-scale));
+  --titlebar-width: calc(
+    env(titlebar-area-width, calc(100vw - var(--window-controls-left) - var(--window-controls-right))) /
+      var(--titlebar-scale)
+  );
+  /* Keep window chrome aligned with native controls while the editor is zoomed. */
+  zoom: var(--titlebar-scale);
+  width: calc(100vw / var(--titlebar-scale));
+  height: 48px;
+  container-type: inline-size;
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  padding-left: calc(var(--titlebar-left) + var(--shell-gutter));
+  padding-right: max(
+    var(--shell-gutter),
+    calc(100vw / var(--titlebar-scale) - var(--titlebar-left) - var(--titlebar-width) + var(--shell-gutter))
+  );
+  app-region: drag;
+  user-select: none;
+}
+.studio[data-desktop] .topbar[data-window-controls='hidden'] {
+  --titlebar-left: 0px;
+  --titlebar-width: calc(100vw / var(--titlebar-scale));
+}
+.studio[data-desktop] .topbar > :not(.titlebar-drag-space) {
+  flex-shrink: 0;
+}
+.titlebar-drag-space {
+  flex: 1;
+  min-width: 64px;
+  align-self: stretch;
+}
+.studio[data-desktop] .top-actions {
+  margin-left: 0;
+}
+.studio[data-desktop] .topbar :is(button, select, input, label, .dropdown) {
+  app-region: no-drag;
+}
+/* Modal backdrops must receive clicks even where they cover the title bar. */
+.studio[data-desktop] .shell[inert] .topbar {
+  app-region: no-drag;
 }
 .brand {
   display: flex;
@@ -863,7 +917,7 @@ input[type='checkbox'] {
   }
   .shell {
     min-height: 450px;
-    grid-template-rows: 46px 44px minmax(0, 1fr) 25px;
+    grid-template-rows: var(--topbar-height, 46px) 44px minmax(0, 1fr) 25px;
   }
   .workspace {
     grid-template-columns: minmax(0, 1fr);
@@ -955,7 +1009,7 @@ input[type='checkbox'] {
 
 @media (max-width: 760px) {
   .shell {
-    grid-template-rows: 78px 44px minmax(0, 1fr) 25px;
+    grid-template-rows: var(--topbar-height, 78px) 44px minmax(0, 1fr) 25px;
   }
   .topbar {
     display: grid;
@@ -987,6 +1041,43 @@ input[type='checkbox'] {
   }
   .course-totals b {
     font-size: 13px;
+  }
+}
+
+/* Desktop chrome uses its unzoomed width for compact controls. */
+@container (max-width: 1120px) {
+  .studio[data-desktop] .brand span {
+    display: none;
+  }
+}
+@container (max-width: 1000px) {
+  .studio[data-desktop] .top-actions > .button span {
+    display: none;
+  }
+  .studio[data-desktop] .top-actions > .button {
+    padding: 0 7px;
+  }
+}
+@container (max-width: 959px) {
+  .studio[data-desktop] .brand svg {
+    width: 26px;
+    height: 26px;
+  }
+  .studio[data-desktop] :is(.file-menu, .history-tools) {
+    padding-left: 5px;
+  }
+  .studio[data-desktop] .top-actions {
+    gap: 4px;
+  }
+  .studio[data-desktop] .language {
+    margin: 0;
+    gap: 1px;
+  }
+  .studio[data-desktop] .language > svg {
+    display: none;
+  }
+  .studio[data-desktop] .language select {
+    max-width: 72px;
   }
 }
 .station-passes {
