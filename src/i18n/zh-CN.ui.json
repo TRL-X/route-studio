@@ -61,6 +61,7 @@
   "type": "类型",
   "short": "短标签",
   "boundary": "赛段边界",
+  "nonBoundary": "非赛段边界",
   "anchor": "赛道通过位置",
   "routeDistanceKm": "沿线里程（km）",
   "routeDistanceHelp": "输入从路线起点算起的里程，按回车确认。",

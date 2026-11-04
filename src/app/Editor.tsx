@@ -390,7 +390,7 @@ export function Editor({
       const id = newId();
       change({
         ...doc,
-        stations: [...doc.stations, { id, name: t.newStation, kind: 'cp', boundary: false, anchor: a }],
+        stations: [...doc.stations, { id, name: t.newStation, kind: 'cp', boundary: true, anchor: a }],
       });
       select({ type: 'station', id }, true);
       setNotice(both('stationAdded'));

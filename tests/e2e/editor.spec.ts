@@ -215,7 +215,7 @@ test('places a checkpoint and its separate landmark, inserts a vertex and edits 
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.fill('Water stop');
   await name.press('Enter');
-  await page.getByRole('checkbox', { name: 'Stage boundary' }).check();
+  await expect(page.getByRole('checkbox', { name: 'Stage boundary' })).toBeChecked();
   await page.getByRole('button', { name: 'Pick on map', exact: true }).click();
   await map.click({ position: { x: position.x + 12, y: position.y + 13 } });
   await expect(map.locator('.rv-connector')).toHaveCount(1);

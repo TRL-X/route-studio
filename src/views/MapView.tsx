@@ -18,6 +18,7 @@ import {
 } from '../maps/basemap';
 import type { ColorScheme } from '../app/theme';
 import { BasemapControls } from './BasemapControls';
+import { StationSymbol } from './StationSymbol';
 import './views.css';
 
 type Point = { lat: number; lon: number };
@@ -95,20 +96,6 @@ function snapToRoute(cursor: XY, screen: (XY & { id: string })[], axis: number[]
   return hit;
 }
 
-function StationSymbol({ kind, x, y }: XY & { kind: Station['kind'] }) {
-  if (kind === 'start') return <circle className="rv-station-pin" cx={x} cy={y} r={5} />;
-  if (kind === 'poi') return <path className="rv-station-pin" d={`M${x} ${y - 6}l5.6 10h-11.2z`} />;
-  return (
-    <rect
-      className="rv-station-pin"
-      x={x - 4.3}
-      y={y - 4.3}
-      width={8.6}
-      height={8.6}
-      transform={kind === 'cp' ? `rotate(45 ${x} ${y})` : undefined}
-    />
-  );
-}
 function project(point: Point): XY {
   const φ = clamp(point.lat, -85.051129, 85.051129) * radians;
   return { x: (point.lon + 180) / 360, y: (1 - Math.asinh(Math.tan(φ)) / Math.PI) / 2 };
@@ -680,8 +667,19 @@ export function MapView(props: MapViewProps) {
                 </>
               )}
               <circle className="rv-station-hit" cx={marker.x} cy={marker.y} r={10} />
+              <StationSymbol
+                className="rv-station-halo"
+                kind={station.kind}
+                boundary={station.boundary}
+                {...marker}
+              />
               {chosen && <circle className="rv-selection-ring" cx={marker.x} cy={marker.y} r={9} />}
-              <StationSymbol kind={station.kind} {...marker} />
+              <StationSymbol
+                className="rv-station-pin"
+                kind={station.kind}
+                boundary={station.boundary}
+                {...marker}
+              />
               {label && (
                 <text x={label.x} y={label.y} textAnchor={label.side}>
                   {name}

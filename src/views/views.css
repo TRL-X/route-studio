@@ -129,19 +129,17 @@
 .rv-station-hit {
   fill: transparent;
 }
-.rv-station-pin {
-  stroke: var(--route);
-  stroke-width: 2;
-  fill: var(--map-halo);
+.rv-station-halo {
+  color: var(--map-halo);
+  stroke-width: 5.6;
+  pointer-events: none;
 }
-.rv-station[data-kind='finish'] .rv-station-pin {
-  fill: var(--route);
+.rv-station-pin {
+  --station-interior: var(--map-halo);
+  color: var(--route);
 }
 .rv-station-active .rv-station-pin {
-  stroke: var(--action);
-}
-.rv-station-active[data-kind='finish'] .rv-station-pin {
-  fill: var(--action);
+  color: var(--action);
 }
 .rv-selection-ring {
   fill: var(--selection);

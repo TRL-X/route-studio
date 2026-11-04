@@ -3,6 +3,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { File, Layers, Plus, Route, Search } from 'lucide-react';
 import type { RouteDocument } from '../domain/model';
 import { orderedStations } from '../domain/projection';
+import { StationSymbol } from '../views/StationSymbol';
 import type { Selection } from './Inspector';
 import type { Copy } from './strings';
 
@@ -118,7 +119,15 @@ export function RouteOutline({ doc, axis, selected, source, t, onSelect, onAddSt
             aria-pressed={selected.type === 'station' && selected.id === station.id}
             onClick={() => onSelect({ type: 'station', id: station.id })}
           >
-            <span className={'station-symbol ' + station.kind} aria-hidden="true" />
+            <svg
+              className="station-symbol"
+              viewBox="-8 -8 16 16"
+              role="img"
+              aria-label={station.boundary ? t.boundary : t.nonBoundary}
+            >
+              <title>{station.boundary ? t.boundary : t.nonBoundary}</title>
+              <StationSymbol kind={station.kind} boundary={station.boundary} />
+            </svg>
             <span>
               <strong title={station.name || t[station.kind]}>{station.name || t[station.kind]}</strong>
               <small>

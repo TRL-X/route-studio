@@ -1,0 +1,9 @@
+.station-glyph {
+  fill: var(--station-interior, none);
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+.station-glyph[data-boundary='true'] {
+  fill: currentColor;
+}
