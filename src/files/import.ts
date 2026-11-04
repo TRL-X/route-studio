@@ -5,6 +5,7 @@ import {
   distances,
   lonDelta,
   newId,
+  projectSegment,
   type Anchor,
   type RouteDocument,
   type Station,
@@ -23,7 +24,12 @@ export type { RouteChoice } from './track';
 
 type XmlElement = Record<string, unknown>;
 type Position = { lat: number; lon: number };
-type Landmark = { name: string; location: Position; kind?: Station['kind'] };
+type Landmark = {
+  name: string;
+  location: Position;
+  kind?: Station['kind'];
+  unassigned?: boolean;
+};
 function stationKind(value: unknown): Station['kind'] | undefined {
   return value === 'start' || value === 'finish' || value === 'cp' || value === 'poi' ? value : undefined;
 }
@@ -91,7 +97,7 @@ function readGpx(root: XmlElement, fallback: string) {
       heights: 'unknown-reference',
     });
   }
-  return { lines, landmarks };
+  return { lines, landmarksForLine: (_line: Line) => landmarks };
 }
 
 function kmlPoints(value: unknown): TrackPoint[] {
@@ -104,22 +110,60 @@ function kmlPoints(value: unknown): TrackPoint[] {
   });
 }
 
-function readKml(root: XmlElement, fallback: string) {
-  const lines: Line[] = [];
-  const landmarks: Landmark[] = [];
+// Nearby route candidates may share a landmark. Container ancestry only breaks
+// geographical ties, so a separate folder of shared waypoints remains useful.
+const kmlLandmarkRange = 250;
+const kmlRouteTolerance = 25;
 
-  function geometry(node: XmlElement, name: string, kind?: Station['kind']) {
+function landmarkOffset(points: TrackPoint[], { location, kind }: Landmark): number {
+  if (!points.length) return Infinity;
+  if (kind === 'start') return distanceMeters(points[0], location);
+  if (kind === 'finish') return distanceMeters(points.at(-1)!, location);
+  if (points.length === 1) return distanceMeters(points[0], location);
+  let offset = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    const { fraction } = projectSegment(a, b, location);
+    offset = Math.min(
+      offset,
+      distanceMeters(location, {
+        lat: a.lat + (b.lat - a.lat) * fraction,
+        lon: a.lon + lonDelta(a.lon, b.lon) * fraction,
+      }),
+    );
+  }
+  return offset;
+}
+
+function sharedContainers(a: XmlElement[], b: XmlElement[]): number {
+  let count = 0;
+  while (count < Math.min(a.length, b.length) && a[count] === b[count]) count++;
+  return count;
+}
+
+function readKml(root: XmlElement, fallback: string) {
+  const lines: (Line & { containers: XmlElement[] })[] = [];
+  const landmarks: (Landmark & { containers: XmlElement[] })[] = [];
+
+  function geometry(
+    node: XmlElement,
+    name: string,
+    containers: XmlElement[],
+    kind?: Station['kind'],
+    trackMode?: string,
+  ) {
     for (const value of list(node.Point)) {
       const points = kmlPoints(object(value).coordinates);
       if (points.length !== 1) throw new RouteFileError('invalid-coordinates');
       const { lat, lon } = points[0];
-      landmarks.push({ name, location: { lat, lon }, kind });
+      landmarks.push({ name, location: { lat, lon }, kind, containers });
     }
 
     for (const tag of ['LineString', 'Track']) {
       for (const item of list(node[tag])) {
         const line = object(item);
-        const mode = text(line.altitudeMode);
+        const mode = tag === 'Track' && trackMode !== undefined ? trackMode : text(line.altitudeMode);
         const points =
           tag === 'LineString'
             ? kmlPoints(line.coordinates)
@@ -133,25 +177,49 @@ function readKml(root: XmlElement, fallback: string) {
         // An omitted altitudeMode is common in GPS exports with usable third ordinates.
         // Accept those only after confirmation. Explicit ground-relative heights are offsets.
         const heights = mode === 'absolute' ? 'sea-level' : mode === '' ? 'unconfirmed' : 'unavailable';
-        lines.push({ name: name || fallback, points, heights });
+        lines.push({ name: name || fallback, points, heights, containers });
       }
     }
-    for (const child of [...list(node.MultiGeometry), ...list(node.MultiTrack)])
-      geometry(object(child), name, kind);
+    for (const child of list(node.MultiGeometry)) geometry(object(child), name, containers, kind);
+    for (const child of list(node.MultiTrack)) {
+      const multiTrack = object(child);
+      const mode = text(multiTrack.altitudeMode);
+      geometry(multiTrack, name, containers, kind, mode || undefined);
+    }
   }
 
-  function container(node: XmlElement) {
+  function container(node: XmlElement, parents: XmlElement[] = []) {
+    const containers = [...parents, node];
     for (const entry of list(node.Placemark)) {
       const placemark = object(entry);
       const role = list(object(placemark.ExtendedData).Data)
         .map(object)
         .find((d) => d['@_name'] === 'route-studio-kind');
-      geometry(placemark, text(placemark.name), stationKind(role?.value));
+      geometry(placemark, text(placemark.name), containers, stationKind(role?.value));
     }
-    for (const child of [...list(node.Document), ...list(node.Folder)]) container(object(child));
+    for (const child of [...list(node.Document), ...list(node.Folder)]) container(object(child), containers);
   }
   container(root);
-  return { lines, landmarks };
+  return {
+    lines,
+    landmarksForLine: (source: Line): Landmark[] =>
+      landmarks.map((mark) => {
+        const offsets = lines.map((line) => ({
+          line,
+          offset: landmarkOffset(line.points, mark),
+          ancestry: sharedContainers(line.containers, mark.containers),
+        }));
+        const nearest = offsets.reduce((best, candidate) => Math.min(best, candidate.offset), Infinity);
+        const candidates = offsets.filter(
+          ({ offset }) => offset <= kmlLandmarkRange && offset <= nearest + kmlRouteTolerance,
+        );
+        const ancestry = candidates.reduce((best, candidate) => Math.max(best, candidate.ancestry), 0);
+        const assigned = candidates.some(
+          (candidate) => candidate.line === source && candidate.ancestry === ancestry,
+        );
+        return assigned ? mark : { ...mark, kind: 'poi', unassigned: true };
+      }),
+  };
 }
 
 interface NumberedMark {
@@ -196,6 +264,7 @@ function matchLandmarks(doc: RouteDocument, landmarks: Landmark[]): (Anchor | nu
   const axis = distances(doc.vertices);
   const groups = new Map<string, NumberedMark[]>();
   const anchors: (Anchor | null)[] = landmarks.map((landmark, index) => {
+    if (landmark.unassigned) return null;
     const passes = stationPassages(doc, landmark.location, axis);
     const match = /^([a-z]+)[ -]?(\d{1,6})(?=$|[^a-z0-9])/i.exec(landmark.name);
     if (match) {
@@ -221,6 +290,7 @@ function applyEndpointMark(endpoint: Station, mark: Landmark, namedForRole: bool
 }
 
 function mergeEndpointMark(mark: Landmark, vertices: Vertex[], start: Station, finish: Station): boolean {
+  if (mark.unassigned) return false;
   if (mark.kind) {
     const endpoint = mark.kind === 'start' ? start : mark.kind === 'finish' ? finish : undefined;
     if (!endpoint || endpoint.location) return false;
@@ -302,7 +372,8 @@ export function parseRoutes(xml: string, filename: string): RouteChoice[] {
         declination: automaticDeclination(),
         pointCount: line.points.length,
         hasUnconfirmedHeights: line.heights === 'unconfirmed' && line.points.some((p) => p.height !== null),
-        open: (useUnconfirmedHeights = false) => openLine(line, result.landmarks, useUnconfirmedHeights),
+        open: (useUnconfirmedHeights = false) =>
+          openLine(line, result.landmarksForLine(source), useUnconfirmedHeights),
       };
     });
   if (choices.length === 0) throw new RouteFileError('no-routes');

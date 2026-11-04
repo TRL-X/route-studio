@@ -17,18 +17,28 @@ const epoch = 1_000_000_000;
 const semi = (degrees: number) => Math.round(degrees * (2 ** 31 / 180));
 const timestamp = (number: number, offset: number) => field(number, Uint32, epoch + offset);
 
-export function multisportActivity(): Uint8Array {
+export function multisportActivity({
+  summaryTime,
+  omitElapsedTime = false,
+}: { summaryTime?: number; omitElapsedTime?: boolean } = {}): Uint8Array {
   const encoder = file(4);
   const session = (start: number, end: number, sport: number) =>
-    encoder.writeMessage(18, [timestamp(2, start), timestamp(253, end), field(5, Enum, sport)]);
+    encoder.writeMessage(18, [
+      timestamp(2, start),
+      timestamp(253, summaryTime ?? end),
+      field(5, Enum, sport),
+      ...(omitElapsedTime ? [] : [field(7, Uint32, (end - start) * 1000)]),
+    ]);
   // Some devices write the summaries first. A shared timestamp belongs to the new session.
   session(10, 20, 2);
   session(0, 10, 1);
   for (const [time, lat] of [
+    [-1, -0.01],
     [0, 0],
     [4, 0.01],
     [10, 2],
     [20, 2.01],
+    [21, 2.02],
   ]) {
     encoder.writeMessage(20, [timestamp(253, time), field(0, Sint32, semi(lat)), field(1, Sint32, 0)]);
   }
