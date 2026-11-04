@@ -148,5 +148,3 @@ npm run test:e2e
 ```
 
 `check` runs formatting checks, unit tests, type checks, and a production build. Playwright tests exercise file selection and download in desktop Chromium, including project recovery, elevation correction, and RTE export. Local acceptance checks used eight GPX and KML fixtures kept outside the repository. All eight routes passed round-trip checks after their height conflicts and gaps were resolved.
-
-See the [roadmap](ROADMAP.md) for device acceptance and planned releases.
