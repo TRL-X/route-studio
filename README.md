@@ -92,7 +92,19 @@ The **Check editor** workflow calls **Desktop packages** for native builds when 
 | macOS notarization | `APPLE_API_KEY` (base64 P8), `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` |
 | Windows signing    | `WIN_CSC_LINK` (base64 PFX), `WIN_CSC_KEY_PASSWORD`                 |
 
-Without certificates, packages are unsigned. Check signing/notarization before distribution. File associations are not enabled. Keep application ID `org.trlx.route-studio` unchanged to preserve profiles.
+Without certificates, CI signs macOS apps ad hoc before creating the DMG and ZIP; Windows packages remain unsigned. The ad-hoc entitlements retain hardened runtime and allow Electron's libraries to load without a Team ID. Certificate-backed macOS builds retain the regular entitlements and notarization flow. Ad-hoc signing provides bundle integrity, not a verified developer identity or notarization, so downloaded apps may still need approval in **System Settings → Privacy & Security**. File associations are not enabled. Keep application ID `org.trlx.route-studio` unchanged to preserve profiles.
+
+To build the same ad-hoc macOS packages locally (replace `--arm64` with `--x64` for Intel):
+
+```sh
+CSC_IDENTITY_AUTO_DISCOVERY=false npm run desktop:pack -- --mac --arm64 \
+  -c.mac.identity=- -c.mac.notarize=false \
+  -c.mac.entitlements=build/entitlements.mac.adhoc.plist \
+  -c.mac.entitlementsInherit=build/entitlements.mac.adhoc.plist
+node scripts/verify-macos-signatures.mjs release arm64
+```
+
+On both macOS CI runners, signature verification runs `codesign --verify --deep --strict` against the unpacked app and copies extracted from the ZIP and read-only DMG before uploading artifacts. This accepts valid ad-hoc and Developer ID signatures and rejects missing or damaged signatures. Gatekeeper trust and notarization are separate checks. Published releases are immutable; distribute a corrected installer under a new patch version.
 
 ### Software updates
 
