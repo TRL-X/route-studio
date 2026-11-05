@@ -1,129 +1,111 @@
-import { TextField, Button, Flex, Text, Separator } from '@radix-ui/themes';
-import { useEffect, useRef, useState } from 'react';
-import { Bluetooth } from 'lucide-react';
-import { UploadError, withBluetoothFs } from '../device/mcumgr';
-import { uploadFile, validDevicePath } from '../device/upload';
-import type { Copy } from './strings';
+import { Button, Flex, Text } from '@radix-ui/themes';
+import { useMemo } from 'react';
+import { Send, Check } from 'lucide-react';
+import { DeviceTransfer } from './DeviceRoutes';
+import { deviceStrings } from './deviceStrings';
+import type { DeviceControls } from './useDeviceRoutes';
+import type { Lang } from './strings';
 
 export function DeviceUpload({
   bytes,
-  t,
-  onBusyChange,
+  device,
+  lang,
+  onManage,
 }: {
   bytes?: Uint8Array;
-  t: Copy;
-  onBusyChange?: (busy: boolean) => void;
+  device: DeviceControls;
+  lang: Lang;
+  onManage: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [path, setPath] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const current = useRef<AbortController | null>(null);
-  useEffect(() => {
-    onBusyChange?.(busy);
-  }, [busy, onBusyChange]);
+  const { state, session } = device;
+  const t = deviceStrings[lang];
   const supported = window.isSecureContext && !!navigator.bluetooth?.requestDevice;
-  const name = path.trim();
-  const valid = validDevicePath(name);
-  useEffect(() => {
-    setBusy(false);
-    setMessage('');
-    return () => {
-      current.current?.abort();
-      current.current = null;
-    };
-  }, [bytes]);
-
-  async function send() {
-    if (!bytes || !valid || current.current) return;
-    const controller = new AbortController();
-    const { signal } = controller;
-    current.current = controller;
-    setBusy(true);
-    setMessage(t.uploadConnecting);
-    try {
-      const crc = await withBluetoothFs(signal, (request) =>
-        uploadFile(request, name, bytes, (off) => {
-          if (!signal.aborted)
-            setMessage(
-              off === bytes.length
-                ? t.uploadVerify
-                : t.uploadProgress.replace('{percent}', String(Math.floor((off * 100) / bytes.length))),
-            );
-        }),
-      );
-      if (!signal.aborted) setMessage(t.uploadDone.replace('{crc}', crc));
-    } catch (error) {
-      if (!signal.aborted) {
-        setMessage(
-          error instanceof UploadError
-            ? t[error.key].replace('{code}', error.detail)
-            : t.uploadFailed.replace('{error}', error instanceof Error ? error.message : String(error)),
-        );
-      }
-    } finally {
-      if (current.current === controller) {
-        current.current = null;
-        setBusy(false);
-      }
-    }
-  }
-
+  // Export can be regenerated when returning from device management. Only show
+  // success for the exact payload that was sent, not another route or set of options.
+  const samePayload = useMemo(
+    () =>
+      !!bytes &&
+      !!state.transferBytes &&
+      bytes.length === state.transferBytes.length &&
+      bytes.every((v, i) => v === state.transferBytes![i]),
+    [bytes, state.transferBytes],
+  );
+  const showTransfer = samePayload || state.pending;
+  const done = samePayload && state.progress?.state === 'ready';
+  const verifying = state.pending && state.progress?.state === 'verifying';
+  const label =
+    state.busy === 'connecting'
+      ? t.connectingShort
+      : verifying && state.busy === 'uploading'
+        ? t.verifying
+        : state.busy === 'uploading'
+          ? t.sending
+          : state.pending
+            ? state.connected
+              ? verifying
+                ? t.checkResult
+                : t.resume
+              : t.reconnectResume
+            : done
+              ? t.sentTo.replace('{name}', state.deviceName)
+              : state.connected
+                ? t.sendTo.replace('{name}', state.deviceName)
+                : t.connectSend;
   return (
     <>
       <Button
-        variant={expanded ? 'surface' : 'solid'}
-        color={expanded ? 'gray' : undefined}
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={expanded ? 'device-upload' : undefined}
-        disabled={busy}
-        onClick={() => setExpanded(!expanded)}
+        className="device-send"
+        title={label}
+        disabled={!supported || !!state.busy || (!state.pending && (!bytes || done))}
+        onClick={() => {
+          if (state.pending) void session.resume();
+          else if (bytes) void session.send(bytes);
+        }}
       >
-        <Bluetooth />
-        {t.bluetoothUpload}
+        {done ? <Check /> : <Send />}
+        <span>{label}</span>
       </Button>
-      {expanded && (
-        <Flex id="device-upload" direction="column" gap="2" width="100%">
-          <Separator size="4" />
-          {supported ? (
-            <Flex asChild wrap="wrap" align="end" gap="2">
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void send();
-                }}
-              >
-                <Flex asChild direction="column" gap="1" flexGrow="1">
-                  <label>
-                    <Text size="2" color="gray">
-                      {t.uploadPath}
-                    </Text>
-                    <TextField.Root
-                      value={path}
-                      onChange={(e) => {
-                        setPath(e.target.value);
-                        setMessage('');
-                      }}
-                      autoFocus
-                      disabled={busy}
-                      aria-invalid={!!name && !valid}
-                    />
-                  </label>
-                </Flex>
-                <Button type="submit" disabled={!bytes || !valid || busy}>
-                  {t.uploadSend}
-                </Button>
-              </form>
-            </Flex>
-          ) : (
+      {(!supported || showTransfer || state.busy === 'connecting') && (
+        <Flex className="device-upload-status" direction="column" gap="2" width="100%">
+          {!supported && (
             <Text size="2" color="gray">
-              {t.uploadUnsupported}
+              {t.unsupported}
             </Text>
           )}
-          <Text size="2" color="gray" role="status">
-            {message}
-          </Text>
+          {state.busy === 'connecting' && (
+            <>
+              <Text size="2" role="status">
+                {t.connecting}
+              </Text>
+              <Button variant="soft" color="gray" onClick={session.cancelConnection}>
+                {t.cancelConnection}
+              </Button>
+            </>
+          )}
+          {showTransfer && <DeviceTransfer device={device} lang={lang} actions={false} />}
+          <Flex gap="3" wrap="wrap" align="center">
+            {state.pending && state.busy !== 'connecting' && (
+              <Button
+                variant="soft"
+                color="gray"
+                disabled={!state.connected || state.cancelling || verifying}
+                onClick={session.cancel}
+              >
+                {t.cancel}
+              </Button>
+            )}
+            {(done || state.error !== undefined) && (
+              <Button
+                className="device-manage-link"
+                variant="ghost"
+                color="gray"
+                disabled={!!state.busy}
+                onClick={onManage}
+              >
+                {done ? t.viewRoutes : t.manageRoutes}
+              </Button>
+            )}
+          </Flex>
         </Flex>
       )}
     </>

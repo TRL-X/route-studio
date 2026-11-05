@@ -19,7 +19,7 @@ for (const format of ['GPX', 'KML', 'FIT']) {
     await selectOption(dialog.getByLabel('Choose export format'), format.toLowerCase());
     await expect(dialog).toHaveAccessibleName('Export route');
     await expect(dialog.getByText('23 track points · 4 stations')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Bluetooth upload…' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Connect and send…' })).toHaveCount(0);
     await dialog.getByLabel('File name').fill('foo/bar');
     await expect(dialog.getByRole('button', { name: `Download ${format}` })).toBeDisabled();
     const name = '山脊.' + format.toLowerCase();

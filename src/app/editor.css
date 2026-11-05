@@ -868,7 +868,7 @@ h2 {
   right: 16px;
   top: 16px;
 }
-.export-dialog > .rt-DialogTitle {
+.export-dialog > .rt-Heading {
   padding-right: 32px;
   flex: none;
 }

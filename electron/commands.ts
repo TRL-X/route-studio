@@ -17,6 +17,7 @@ export const commandIds = [
   'mapZoomIn',
   'mapZoomOut',
   'toggleProfile',
+  'deviceRoutes',
   'settings',
   'checkUpdates',
 ] as const;
@@ -49,6 +50,7 @@ export const commandDefinitions: CommandDefinition[] = [
   { id: 'mapZoomIn', group: 'view' },
   { id: 'mapZoomOut', group: 'view' },
   { id: 'toggleProfile', group: 'view' },
+  { id: 'deviceRoutes' },
   { id: 'settings', accelerator: 'CommandOrControl+,' },
   { id: 'checkUpdates' },
 ];
