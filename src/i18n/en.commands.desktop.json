@@ -17,6 +17,7 @@
   "deleteSelected": "Delete selection",
   "routeProperties": "Route properties",
   "elevation": "Elevation tools…",
+  "resample": "Resample route points…",
   "fitRoute": "Fit route",
   "mapZoomIn": "Zoom map in",
   "mapZoomOut": "Zoom map out",

@@ -25,7 +25,14 @@ import {
   Waypoints,
   X,
 } from 'lucide-react';
-import { appendVertex, deleteVertex, insertVertex, moveVertex, updateStation } from '../domain/edit';
+import {
+  appendVertex,
+  deleteVertex,
+  geometryChanged,
+  insertVertex,
+  moveVertex,
+  updateStation,
+} from '../domain/edit';
 import { fillShortElevationGaps, type ImportElevationAssessment } from '../domain/elevation-repair';
 import {
   anchorDistance,
@@ -62,6 +69,7 @@ import { ElevationTools, workflowStrings } from './ElevationTools';
 import { ImportElevationDialog } from './ImportElevationDialog';
 import { useDeclinationLookup } from './useDeclinationLookup';
 import { commandStrings, type EditorCommands } from './commands';
+import { ResampleDialog, resampleStrings } from './ResampleDialog';
 
 type Localized = { en: string; zh: string };
 type Problem = Localized & { target?: Selection };
@@ -137,6 +145,7 @@ export function Editor({
   const [pending, setPending] = useState<Replacement | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
   const [elevationPanel, setElevationPanel] = useState<'import' | 'tools' | 'online' | null>(null);
+  const [resampleSource, setResampleSource] = useState<RouteDocument | null>(null);
   const [importElevation, setImportElevation] = useState<ImportElevationAssessment | null>(null);
   const [elevationSummary, setElevationSummary] = useState<Localized | null>(null);
   const [settingsTab, setSettingsTab] = useState<'general' | 'map' | 'updates' | null>(null);
@@ -147,7 +156,14 @@ export function Editor({
   const [magneticExpanded, setMagneticExpanded] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const locked =
-    busy || savingFile || !!pending || !!choices || !!exportFormat || !!elevationPanel || !!settingsTab;
+    busy ||
+    savingFile ||
+    !!pending ||
+    !!choices ||
+    !!exportFormat ||
+    !!elevationPanel ||
+    !!settingsTab ||
+    !!resampleSource;
   const lookup = useDeclinationLookup(
     doc,
     dispatch,
@@ -160,7 +176,8 @@ export function Editor({
   const ioLock = useRef(false);
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const dirty = doc !== savedDoc;
-  const updateBlocked = busy || savingFile || !!exportFormat || !!elevationPanel || !!pending || !!choices;
+  const updateBlocked =
+    busy || savingFile || !!exportFormat || !!elevationPanel || !!pending || !!choices || !!resampleSource;
   useLayoutEffect(() => {
     window.routeStudioDesktop?.setDocumentState(dirty, lang, updateBlocked);
   }, [dirty, lang, updateBlocked]);
@@ -270,6 +287,7 @@ export function Editor({
     setImportElevation(next.elevationAssessment ?? null);
     setElevationSummary(null);
     setMagneticExpanded(false);
+    setResampleSource(null);
     setIssue(null);
     setHoveredSample(null);
     setMapProbeDistance(null);
@@ -501,6 +519,13 @@ export function Editor({
     deleteSelected: { run: deleteSelected, disabled: !canDelete },
     routeProperties: { run: () => select({ type: 'route' }, true) },
     elevation: { run: openElevationTools, disabled: !doc.vertices.length },
+    resample: {
+      run: () => {
+        cancelTool();
+        setResampleSource(doc);
+      },
+      disabled: doc.vertices.length < 2 || !(axis.at(-1)! > 0),
+    },
     fitRoute: { run: () => mapCommand('fit'), disabled: !doc.vertices.length },
     mapZoomIn: { run: () => mapCommand('zoomIn') },
     mapZoomOut: { run: () => mapCommand('zoomOut') },
@@ -810,6 +835,23 @@ export function Editor({
           updates={updates}
           dirty={dirty}
           onSave={save}
+        />
+      )}
+      {resampleSource && (
+        <ResampleDialog
+          doc={resampleSource}
+          lang={lang}
+          scheme={scheme}
+          basemap={basemap}
+          onClose={() => setResampleSource(null)}
+          onApply={(next) => {
+            // A magnetic lookup can complete during preview; retain it if still applicable.
+            change(geometryChanged({ ...next, declination: doc.declination }));
+            select({ type: 'route' });
+            setMapProbeDistance(null);
+            setResampleSource(null);
+            setNotice({ en: resampleStrings.en.done, zh: resampleStrings.zh.done });
+          }}
         />
       )}
       {elevationPanel === 'import' && importElevation && (

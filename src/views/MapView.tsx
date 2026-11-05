@@ -5,7 +5,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Map as LibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { anchorPoint, lonDelta } from '../domain/model';
-import type { Anchor, RouteDocument, Station } from '../domain/model';
+import type { Anchor, RouteDocument, Station, Vertex } from '../domain/model';
 import { orderedStations, stationPassages, type StationPassage } from '../domain/projection';
 import type { Tool } from '../app/Inspector';
 import { StationPassOptions } from '../app/StationPassOptions';
@@ -25,6 +25,12 @@ type Point = { lat: number; lon: number };
 type XY = { x: number; y: number };
 type Camera = XY & { zoom: number };
 interface MapViewProps {
+  readOnly?: boolean;
+  comparison?: {
+    vertices: Vertex[];
+    shortSegments: number[];
+    focus?: { index: number; nonce: number };
+  };
   doc: RouteDocument;
   lang: Lang;
   scheme: ColorScheme;
@@ -371,6 +377,48 @@ export function MapView(props: MapViewProps) {
       }),
     [world, preview, camera, scale, size],
   );
+  const comparisonWorld = useMemo(() => {
+    let previousX = world[0]?.x ?? 0;
+    return props.comparison?.vertices.map((p, i, vertices) => {
+      const projected = project(p);
+      projected.x = i
+        ? previousX + lonDelta(vertices[i - 1].lon, p.lon) / 360
+        : projected.x + Math.round(previousX - projected.x);
+      previousX = projected.x;
+      return { ...projected, id: p.id };
+    });
+  }, [props.comparison?.vertices, world]);
+  const comparisonScreen = useMemo(
+    () => comparisonWorld?.map((p) => ({ ...toScreen(p), id: p.id })),
+    [comparisonWorld, camera, scale, size],
+  );
+  const comparisonPath = useMemo(
+    () => comparisonScreen?.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(''),
+    [comparisonScreen],
+  );
+  const shortPath = useMemo(
+    () =>
+      props.comparison?.shortSegments
+        .map((i) => {
+          const a = comparisonScreen![i],
+            b = comparisonScreen![i + 1];
+          return `M${a.x.toFixed(2)} ${a.y.toFixed(2)}L${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+        })
+        .join(''),
+    [props.comparison?.shortSegments, comparisonScreen],
+  );
+  const comparisonFocus = props.comparison?.focus;
+  useEffect(() => {
+    if (!comparisonFocus || !comparisonWorld) return;
+    const pair = comparisonWorld.slice(comparisonFocus.index, comparisonFocus.index + 2);
+    if (pair.length !== 2) return;
+    const target = fitted(pair, size.width, size.height);
+    const scale = Math.min(
+      Math.max(40, size.width - 120) / Math.max(1e-12, Math.abs(pair[1].x - pair[0].x)),
+      Math.max(40, size.height - 120) / Math.max(1e-12, Math.abs(pair[1].y - pair[0].y)),
+    );
+    setCamera({ ...target, zoom: clamp(Math.log2(scale / 512), 0, 20) });
+  }, [comparisonFocus]);
   const { routePath, handles } = useMemo(() => {
     let routePath = '',
       last: XY | undefined;
@@ -443,7 +491,7 @@ export function MapView(props: MapViewProps) {
     ev.currentTarget.focus();
     const start = here(ev);
     setMapProbe(null);
-    const pan = ev.button === 1;
+    const pan = ev.button === 1 || !!props.readOnly;
     const station =
       !pan && tool === 'select'
         ? ((ev.target as Element).closest('[data-station]')?.getAttribute('data-station') ?? undefined)
@@ -640,11 +688,28 @@ export function MapView(props: MapViewProps) {
       >
         {!showBase && <g className="rv-graticule">{grid}</g>}
         <path className="rv-route-halo" d={routePath} />
-        <path className="rv-route" d={routePath} />
+        <path className={props.readOnly ? 'rv-route-original' : 'rv-route'} d={routePath} />
         <path className="rv-route-hit" d={routePath} strokeWidth={snapRadius * 2} />
-        {handles.map((p) => (
-          <circle className="rv-vertex" key={p.id} cx={p.x} cy={p.y} r={2.4} />
-        ))}
+        {!props.readOnly &&
+          handles.map((p) => <circle className="rv-vertex" key={p.id} cx={p.x} cy={p.y} r={2.4} />)}
+        {comparisonScreen && (
+          <g className="rv-comparison" pointerEvents="none">
+            <path className="rv-route" d={comparisonPath} />
+            {comparisonScreen
+              .filter(
+                (p, i) =>
+                  p.x >= -8 &&
+                  p.x <= size.width + 8 &&
+                  p.y >= -8 &&
+                  p.y <= size.height + 8 &&
+                  (!i || Math.hypot(p.x - comparisonScreen[i - 1].x, p.y - comparisonScreen[i - 1].y) >= 5),
+              )
+              .map((p) => (
+                <circle className="rv-vertex" key={p.id} cx={p.x} cy={p.y} r={2.4} />
+              ))}
+            {shortPath && <path className="rv-short-segment" d={shortPath} />}
+          </g>
+        )}
         {mapStations.map(({ station, anchor, location, marker, chosen, name, label }) => {
           return (
             <g
@@ -755,14 +820,16 @@ export function MapView(props: MapViewProps) {
           </IconButton>
         </Flex>
       </Card>
-      <BasemapControls
-        lang={lang}
-        preferences={basemap}
-        failure={basemap.enabled ? (missingBaseKey ? 'key' : baseFailure) : null}
-        storageFailed={props.storageFailed}
-        onOpenSettings={props.onOpenSettings}
-        onRetry={retryBase}
-      />
+      {!props.readOnly && (
+        <BasemapControls
+          lang={lang}
+          preferences={basemap}
+          failure={basemap.enabled ? (missingBaseKey ? 'key' : baseFailure) : null}
+          storageFailed={props.storageFailed}
+          onOpenSettings={props.onOpenSettings}
+          onRetry={retryBase}
+        />
+      )}
       <div className="rv-scale">
         <span style={{ width: scaleMetres / metresPerPixel }} />
         {scaleMetres >= 1000 ? scaleMetres / 1000 + ' km' : scaleMetres + ' m'}

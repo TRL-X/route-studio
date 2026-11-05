@@ -9,7 +9,7 @@ import {
   type Station,
 } from './model';
 
-function geometryChanged(doc: RouteDocument): RouteDocument {
+export function geometryChanged(doc: RouteDocument): RouteDocument {
   if (doc.rte) {
     const rte = { ...doc.rte };
     delete rte.distanceDm;

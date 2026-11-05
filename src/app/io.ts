@@ -4,17 +4,21 @@ import type { Point, RouteDocument } from '../domain/model';
 import type { FileErrorCode } from '../files/errors';
 import type { TrackFormat, TrackExportPreview } from '../files/export';
 import type { ImportElevationAssessment } from '../domain/elevation-repair';
+import type { ResampleOptions, ResampleResult, ResampleErrorCode } from '../domain/resample';
 export interface Choice {
   name: string;
   pointCount: number;
   hasUnconfirmedHeights: boolean;
 }
 export type IORequest =
+  | { type: 'resample'; doc: RouteDocument; options: ResampleOptions }
   | { type: 'read'; file: File; choice?: number; accept?: boolean }
   | { type: 'terrain'; points: Point[] }
   | { type: 'export'; doc: RouteDocument; format: TrackFormat }
   | { type: 'compile'; doc: RouteDocument; options: ExportOptions };
 export type IOResult =
+  | { type: 'resampled'; result: ResampleResult }
+  | { type: 'resample-error'; code: ResampleErrorCode }
   | { type: 'document'; doc: RouteDocument; elevationAssessment?: ImportElevationAssessment | null }
   | { type: 'heights'; values: (number | null)[] }
   | { type: 'choices'; choices: Choice[] }
