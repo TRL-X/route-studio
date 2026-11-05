@@ -110,7 +110,7 @@ The update source is the public `TRL-X/route-studio` GitHub repository. Keep `el
 
 ## Contributing and verification
 
-Use short-lived branches and pull requests targeting `main`. Resolve reviews and pass **Check editor / verify**, then a [mergers team](https://github.com/orgs/TRL-X/teams/route-studio-mergers) member adds the PR to the merge queue. The queue validates the combined changes against the latest `main` and squash-merges automatically; updating every PR branch after another PR merges is unnecessary unless there is a conflict. Write code, comments and documentation in English; translations belong in `src/i18n/`.
+Use short-lived branches and pull requests targeting `main`. Resolve reviews and pass **Check editor / verify**, then add the PR to the merge queue. The queue validates the combined changes against the latest `main` and squash-merges automatically; updating every PR branch after another PR merges is unnecessary unless there is a conflict. Write code, comments and documentation in English; translations belong in `src/i18n/`.
 
 CI runs once per PR revision and again for each merge group. A newer PR revision cancels the previous run. Web checks and desktop validation run in parallel, and the stable `verify` check requires both to pass:
 
@@ -121,7 +121,7 @@ CI runs once per PR revision and again for each merge group. A newer PR revision
 
 Only `verify` is required in branch rules. It rejects failed, cancelled or unexpectedly skipped dependencies, including the selected desktop checks. Keep `pull_request` and `merge_group` triggers enabled; filtering out the entire workflow can leave the required check pending.
 
-The [GitHub Flow ruleset](https://github.com/TRL-X/route-studio/rules/26424914) requires the merge queue, with up to three groups validating concurrently, all entries required to pass, and a 30-minute check timeout. One ready PR is enough to merge, so the queue does not wait to accumulate a batch. After `verify` passes, use **Merge when ready** / **Add to merge queue** in GitHub, or `gh pr merge <number> --repo TRL-X/route-studio`. The queue runs `verify` again on the combined changes and squash-merges automatically. The separate mergers-team restriction still applies. If a queue check fails, inspect the failed job, fix the PR or rerun a transient failure, then re-add the PR to the queue.
+The [GitHub Flow ruleset](https://github.com/TRL-X/route-studio/rules/26424914) requires the merge queue, with up to three groups validating concurrently, all entries required to pass, and a 30-minute check timeout. One ready PR is enough to merge, so the queue does not wait to accumulate a batch. After `verify` passes, use **Merge when ready** / **Add to merge queue** in GitHub, or `gh pr merge <number> --repo TRL-X/route-studio`. The queue runs `verify` again on the combined changes and squash-merges automatically. If a queue check fails, inspect the failed job, fix the PR or rerun a transient failure, then re-add the PR to the queue.
 
 ```sh
 npm run check
