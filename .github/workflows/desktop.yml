@@ -59,6 +59,13 @@ jobs:
           fi
           args=(--${{ matrix.platform }} --${{ matrix.arch }} --publish never)
           if [[ -n "${CSC_LINK:-}" ]]; then args+=(-c.forceCodeSigning=true); fi
+          if [[ "${{ matrix.platform }}" == "mac" && -z "${CSC_LINK:-}" ]]; then
+            # Ad-hoc signing needs no secrets, including on pull requests.
+            export CSC_FOR_PULL_REQUEST=true
+            args+=(-c.mac.identity=- -c.mac.notarize=false)
+            args+=(-c.mac.entitlements=build/entitlements.mac.adhoc.plist)
+            args+=(-c.mac.entitlementsInherit=build/entitlements.mac.adhoc.plist)
+          fi
           if [[ "${{ matrix.platform }}" == "mac" && -n "${CSC_LINK:-}" ]]; then
             test -n "$APPLE_API_KEY_BASE64" && test -n "$APPLE_API_KEY_ID" && test -n "$APPLE_API_ISSUER"
             export APPLE_API_KEY="$RUNNER_TEMP/route-studio-notarization.p8"
@@ -68,6 +75,12 @@ jobs:
           npx electron-builder "${args[@]}"
       - name: Verify installers and update manifests
         run: node scripts/verify-release.mjs release ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Test macOS signature validation
+        if: runner.os == 'macOS'
+        run: node --test tests/ci/mac-signatures.test.mjs
+      - name: Verify macOS application and archive signatures
+        if: runner.os == 'macOS'
+        run: node scripts/verify-macos-signatures.mjs release ${{ matrix.arch }}
       - name: Locate packaged executable
         shell: bash
         run: node scripts/packaged-executable.mjs >> "$GITHUB_ENV"
