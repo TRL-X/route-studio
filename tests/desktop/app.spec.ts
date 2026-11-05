@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
 let directory: string;
 let mainErrors: string[];
-let child: ReturnType<ElectronApplication['process']>;
+let child: ReturnType<ElectronApplication['process']> | undefined;
 const gpx =
   '<gpx><trk><name>Desktop ridge</name><trkseg><trkpt lat="30" lon="105"><ele>10</ele></trkpt><trkpt lat="30.01" lon="105.01"><ele>20</ele></trkpt></trkseg></trk></gpx>';
 
@@ -94,6 +94,8 @@ async function nativeCommand(command: CommandId) {
 }
 
 test.beforeEach(async () => {
+  // Runtime-skipped tests still run afterEach without launching their own app.
+  child = undefined;
   mainErrors = [];
   directory = await mkdtemp(path.join(os.tmpdir(), 'route-studio-desktop-'));
 });
@@ -725,7 +727,7 @@ test('quitting with unsaved edits confirms once and exits without a destroyed-wi
     dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
     setImmediate(() => app.quit());
   });
-  await expect.poll(() => child.exitCode).toBe(0);
+  await expect.poll(() => child?.exitCode).toBe(0);
 });
 
 for (const disableWebGL of [false, true]) {
