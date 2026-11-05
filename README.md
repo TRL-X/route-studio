@@ -84,7 +84,7 @@ Native open/save dialogs limit files to 64 MiB. Cancelling a save preserves edit
 
 The renderer uses context isolation, sandboxing, disabled Node integration and a restricted `app://route-studio/` protocol with CSP. Only the main frame can use the file bridge, and it cannot supply filesystem paths. HTTP/HTTPS links open in the system browser.
 
-The **Desktop packages** workflow builds and tests packages on native runners. Pull requests and manual runs produce artifacts; version tags create a GitHub Release draft. Publishing remains a maintainer action. Signing secrets:
+The **Check editor** workflow calls **Desktop packages** for native builds when desktop validation is required (see below). Full builds produce installer artifacts; version tags create a GitHub Release draft after all checks pass. Publishing remains a maintainer action. Signing secrets:
 
 | Platform           | Secrets                                                             |
 | ------------------ | ------------------------------------------------------------------- |
@@ -110,7 +110,16 @@ The update source is the public `TRL-X/route-studio` GitHub repository. Keep `el
 
 ## Contributing and verification
 
-Use short-lived branches and pull requests targeting `main`. Resolve reviews and pass **Check editor / verify** before a [mergers team](https://github.com/orgs/TRL-X/teams/route-studio-mergers) member squash-merges. Write code, comments and documentation in English; translations belong in `src/i18n/`.
+Use short-lived branches and pull requests targeting `main`. Resolve reviews and pass **Check editor / verify**, then a [mergers team](https://github.com/orgs/TRL-X/teams/route-studio-mergers) member adds the PR to the merge queue. The queue validates the combined changes against the latest `main` and squash-merges automatically; updating every PR branch after another PR merges is unnecessary unless there is a conflict. Write code, comments and documentation in English; translations belong in `src/i18n/`.
+
+CI runs once per PR revision and again for each merge group. A newer PR revision cancels the previous run. Web checks and desktop validation run in parallel, and the stable `verify` check requires both to pass:
+
+- All PRs run formatting, all unit tests, Web/Electron type checks, a production build and all browser tests. Browser tests reuse the build in CI; local `test:e2e` still builds automatically.
+- Renderer, Web-test and documentation changes run the complete desktop test suite against a Linux unpacked application, without generating installers.
+- Electron, updater/native integration, dependency, build, shared test helper, CI and other unclassified changes require all four native package/test jobs: macOS ARM64 and x64, Windows x64 and Linux x64. `scripts/ci-policy.mjs` defines the selection. Renames and deletions are included; merge groups inspect all combined changes.
+- Pushes to `main`, `v*` tags and manual **Check editor** runs always build and test all four packages. Newer `main` runs cancel older ones; release and merge-group runs are not cancelled by that policy.
+
+Only `verify` is required in branch rules. It rejects failed, cancelled or unexpectedly skipped dependencies, including the selected desktop checks. Keep `pull_request` and `merge_group` triggers enabled; filtering out the entire workflow can leave the required check pending.
 
 ```sh
 npm run check

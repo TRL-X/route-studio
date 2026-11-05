@@ -1,12 +1,45 @@
 name: Check editor
-on: [push, pull_request]
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # Superseded PR/main runs are disposable; queue groups and releases are not.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
 jobs:
-  verify:
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full_desktop: ${{ steps.changes.outputs.full_desktop }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - id: changes
+        run: node scripts/ci-policy.mjs changes
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      PLAYWRIGHT_SKIP_BUILD: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,5 +48,97 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npx playwright install --with-deps chromium
+      - run: npm run desktop:typecheck
+      - run: npx playwright install --with-deps --only-shell chromium
       - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: web-test-results
+          path: test-results
+          retention-days: 7
+
+  desktop-smoke:
+    needs: changes
+    if: needs.changes.outputs.full_desktop == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx install-electron --no
+      - run: npx playwright install-deps chromium
+      - run: npm run desktop:build
+      - name: Package application without installers
+        run: npx electron-builder --linux --x64 --dir --publish never
+      - name: Locate packaged executable
+        run: node scripts/packaged-executable.mjs >> "$GITHUB_ENV"
+      - run: xvfb-run --auto-servernum npm run test:desktop
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-smoke-test-results
+          path: desktop-test-results
+          retention-days: 7
+
+  desktop-packages:
+    needs: changes
+    if: needs.changes.outputs.full_desktop == 'true'
+    uses: ./.github/workflows/desktop.yml
+    secrets: inherit
+
+  # Keep this check name stable in main's ruleset. An expected job that fails,
+  # is cancelled or is unexpectedly skipped must never pass the merge gate.
+  verify:
+    if: always()
+    needs: [changes, web, desktop-smoke, desktop-packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/ci-policy.mjs verify
+        env:
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: installers
+      - name: Verify complete release
+        run: node scripts/verify-release.mjs installers
+      - name: Upload installers to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" installers/* --clobber
