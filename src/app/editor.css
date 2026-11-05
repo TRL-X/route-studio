@@ -207,6 +207,9 @@ p {
   padding: 0 0 14px;
   min-height: 0;
 }
+.station-list > .hint {
+  margin-inline: var(--pane-inset);
+}
 .station-row {
   width: calc(100% - 16px);
   margin: 2px 8px;
