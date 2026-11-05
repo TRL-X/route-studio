@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
 let directory: string;
 let mainErrors: string[];
-let child: ReturnType<ElectronApplication['process']>;
+let child: ReturnType<ElectronApplication['process']> | undefined;
 const gpx =
   '<gpx><trk><name>Desktop ridge</name><trkseg><trkpt lat="30" lon="105"><ele>10</ele></trkpt><trkpt lat="30.01" lon="105.01"><ele>20</ele></trkpt></trkseg></trk></gpx>';
 
@@ -94,6 +94,8 @@ async function nativeCommand(command: CommandId) {
 }
 
 test.beforeEach(async () => {
+  // Runtime-skipped tests still run afterEach without launching their own app.
+  child = undefined;
   mainErrors = [];
   directory = await mkdtemp(path.join(os.tmpdir(), 'route-studio-desktop-'));
 });
@@ -661,6 +663,33 @@ test('cancelled or failed native saves retain unsaved edits and the close remind
   await expect(page.getByRole('alert')).toContainText('Could not save the file.');
 });
 
+test('opens device routes from the native menu without a local route', async () => {
+  const page = await launch();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'Menu', exact: true });
+  expect(
+    await menu
+      .getByRole('menuitem')
+      .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') || item.textContent)),
+  ).toEqual(['File', 'Edit', 'Route', 'View', 'Device…', 'Check for updates…', 'Settings…']);
+  expect(
+    await menu
+      .getByRole('menuitem', { name: 'Device…', exact: true })
+      .evaluate((item) => [
+        item.previousElementSibling?.getAttribute('role'),
+        item.nextElementSibling?.getAttribute('role'),
+      ]),
+  ).toEqual(['separator', 'separator']);
+  await page.keyboard.press('Escape');
+  await nativeCommand('deviceRoutes');
+  const manager = page.getByRole('dialog', { name: 'Device', exact: true });
+  await expect(manager).toBeVisible();
+  await expect(manager.getByRole('button', { name: 'Connect device', exact: true })).toBeEnabled();
+  await manager.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(manager).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('');
+});
+
 test('device chooser updates discovery results and cancels without selecting a device', async () => {
   const page = await launch();
   await desktop.evaluate(({ BrowserWindow }) => {
@@ -698,7 +727,7 @@ test('quitting with unsaved edits confirms once and exits without a destroyed-wi
     dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
     setImmediate(() => app.quit());
   });
-  await expect.poll(() => child.exitCode).toBe(0);
+  await expect.poll(() => child?.exitCode).toBe(0);
 });
 
 for (const disableWebGL of [false, true]) {

@@ -1,6 +1,8 @@
 import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { ArrowDownToLine, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
+import { Bluetooth, BluetoothOff, ArrowDownToLine, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
+import type { DeviceSnapshot } from '../device/session';
+import { deviceStrings } from './deviceStrings';
 import type { Lang } from './strings';
 import {
   commandDefinitions,
@@ -17,6 +19,7 @@ interface ToolbarProps {
   lang: Lang;
   locked: boolean;
   commands: EditorCommands;
+  device: DeviceSnapshot;
 }
 
 function editingText() {
@@ -29,8 +32,21 @@ function editingText() {
   );
 }
 
-export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
+export function EditorToolbar({ title, lang, locked, commands, device }: ToolbarProps) {
   const t = commandStrings[lang];
+  const deviceCopy = deviceStrings[lang];
+  const deviceLabel = (
+    device.busy === 'connecting'
+      ? deviceCopy.toolbarConnecting
+      : device.busy === 'uploading'
+        ? deviceCopy.toolbarSending
+        : device.pending
+          ? deviceCopy.toolbarPaused
+          : device.connected
+            ? deviceCopy.toolbarConnected
+            : deviceCopy.toolbarDisconnected
+  ).replace('{name}', device.deviceName);
+
   const desktop = window.routeStudioDesktop;
   const [zoom, setZoom] = useState(() => desktop?.getZoomFactor() ?? 1);
   const [windowControlsVisible, setWindowControlsVisible] = useState(true);
@@ -192,6 +208,14 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
                 </DropdownMenu.Sub>
               ))}
               <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                aria-label={t.deviceRoutes}
+                disabled={locked || commands.deviceRoutes.disabled}
+                onSelect={() => execute('deviceRoutes')}
+              >
+                {t.deviceRoutes}
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
               {desktop && (
                 <DropdownMenu.Item disabled={locked} onSelect={() => execute('checkUpdates')}>
                   {t.checkUpdates}
@@ -235,6 +259,18 @@ export function EditorToolbar({ title, lang, locked, commands }: ToolbarProps) {
           <h1 title={title}>{title}</h1>
         </div>
         <div className="top-actions">
+          <IconButton
+            variant="ghost"
+            color={device.connected ? 'blue' : 'gray'}
+            className="device-status-button"
+            aria-label={deviceLabel}
+            title={deviceLabel}
+            aria-haspopup="dialog"
+            disabled={locked}
+            onClick={() => execute('deviceRoutes')}
+          >
+            {device.connected ? <Bluetooth /> : <BluetoothOff />}
+          </IconButton>
           <Button
             variant="surface"
             color="gray"

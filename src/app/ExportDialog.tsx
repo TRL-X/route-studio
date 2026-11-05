@@ -3,6 +3,7 @@ import { Table, Button, Heading, Callout, Flex, Text } from '@radix-ui/themes';
 import { useEffect, useState } from 'react';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { declinationSettings } from '../domain/declination';
+import type { DeviceControls } from './useDeviceRoutes';
 import { DeviceUpload } from './DeviceUpload';
 import type { LookupState } from './useDeclinationLookup';
 import en from '../i18n/en.export.json';
@@ -73,7 +74,11 @@ export function ExportDialog({
   onDownload,
   saving,
   saveError,
+  device,
+  onManageDevice,
 }: ExportControls & {
+  device: DeviceControls;
+  onManageDevice: () => void;
   doc: RouteDocument;
   format: ExportFormat;
   projectGain: number | null;
@@ -85,7 +90,7 @@ export function ExportDialog({
 }) {
   const t = strings[lang];
   const copy = { en, zh }[lang];
-  const [uploading, setUploading] = useState(false);
+  const uploading = !!device.state.busy;
   const mag = declinationSettings(doc);
   const [job, setJob] = useState<{
     doc: RouteDocument;
@@ -154,7 +159,9 @@ export function ExportDialog({
       saveError={saveError}
       bytes={ready?.bytes ?? trackFile?.bytes}
       extraAction={
-        format === 'rte' ? <DeviceUpload bytes={ready?.bytes} t={t} onBusyChange={setUploading} /> : undefined
+        format === 'rte' ? (
+          <DeviceUpload bytes={ready?.bytes} device={device} lang={lang} onManage={onManageDevice} />
+        ) : undefined
       }
     >
       {format === 'rte' && (

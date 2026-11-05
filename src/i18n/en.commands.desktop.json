@@ -24,5 +24,6 @@
   "toggleProfile": "Show / hide elevation profile",
   "settings": "Settings…",
   "checkUpdates": "Check for updates…",
-  "help": "Help"
+  "help": "Help",
+  "deviceRoutes": "Device…"
 }

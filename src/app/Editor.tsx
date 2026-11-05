@@ -47,6 +47,8 @@ import { saveDraft, saveProject } from '../files';
 import { MapView } from '../views/MapView';
 import { ProfileView } from '../views/ProfileView';
 import type { ExportFormat } from '../files/export';
+import { useDeviceRoutes } from './useDeviceRoutes';
+import { DeviceRoutes } from './DeviceRoutes';
 import { ExportDialog } from './ExportDialog';
 import { defaultExportOptions } from '../rte/processing';
 import { EditorToolbar } from './EditorToolbar';
@@ -120,6 +122,9 @@ export function Editor({
   const currentDoc = useRef(doc);
   currentDoc.current = doc;
   const updates = useUpdates();
+  const device = useDeviceRoutes();
+  const [deviceOpen, setDeviceOpen] = useState(false);
+  const [returnToExport, setReturnToExport] = useState<ExportFormat | null>(null);
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
   const { theme, scheme, changeTheme } = useTheme();
@@ -156,6 +161,8 @@ export function Editor({
   const [magneticExpanded, setMagneticExpanded] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const locked =
+    deviceOpen ||
+    !!device.state.busy ||
     busy ||
     savingFile ||
     !!pending ||
@@ -177,7 +184,16 @@ export function Editor({
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const dirty = doc !== savedDoc;
   const updateBlocked =
-    busy || savingFile || !!exportFormat || !!elevationPanel || !!pending || !!choices || !!resampleSource;
+    deviceOpen ||
+    !!device.state.busy ||
+    device.state.pending ||
+    busy ||
+    savingFile ||
+    !!exportFormat ||
+    !!elevationPanel ||
+    !!pending ||
+    !!choices ||
+    !!resampleSource;
   useLayoutEffect(() => {
     window.routeStudioDesktop?.setDocumentState(dirty, lang, updateBlocked);
   }, [dirty, lang, updateBlocked]);
@@ -530,6 +546,12 @@ export function Editor({
     mapZoomIn: { run: () => mapCommand('zoomIn') },
     mapZoomOut: { run: () => mapCommand('zoomOut') },
     toggleProfile: { run: () => setProfileCollapsed((value) => !value) },
+    deviceRoutes: {
+      run: () => {
+        setReturnToExport(null);
+        setDeviceOpen(true);
+      },
+    },
     settings: { run: () => setSettingsTab('general') },
     checkUpdates: {
       run: () => {
@@ -562,7 +584,13 @@ export function Editor({
       }}
     >
       <div className="shell" inert={locked}>
-        <EditorToolbar title={doc.name || t.untitled} lang={lang} locked={locked} commands={commands} />
+        <EditorToolbar
+          title={doc.name || t.untitled}
+          lang={lang}
+          locked={locked}
+          commands={commands}
+          device={device.state}
+        />
         <input
           ref={picker}
           type="file"
@@ -805,6 +833,12 @@ export function Editor({
       </div>
       {exportFormat && (
         <ExportDialog
+          device={device}
+          onManageDevice={() => {
+            setReturnToExport(exportFormat);
+            setExportFormat(null);
+            setDeviceOpen(true);
+          }}
           format={exportFormat}
           doc={doc}
           {...exportControls}
@@ -923,6 +957,18 @@ export function Editor({
             </Button>
           </div>
         </Modal>
+      )}
+      {deviceOpen && (
+        <DeviceRoutes
+          device={device}
+          lang={lang}
+          returnToExport={returnToExport !== null}
+          onClose={() => {
+            setDeviceOpen(false);
+            if (returnToExport) setExportFormat(returnToExport);
+            setReturnToExport(null);
+          }}
+        />
       )}
       <DesktopBluetooth lang={lang} />
       {choices && (

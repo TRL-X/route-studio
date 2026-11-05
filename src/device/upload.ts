@@ -1,53 +1,100 @@
-import { crc32 } from '../crc32';
-import { UploadError, type FsRequest } from './mcumgr';
+import { checked, DeviceError } from './mcumgr';
+import { RouteClient, routeFailure, uint, type UploadStatus } from './routes';
 
-export function validDevicePath(path: string) {
-  return (
-    path.startsWith('/') &&
-    !path.endsWith('/') &&
-    !/[\\\u0000-\u001f]/.test(path) &&
-    path
-      .slice(1)
-      .split('/')
-      .every((segment) => segment && segment !== '.' && segment !== '..') &&
-    new TextEncoder().encode(path).length <= 64
-  );
+export interface UploadJob {
+  bytes: Uint8Array;
+  reqId: Uint8Array;
+  uploadId?: number;
+  remote?: UploadStatus;
+  cancelRequested: boolean;
 }
-
-function checked(reply: Awaited<ReturnType<FsRequest>>) {
-  if (reply.err || (reply.rc !== undefined && reply.rc !== 0)) {
-    const code = reply.err ? reply.err.group + '/' + reply.err.rc : String(reply.rc);
-    throw new UploadError('uploadDeviceError', code);
-  }
-  return reply;
+export function createUpload(bytes: Uint8Array): UploadJob {
+  return { bytes: bytes.slice(), reqId: crypto.getRandomValues(new Uint8Array(16)), cancelRequested: false };
 }
+export type UploadProgress = {
+  state: 'preparing' | 'receiving' | 'verifying' | 'ready' | 'cancelled';
+  off: number;
+  name?: string;
+};
+export const terminalUpload = (job: UploadJob) =>
+  !!job.remote && ['ready', 'cancelled', 'failed', 'expired'].includes(job.remote.state);
 
-export async function uploadFile(
-  request: FsRequest,
-  name: string,
-  bytes: Uint8Array,
-  progress: (off: number) => void,
+export async function transferRoute(
+  client: RouteClient,
+  job: UploadJob,
+  progress: (value: UploadProgress) => void,
+  wait = () => new Promise<void>((resolve) => setTimeout(resolve, 750)),
 ) {
-  const status = await request(1, { name });
-  const exists = !(status.err?.group === 8 && status.err.rc === 3); // FS_MGMT_ERR_FILE_NOT_FOUND
-  if (exists) {
-    const { len } = checked(status);
-    if (!Number.isSafeInteger(len)) throw new UploadError('uploadProtocol');
-    if (len !== bytes.length) throw new UploadError('uploadExists');
-    progress(bytes.length);
+  const accept = (reply: UploadStatus) => {
+    if (reply.size !== job.bytes.length || (job.uploadId !== undefined && reply.uploadId !== job.uploadId))
+      throw new DeviceError('protocol');
+    job.uploadId = reply.uploadId;
+    job.remote = reply;
+    return reply;
+  };
+  progress({ state: 'preparing', off: 0 });
+  if (job.uploadId === undefined) {
+    // Repeating PREPARE with the same request ID recovers a lost PREPARE response.
+    accept(await client.prepare(job.reqId, job.bytes.length));
   } else {
-    let off = 0;
-    while (off < bytes.length) {
-      const data = bytes.subarray(off, off + 512);
-      const reply = checked(await request(0, { name, off, data, ...(off === 0 && { len: bytes.length }) }));
-      if (reply.off !== off + data.length) throw new UploadError('uploadProtocol');
-      off = reply.off;
-      progress(off);
+    try {
+      accept(await client.uploadStatus(job.uploadId));
+    } catch (error) {
+      if (!(error instanceof DeviceError && error.group === 64 && error.rc === 2)) throw error;
+      // The device can reboot after committing but before the READY response.
+      const catalog = await client.list();
+      const entry = catalog.items.find((item) => item.id === job.uploadId);
+      if (!entry || entry.size !== job.bytes.length || entry.state !== 'ready') {
+        job.remote = { uploadId: job.uploadId, size: job.bytes.length, state: 'expired', error: 10 };
+        throw routeFailure(10);
+      }
+      accept({
+        uploadId: entry.id,
+        size: entry.size,
+        state: 'ready',
+        name: entry.name,
+        rev: catalog.rev,
+        error: 0,
+      });
     }
   }
-  const hash = checked(await request(2, { name, type: 'crc32' }));
-  const crc = crc32(bytes); // The device hashes every byte, including the RTE header's own CRC.
-  if (hash.type !== 'crc32' || hash.len !== bytes.length || (hash.off ?? 0) !== 0 || hash.output !== crc)
-    throw new UploadError(exists ? 'uploadExists' : 'uploadMismatch');
-  return crc.toString(16).toUpperCase().padStart(8, '0');
+  let remote = job.remote!;
+  if (remote.state === 'receiving') {
+    if (job.cancelRequested) {
+      remote = accept(await client.cancel(remote.uploadId));
+    } else {
+      // STAT flushes/closes the FS handle; its size is the authoritative resume offset.
+      const stat = checked(await client.request(8, 1, 'read', { name: remote.path }));
+      let off = uint(stat.len, job.bytes.length);
+      progress({ state: 'receiving', off });
+      while (off < job.bytes.length && !job.cancelRequested) {
+        const data = job.bytes.subarray(off, off + Math.min(remote.maxChunk!, 512));
+        const ack = checked(
+          await client.request(8, 0, 'write', {
+            name: remote.path,
+            off,
+            data,
+            ...(off === 0 && { len: job.bytes.length }),
+          }),
+        );
+        if (ack.off !== off + data.length) throw new DeviceError('protocol');
+        off += data.length;
+        progress({ state: 'receiving', off });
+      }
+      // Cancel only between complete SMP requests, never halfway through a BLE frame.
+      remote = accept(
+        job.cancelRequested ? await client.cancel(remote.uploadId) : await client.commit(remote.uploadId),
+      );
+    }
+  }
+  // Poll for at most two minutes per invocation; continuing later uses the same transaction.
+  for (let poll = 0; remote.state === 'verifying'; poll++) {
+    progress({ state: 'verifying', off: job.bytes.length });
+    if (poll === 160) throw new DeviceError('timeout');
+    await wait();
+    remote = accept(await client.uploadStatus(remote.uploadId));
+  }
+  if (remote.state === 'ready') progress({ state: 'ready', off: job.bytes.length, name: remote.name });
+  else if (remote.state === 'cancelled') progress({ state: 'cancelled', off: 0 });
+  else throw routeFailure(remote.error || (remote.state === 'expired' ? 10 : 8));
 }

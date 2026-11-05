@@ -110,6 +110,7 @@ async function updateCommandMenu() {
       );
     return { label: labels[group], submenu };
   });
+  groups.push({ label: labels.deviceRoutes.replace(/…$/, ''), submenu: [item('deviceRoutes')] });
   if (process.platform === 'darwin')
     groups.unshift({
       label: app.name,
