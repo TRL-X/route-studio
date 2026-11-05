@@ -597,7 +597,8 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.fill('Saved desktop route');
   await name.press('Enter');
-  await page.getByRole('heading', { name: 'Saved desktop route', exact: true }).click();
+  await page.getByRole('button', { name: 'Rename route', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Route name', exact: true }).press('Escape');
   await page.keyboard.press('ControlOrMeta+z');
   await expect(name).toHaveValue('Desktop ridge');
   await page.keyboard.press('ControlOrMeta+Shift+z');

@@ -4,6 +4,7 @@ import { Bluetooth, BluetoothOff, ArrowDownToLine, Menu, Redo2, Save, Settings, 
 import type { DeviceSnapshot } from '../device/session';
 import { deviceStrings } from './deviceStrings';
 import type { Lang } from './strings';
+import { RouteTitle } from './RouteTitle';
 import {
   commandDefinitions,
   commandGroups,
@@ -16,6 +17,7 @@ import {
 
 interface ToolbarProps {
   title: string;
+  onRename: (name: string) => void;
   lang: Lang;
   locked: boolean;
   commands: EditorCommands;
@@ -32,7 +34,7 @@ function editingText() {
   );
 }
 
-export function EditorToolbar({ title, lang, locked, commands, device }: ToolbarProps) {
+export function EditorToolbar({ title, onRename, lang, locked, commands, device }: ToolbarProps) {
   const t = commandStrings[lang];
   const deviceCopy = deviceStrings[lang];
   const deviceLabel = (
@@ -256,7 +258,7 @@ export function EditorToolbar({ title, lang, locked, commands, device }: Toolbar
           </IconButton>
         </div>
         <div className="titlebar-drag-space">
-          <h1 title={title}>{title}</h1>
+          <RouteTitle name={title} lang={lang} locked={locked} onRename={onRename} />
         </div>
         <div className="top-actions">
           <IconButton

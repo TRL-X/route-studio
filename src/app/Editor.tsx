@@ -585,7 +585,8 @@ export function Editor({
     >
       <div className="shell" inert={locked}>
         <EditorToolbar
-          title={doc.name || t.untitled}
+          title={doc.name}
+          onRename={(name) => change({ ...currentDoc.current, name })}
           lang={lang}
           locked={locked}
           commands={commands}

@@ -29,6 +29,8 @@
   "untitled": "未命名路线",
   "details": "路线详情",
   "name": "名称",
+  "routeName": "路线名称",
+  "renameRoute": "重命名路线",
   "length": "长度",
   "distance": "里程",
   "gain": "累计爬升",

@@ -29,6 +29,8 @@
   "untitled": "Untitled route",
   "details": "Route details",
   "name": "Name",
+  "routeName": "Route name",
+  "renameRoute": "Rename route",
   "length": "Length",
   "distance": "Distance",
   "gain": "Ascent",
