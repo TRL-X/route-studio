@@ -121,6 +121,8 @@ CI runs once per PR revision and again for each merge group. A newer PR revision
 
 Only `verify` is required in branch rules. It rejects failed, cancelled or unexpectedly skipped dependencies, including the selected desktop checks. Keep `pull_request` and `merge_group` triggers enabled; filtering out the entire workflow can leave the required check pending.
 
+The [GitHub Flow ruleset](https://github.com/TRL-X/route-studio/rules/26424914) requires the merge queue, with up to three groups validating concurrently, all entries required to pass, and a 30-minute check timeout. One ready PR is enough to merge, so the queue does not wait to accumulate a batch. After `verify` passes, use **Merge when ready** / **Add to merge queue** in GitHub, or `gh pr merge <number> --repo TRL-X/route-studio`. The queue runs `verify` again on the combined changes and squash-merges automatically. The separate mergers-team restriction still applies. If a queue check fails, inspect the failed job, fix the PR or rerun a transient failure, then re-add the PR to the queue.
+
 ```sh
 npm run check
 npx playwright install chromium
