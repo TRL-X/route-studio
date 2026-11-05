@@ -17,6 +17,7 @@
   "deleteSelected": "删除选中项",
   "routeProperties": "路线属性",
   "elevation": "高程处理…",
+  "resample": "重采样路线点…",
   "fitRoute": "缩放至路线",
   "mapZoomIn": "放大地图",
   "mapZoomOut": "缩小地图",

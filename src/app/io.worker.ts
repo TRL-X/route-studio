@@ -2,7 +2,16 @@ import { loadProject, parseRoutes, RouteFileError, type RouteChoice } from '../f
 import { readRte, prepareRte, RteError } from '../rte';
 import type { IORequest, IOResult } from './io';
 import { assessImportedElevation } from '../domain/elevation-repair';
+import { resampleRoute, ResampleError } from '../domain/resample';
 async function handle(request: IORequest): Promise<IOResult> {
+  if (request.type === 'resample') {
+    try {
+      return { type: 'resampled', result: resampleRoute(request.doc, request.options) };
+    } catch (error) {
+      if (error instanceof ResampleError) return { type: 'resample-error', code: error.code };
+      throw error;
+    }
+  }
   if (request.type === 'terrain') {
     const { sampleCopernicus } = await import('../files/copernicus');
     const values = await sampleCopernicus(request.points, new AbortController().signal);
