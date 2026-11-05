@@ -293,6 +293,42 @@ h1 {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.route-title {
+  max-width: 100%;
+  padding: 2px;
+}
+.route-title :is(button, input) {
+  display: block;
+  max-width: 100%;
+  height: 28px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-2);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.route-title button {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.route-title button:hover:not(:disabled) {
+  background: var(--gray-a3);
+}
+.route-title button:focus-visible,
+.route-title input:focus {
+  outline: 2px solid var(--accent-8);
+  outline-offset: -1px;
+}
+.route-title input {
+  width: clamp(160px, 28vw, 360px);
+  border-color: var(--line);
+  background: var(--surface);
+  user-select: text;
+}
 .course-totals {
   display: flex;
   align-items: center;
