@@ -108,7 +108,8 @@ jobs:
           CI_JOB_RESULTS: ${{ toJSON(needs) }}
 
   draft-release:
-    if: startsWith(github.ref, 'refs/tags/')
+    # The unselected desktop job is intentionally skipped; rely on the verify gate.
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') && needs.verify.result == 'success' }}
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 10
