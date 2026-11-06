@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { strings } from '../../src/app/strings';
+import { strings } from '../../src/i18n/index';
 import { open } from './files';
 import { dismissImportElevation, openOnlineTerrain } from './elevation';
 import { mockOnlineTerrain } from './fixtures/online-terrain';

@@ -1,6 +1,6 @@
 import { Badge, Button, Callout, Flex, Tooltip } from '@radix-ui/themes';
 import { Layers } from 'lucide-react';
-import { strings, type Lang } from '../app/strings';
+import { strings, type Lang } from '../i18n/index';
 import type { BasemapFailure, BasemapPreferences } from '../maps/basemap';
 
 export function BasemapControls({

@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { loadDraft, loadProject, saveDraft, saveProject } from '../../src/files';
+import { loadProject, saveProject } from '../../src/files';
+import { loadDraft, saveDraft } from '../../src/platform/storage/draft';
 import { emptyRoute, type RouteDocument } from '../../src/domain/model';
 
 const doc: RouteDocument = {
