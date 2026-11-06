@@ -85,6 +85,8 @@ The renderer uses context isolation, sandboxing, disabled Node integration and a
 
 [security.ts](../electron/security.ts) contains URL, resource-path and filename checks. The main process checks the sender and arguments for desktop requests and chooses filesystem paths through native dialogs. Update state and platform decisions are separated into [update-service.ts](../electron/update-service.ts), [update-release.ts](../electron/update-release.ts) and [updates.cts](../electron/updates.cts).
 
+Native imports validate the selected file's extension, regular-file status and 64 MiB size limit. Existing filenames may contain any characters supported by the host filesystem. Portable filename restrictions and the 180-character limit apply only to save-name suggestions supplied by the renderer.
+
 ## Route document model
 
 [RouteDocument](../src/domain/model.ts) is the editable model shared by views, domain operations, importers and exporters:

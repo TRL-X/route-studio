@@ -9,6 +9,7 @@ import {
   appURL,
   developmentURL,
   extensions,
+  hasSupportedExtension,
   isAppURL,
   maxFileBytes,
   resourcePath,
@@ -333,7 +334,9 @@ ipcMain.handle('desktop:open', async (event): Promise<DesktopFile | null> => {
     });
     if (result.canceled || !result.filePaths[0]) return null;
     const filename = result.filePaths[0];
-    if (!validFilename(path.basename(filename))) throw new Error('Unsupported file');
+    // The native picker supplies this path. Save-name restrictions would reject
+    // existing files with valid platform-specific names (for example '?' on macOS).
+    if (!hasSupportedExtension(filename)) throw new Error('Unsupported file');
     const file = await open(filename, 'r');
     try {
       const stat = await file.stat();

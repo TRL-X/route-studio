@@ -1,6 +1,12 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { developmentURL, isAppURL, resourcePath, validFilename } from '../../electron/security';
+import {
+  developmentURL,
+  hasSupportedExtension,
+  isAppURL,
+  resourcePath,
+  validFilename,
+} from '../../electron/security';
 
 describe('desktop resource boundary', () => {
   const root = path.resolve('dist');
@@ -26,10 +32,33 @@ describe('desktop resource boundary', () => {
     expect(() => developmentURL('https://example.com')).toThrow();
     expect(() => developmentURL('http://127.0.0.1.evil.test')).toThrow();
   });
-  it('accepts supported filenames without allowing renderer paths', () => {
+  it('accepts supported native file extensions regardless of platform-specific names', () => {
+    for (const filename of [
+      '鲲鹏径（第四段）-深圳远足径专区发布20260303更新?    .kml',
+      'route:part*1?"<>|.gpx',
+      'r'.repeat(181) + '.kml',
+      path.join('routes', 'COURSE.GPX'),
+      'route.routeproj',
+      'route.rte',
+      'route.fit',
+    ])
+      expect(hasSupportedExtension(filename)).toBe(true);
+    for (const filename of ['route.exe', 'route.kml.exe', 'route', '', 'route.gpx/other.txt'])
+      expect(hasSupportedExtension(filename)).toBe(false);
+  });
+  it('restricts renderer-provided save names to portable filenames without paths', () => {
     expect(validFilename('山脊路线.routeproj')).toBe(true);
     expect(validFilename('COURSE.GPX')).toBe(true);
-    for (const name of ['../route.gpx', 'C:\\route.fit', 'route.exe', '', null])
+    for (const name of [
+      '../route.gpx',
+      'C:\\route.fit',
+      'route?.kml',
+      'route:part.gpx',
+      'r'.repeat(181) + '.kml',
+      'route.exe',
+      '',
+      null,
+    ])
       expect(validFilename(name)).toBe(false);
   });
 });

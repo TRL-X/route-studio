@@ -39,12 +39,16 @@ export function resourcePath(root: string, value: string): string | null {
   }
 }
 
+export function hasSupportedExtension(filename: string): boolean {
+  return extensions.includes(path.extname(filename).slice(1).toLowerCase());
+}
+
 export function validFilename(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length > 0 &&
     value.length <= 180 &&
     !/[\\/:*?"<>|\u0000-\u001f]/.test(value) &&
-    extensions.includes(path.extname(value).slice(1).toLowerCase())
+    hasSupportedExtension(value)
   );
 }
