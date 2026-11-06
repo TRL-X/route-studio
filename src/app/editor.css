@@ -1,5 +1,5 @@
 @import '@radix-ui/themes/styles.css';
-@import './theme.css';
+@import '../ui/theme.css';
 
 :root {
   font-synthesis: none;

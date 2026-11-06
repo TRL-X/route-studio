@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { strings } from '../../src/app/strings';
+import { strings } from '../../src/i18n/index';
 import { emptyRoute, type RouteDocument } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
 import copy from '../../src/i18n/en.workflow.json' with { type: 'json' };

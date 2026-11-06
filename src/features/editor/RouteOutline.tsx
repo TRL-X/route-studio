@@ -1,0 +1,150 @@
+import { Badge, TextField, Button, IconButton } from '@radix-ui/themes';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { File, Layers, Plus, Route, Search } from 'lucide-react';
+import type { RouteDocument } from '../../domain/model';
+import { orderedStations } from '../../domain/projection';
+import { StationSymbol } from '../../views/StationSymbol';
+import type { Selection } from './types';
+import type { Copy } from '../../i18n/index';
+
+interface OutlineProps {
+  doc: RouteDocument;
+  axis: number[];
+  selected: Selection;
+  source: string;
+  t: Copy;
+  onSelect: (selected: Selection) => void;
+  onAddStation: () => void;
+}
+
+export function RouteOutline({ doc, axis, selected, source, t, onSelect, onAddStation }: OutlineProps) {
+  const [filter, setFilter] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
+  const selectedRow = useRef<HTMLButtonElement>(null);
+  const ordered = useMemo(() => orderedStations(doc, axis), [axis, doc.vertices, doc.stations]);
+  const query = filter.toLowerCase();
+  const stationList = ordered.filter(({ station }) => station.name.toLowerCase().includes(query));
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const row = selectedRow.current;
+    if (!list || !row) return;
+    const reveal = () => {
+      const viewport = list.getBoundingClientRect();
+      if (!viewport.height) return;
+      const bounds = row.getBoundingClientRect();
+      if (bounds.top < viewport.top) list.scrollTop += bounds.top - viewport.top;
+      else if (bounds.bottom > viewport.bottom) list.scrollTop += bounds.bottom - viewport.bottom;
+    };
+    reveal();
+    // Also reveal the selection when the narrow-window outline drawer opens.
+    const observer = new ResizeObserver(reveal);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [selected, ordered, filter]);
+  return (
+    <aside className="sidebar">
+      <div className="panel-heading">
+        <Layers size={14} />
+        {t.outline}
+      </div>
+      <Button
+        variant={selected.type === 'route' ? 'soft' : 'ghost'}
+        color={selected.type === 'route' ? 'blue' : 'gray'}
+        highContrast
+        className="route-item"
+        aria-pressed={selected.type === 'route'}
+        onClick={() => onSelect({ type: 'route' })}
+      >
+        <Route size={16} />
+        <span>
+          <strong>{t.details}</strong>
+          <small>
+            {doc.vertices.length} {t.vertices}
+          </small>
+        </span>
+      </Button>
+      <div className="station-heading">
+        <span>{t.stations}</span>
+        <Badge color="gray">{doc.stations.length}</Badge>
+        <IconButton
+          variant="ghost"
+          color="gray"
+
+          aria-label={t.addStation}
+          title={t.addStation}
+          disabled={doc.vertices.length < 2}
+          onClick={onAddStation}
+        >
+          <Plus />
+        </IconButton>
+      </div>
+      <TextField.Root
+        className="filter"
+        aria-label={t.filter}
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder={t.filter}
+      >
+        <TextField.Slot>
+          <Search size={14} />
+        </TextField.Slot>
+      </TextField.Root>
+      <div
+        className="station-list"
+        ref={listRef}
+        onKeyDown={(event) => {
+          if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+          const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.station-row'));
+          const index = rows.indexOf(event.target as HTMLButtonElement);
+          if (index < 0) return;
+          event.preventDefault();
+          const next =
+            event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? rows.length - 1
+                : Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
+          rows[next].focus();
+          onSelect({ type: 'station', id: stationList[next].station.id });
+        }}
+      >
+        {stationList.map(({ station, meters }) => (
+          <Button
+            variant={selected.type === 'station' && selected.id === station.id ? 'soft' : 'ghost'}
+            color={selected.type === 'station' && selected.id === station.id ? 'blue' : 'gray'}
+            highContrast
+            key={station.id}
+            ref={selected.type === 'station' && selected.id === station.id ? selectedRow : undefined}
+            className="station-row"
+            aria-pressed={selected.type === 'station' && selected.id === station.id}
+            onClick={() => onSelect({ type: 'station', id: station.id })}
+          >
+            <svg
+              className="station-symbol"
+              viewBox="-8 -8 16 16"
+              role="img"
+              aria-label={station.boundary ? t.boundary : t.nonBoundary}
+            >
+              <title>{station.boundary ? t.boundary : t.nonBoundary}</title>
+              <StationSymbol kind={station.kind} boundary={station.boundary} />
+            </svg>
+            <span>
+              <strong title={station.name || t[station.kind]}>{station.name || t[station.kind]}</strong>
+              <small>
+                <span className="station-kind" title={t[station.kind]}>
+                  {t[station.kind]}
+                </span>
+                <span>{meters === null ? t.noAnchor : (meters / 1000).toFixed(2) + ' km'}</span>
+              </small>
+            </span>
+          </Button>
+        ))}
+        {!stationList.length && <p className="hint">{filter ? t.noStations : t.emptyStations}</p>}
+      </div>
+      <div className="local-source">
+        <File size={16} />
+        <span>{source || t.local}</span>
+      </div>
+    </aside>
+  );
+}

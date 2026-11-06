@@ -1,7 +1,7 @@
 import { selectOption } from '../controls';
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
-import { commandStrings } from '../../src/app/commands';
+import { commandStrings } from '../../src/features/editor/commands';
 import { saveProject } from '../../src/files/project';
 import { ridgeRoute } from '../fixtures/ridge';
 

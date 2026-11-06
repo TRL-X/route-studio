@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { strings } from '../../src/app/strings';
+import { strings } from '../../src/i18n/index';
 import { loadProject } from '../../src/files/project';
 import copy from '../../src/i18n/en.repair.json' with { type: 'json' };
 import workflow from '../../src/i18n/en.workflow.json' with { type: 'json' };

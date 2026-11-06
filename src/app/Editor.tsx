@@ -1,115 +1,38 @@
-import {
-  Checkbox,
-  Button,
-  IconButton,
-  Theme,
-  SegmentedControl,
-  Card,
-  Spinner,
-  Callout,
-} from '@radix-ui/themes';
+import { Button, IconButton, Theme, Callout } from '@radix-ui/themes';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
-import { useUpdates } from './useUpdates';
-import { updateStrings } from './UpdatesPanel';
-import {
-  Check,
-  FolderOpen,
-  Layers,
-  Map as MapIcon,
-  MapPin,
-  MousePointer2,
-  PanelsTopLeft,
-  Plus,
-  ShieldCheck,
-  Waypoints,
-  X,
-} from 'lucide-react';
-import {
-  appendVertex,
-  deleteVertex,
-  geometryChanged,
-  insertVertex,
-  moveVertex,
-  updateStation,
-} from '../domain/edit';
+import { useUpdates } from '../features/settings/useUpdates';
+import { updateStrings } from '../features/settings/UpdatesPanel';
+import { ShieldCheck, X } from 'lucide-react';
+import { geometryChanged } from '../domain/edit';
 import { fillShortElevationGaps, type ImportElevationAssessment } from '../domain/elevation-repair';
-import {
-  anchorDistance,
-  distances,
-  emptyRoute,
-  newId,
-  type Anchor,
-  type RouteDocument,
-} from '../domain/model';
+import { emptyRoute, type RouteDocument } from '../domain/model';
 import { ascent } from '../domain/summary';
-import { saveDraft, saveProject } from '../files';
-import { MapView } from '../views/MapView';
-import { ProfileView } from '../views/ProfileView';
 import type { ExportFormat } from '../files/export';
-import { useDeviceRoutes } from './useDeviceRoutes';
-import { DeviceRoutes } from './DeviceRoutes';
-import { ExportDialog } from './ExportDialog';
+import { useDeviceRoutes } from '../features/device/useDeviceRoutes';
+import { DeviceRoutes } from '../features/device/DeviceRoutes';
+import { ExportDialog } from '../features/export/ExportDialog';
 import { defaultExportOptions } from '../rte/processing';
-import { EditorToolbar } from './EditorToolbar';
-import { RouteOutline } from './RouteOutline';
-import { ProfilePanel } from './ProfilePanel';
-import { ElevationRepair } from './ElevationRepair';
-import { Inspector, type Selection, type Tool } from './Inspector';
-import { useHistory } from './history';
-import { runIO, type Choice as TrackChoice, type IOResult } from './io';
-import { initialLanguage, strings, type Lang } from './strings';
+import { EditorToolbar } from '../features/editor/EditorToolbar';
+import { ElevationRepair } from '../features/elevation/ElevationRepair';
+import type { Selection } from '../features/editor/types';
+import { useEditorSelection } from '../features/editor/useEditorSelection';
+import { both, initialLanguage, strings, type Lang, type Localized } from '../i18n';
+import { useDocumentSession } from '../features/editor/useDocumentSession';
+import { useRouteFiles, routeFilename, type Replacement } from '../features/editor/useRouteFiles';
+import { FileDialogs } from '../features/editor/FileDialogs';
+import { EditorWorkspace } from '../features/editor/EditorWorkspace';
 import './editor.css';
-import { saveFile } from './saveFile';
-import { DesktopBluetooth } from './DesktopBluetooth';
-import { useTheme } from './theme';
-import { Choice } from './Choice';
-import { Modal } from './Modal';
-import { SettingsDialog, type SettingsValues } from './SettingsDialog';
+import { DesktopBluetooth } from '../features/device/DesktopBluetooth';
+import { useTheme } from '../ui/theme';
+import { SettingsDialog, type SettingsValues } from '../features/settings/SettingsDialog';
 import { loadBasemapPreferences, saveBasemapPreferences } from '../maps/basemap';
-import { ElevationTools, workflowStrings } from './ElevationTools';
-import { ImportElevationDialog } from './ImportElevationDialog';
-import { useDeclinationLookup } from './useDeclinationLookup';
-import { commandStrings, type EditorCommands } from './commands';
-import { ResampleDialog, resampleStrings } from './ResampleDialog';
+import { ElevationTools, workflowStrings } from '../features/elevation/ElevationTools';
+import { ImportElevationDialog } from '../features/elevation/ImportElevationDialog';
+import { useDeclinationLookup } from '../features/declination/useDeclinationLookup';
+import { type EditorCommands } from '../features/editor/commands';
+import { ResampleDialog, resampleStrings } from '../features/resample/ResampleDialog';
 
-type Localized = { en: string; zh: string };
 type Problem = Localized & { target?: Selection };
-function sameTarget(a: Selection, b?: Selection) {
-  if (a.type === 'route') return b?.type === 'route';
-  if (a.type === 'sample') return b?.type === 'sample' && a.index === b.index;
-  return a.type === b?.type && a.id === b.id;
-}
-const both = (key: keyof Omit<(typeof strings)['en'], 'fileErrors'>): Localized => ({
-  en: strings.en[key],
-  zh: strings.zh[key],
-});
-function filename(name: string) {
-  return (
-    name
-      .trim()
-      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
-      .slice(0, 100) || 'route'
-  );
-}
-function fileError(result: Extract<IOResult, { type: 'error' }>): Localized {
-  const key = result.fileCode;
-  return key && Object.hasOwn(strings.en.fileErrors, key)
-    ? { en: strings.en.fileErrors[key], zh: strings.zh.fileErrors[key] }
-    : result;
-}
-interface Replacement {
-  doc: RouteDocument;
-  source: string;
-  elevationAssessment?: ImportElevationAssessment | null;
-}
-interface ImportChoice {
-  list: TrackChoice[];
-  file: File;
-  index: number;
-  accept: boolean;
-}
-
 export function Editor({
   restored,
   recoveryError,
@@ -117,10 +40,8 @@ export function Editor({
   restored: RouteDocument | null;
   recoveryError: boolean;
 }) {
-  const [history, dispatch] = useHistory(() => restored ?? emptyRoute());
-  const { doc } = history;
-  const currentDoc = useRef(doc);
-  currentDoc.current = doc;
+  const documentSession = useDocumentSession(restored, recoveryError);
+  const { history, dispatch, doc, currentDoc, dirty, source, session, draftState } = documentSession;
   const updates = useUpdates();
   const device = useDeviceRoutes();
   const [deviceOpen, setDeviceOpen] = useState(false);
@@ -128,27 +49,12 @@ export function Editor({
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
   const { theme, scheme, changeTheme } = useTheme();
-  const [selected, choose] = useState<Selection>({ type: 'route' });
-  const [revealSelection, setRevealSelection] = useState(0);
-  const [tool, setTool] = useState<Tool>('select');
-  const [source, setSource] = useState('');
-  const [session, setSession] = useState(0);
-  const [savedDoc, setSavedDoc] = useState(doc);
   const [notice, setNotice] = useState<Localized | null>(restored ? both('recovery') : null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [issue, setIssue] = useState<Problem | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(null);
   const [exportOptions, setExportOptions] = useState(defaultExportOptions);
   const [exportName, setExportName] = useState<string | null>(null);
-  const [hoveredSample, setHoveredSample] = useState<number | null>(null);
-  const [mapProbeDistance, setMapProbeDistance] = useState<number | null>(null);
-  const [panel, setPanel] = useState<'outline' | 'inspector' | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [savingFile, setSavingFile] = useState(false);
-  const [fileSaveError, setFileSaveError] = useState<Localized | null>(null);
-  const saveLock = useRef(false);
-  const [pending, setPending] = useState<Replacement | null>(null);
-  const [choices, setChoices] = useState<ImportChoice | null>(null);
   const [elevationPanel, setElevationPanel] = useState<'import' | 'tools' | 'online' | null>(null);
   const [resampleSource, setResampleSource] = useState<RouteDocument | null>(null);
   const [importElevation, setImportElevation] = useState<ImportElevationAssessment | null>(null);
@@ -157,9 +63,29 @@ export function Editor({
   const [basemap, setBasemap] = useState(loadBasemapPreferences);
   const [preferencesFailed, setPreferencesFailed] = useState(false);
   const [profileCollapsed, setProfileCollapsed] = useState(false);
-  const [viewCommand, setViewCommand] = useState<{ type: 'fit' | 'zoomIn' | 'zoomOut'; nonce: number }>();
   const [magneticExpanded, setMagneticExpanded] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
+  const files = useRouteFiles({
+    doc,
+    currentDoc,
+    dirty,
+    onReplace: replace,
+    onSaved: documentSession.markSaved,
+    onNotice: setNotice,
+    onProblem: setProblem,
+  });
+  const {
+    busy,
+    savingFile,
+    fileSaveError,
+    setFileSaveError,
+    pending,
+    choices,
+    requestReplace,
+    openFile,
+    pickDesktopFile,
+    save,
+  } = files;
   const locked =
     deviceOpen ||
     !!device.state.busy ||
@@ -171,18 +97,28 @@ export function Editor({
     !!elevationPanel ||
     !!settingsTab ||
     !!resampleSource;
+  const selection = useEditorSelection({ doc, lang, locked, change, setNotice });
+  const {
+    selected,
+    setHoveredSample,
+    setMapProbeDistance,
+    setPanel,
+    axis,
+    select,
+    addStation,
+    cancelTool,
+    canDelete,
+    deleteSelected,
+    startTool,
+    mapCommand,
+    toolHelp,
+  } = selection;
   const lookup = useDeclinationLookup(
     doc,
     dispatch,
     exportFormat === 'rte' || (selected.type === 'route' && magneticExpanded),
   );
-  const [draftState, setDraftState] = useState<'auto' | 'saving' | 'saved' | 'saveFailed'>(
-    recoveryError ? 'saveFailed' : 'auto',
-  );
-  const autosave = useRef(!!restored);
-  const ioLock = useRef(false);
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
-  const dirty = doc !== savedDoc;
   const updateBlocked =
     deviceOpen ||
     !!device.state.busy ||
@@ -197,19 +133,15 @@ export function Editor({
   useLayoutEffect(() => {
     window.routeStudioDesktop?.setDocumentState(dirty, lang, updateBlocked);
   }, [dirty, lang, updateBlocked]);
-  const change = (next: RouteDocument) => {
+  function change(next: RouteDocument) {
     if (next === doc) return;
-    autosave.current = true;
     setIssue(null);
     setHoveredSample(null);
     setProblem(null);
     setNotice(null);
-    dispatch({ type: 'edit', doc: next });
-  };
-  const axis = useMemo(() => distances(doc.vertices), [doc.vertices]);
-  const length = (axis.at(-1) ?? 0) / 1000;
+    documentSession.edit(next);
+  }
   const gain = useMemo(() => ascent(doc), [doc.vertices, doc.elevation]);
-  const gainText = gain === null ? '—' : gain.toFixed(0);
   const missingHeights = useMemo(
     () => doc.elevation.filter((s) => s.height === null).length,
     [doc.elevation],
@@ -233,43 +165,10 @@ export function Editor({
       setProblem(both('terrainLimit'));
     }
   }
-  const activeStation =
-    selected.type === 'station' ? doc.stations.find((s) => s.id === selected.id) : undefined;
-  const focus = useMemo(
-    () =>
-      selected.type === 'station'
-        ? activeStation?.anchor
-        : selected.type === 'vertex'
-          ? { vertexId: selected.id, fraction: 0 }
-          : selected.type === 'sample'
-            ? doc.elevation[selected.index]?.anchor
-            : null,
-    [selected, activeStation, doc.elevation],
-  );
-  const focusedMeters = useMemo(() => (focus ? anchorDistance(doc, focus, axis) : null), [axis, focus]);
-  let selectionTitle = t.details;
-  if (activeStation) selectionTitle = activeStation.name || t[activeStation.kind];
-  if (selected.type === 'sample') selectionTitle = t.sample + ' ' + (selected.index + 1);
-  if (selected.type === 'vertex') selectionTitle = t.vertex;
-  const select = (s: Selection, inspect = false) => {
-    choose(s);
-    setNotice(null);
-    setRevealSelection((n) => n + 1);
-    setTool('select');
-    setPanel(inspect ? 'inspector' : null);
-  };
   function historyAction(type: 'undo' | 'redo') {
     const next = type === 'undo' ? history.past.at(-1) : history.future[0];
     if (!next) return;
-    if (
-      (selected.type === 'station' && !next.stations.some((s) => s.id === selected.id)) ||
-      (selected.type === 'vertex' && !next.vertices.some((v) => v.id === selected.id)) ||
-      (selected.type === 'sample' && !next.elevation[selected.index])
-    ) {
-      choose({ type: 'route' });
-      setPanel(null);
-    }
-    setTool('select');
+    selection.reconcile(next);
     setIssue(null);
     setHoveredSample(null);
     setProblem(null);
@@ -279,22 +178,6 @@ export function Editor({
   useEffect(() => {
     document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
   }, [lang]);
-  // Publish the pending status before the newly edited document is painted.
-  useLayoutEffect(() => {
-    if (!autosave.current) return;
-    let active = true;
-    setDraftState('saving');
-    saveDraft(doc)
-      .then(() => {
-        if (active) setDraftState('saved');
-      })
-      .catch(() => {
-        if (active) setDraftState('saveFailed');
-      });
-    return () => {
-      active = false;
-    };
-  }, [doc]);
   function replace(next: Replacement) {
     setExportOptions(defaultExportOptions);
     setExportName(null);
@@ -307,42 +190,11 @@ export function Editor({
     setIssue(null);
     setHoveredSample(null);
     setMapProbeDistance(null);
-    setSession((v) => v + 1);
-    setSource(next.source);
-    autosave.current = true;
-    dispatch({ type: 'replace', doc: next.doc });
-    setSavedDoc(next.doc);
+    documentSession.replace(next.doc, next.source);
     select({ type: 'route' });
     setPanel(null);
-    setPending(null);
     setProblem(null);
     setNotice(both('loaded'));
-  }
-  function requestReplace(next: Replacement) {
-    if (dirty) setPending(next);
-    else replace(next);
-  }
-  async function openFile(file: File, index?: number, accept?: boolean) {
-    if (ioLock.current) return;
-    ioLock.current = true;
-    setBusy(true);
-    setChoices(null);
-    try {
-      const result = await runIO({ type: 'read', file, choice: index, accept });
-      if (result.type === 'error') setProblem(fileError(result));
-      else if (result.type === 'choices') setChoices({ file, list: result.choices, index: 0, accept: true });
-      else if (result.type === 'document')
-        requestReplace({
-          doc: result.doc,
-          source: file.name,
-          elevationAssessment: result.elevationAssessment,
-        });
-    } catch {
-      setProblem(both('readFailed'));
-    } finally {
-      setBusy(false);
-      ioLock.current = false;
-    }
   }
   const exportControls = {
     lang,
@@ -350,7 +202,7 @@ export function Editor({
       setExportFormat(format);
       setFileSaveError(null);
     },
-    name: exportName ?? filename(doc.name),
+    name: exportName ?? routeFilename(doc.name),
     onName: setExportName,
     onClose: () => {
       setExportFormat(null);
@@ -359,111 +211,9 @@ export function Editor({
     saving: savingFile,
     saveError: fileSaveError?.[lang],
     onDownload: async (bytes: Uint8Array<ArrayBuffer>, name: string) => {
-      if (!exportFormat || saveLock.current) return;
-      saveLock.current = true;
-      setSavingFile(true);
-      setFileSaveError(null);
-      const types = {
-        rte: 'application/octet-stream',
-        fit: 'application/octet-stream',
-        gpx: 'application/gpx+xml',
-        kml: 'application/vnd.google-earth.kml+xml',
-      };
-      try {
-        if (!(await saveFile(bytes, filename(name) + '.' + exportFormat, types[exportFormat]))) return;
-        setExportFormat(null);
-        const key = window.routeStudioDesktop ? 'desktopFormatDone' : 'formatDone';
-        setNotice({
-          en: strings.en[key].replace('{format}', exportFormat.toUpperCase()),
-          zh: strings.zh[key].replace('{format}', exportFormat.toUpperCase()),
-        });
-      } catch {
-        setFileSaveError(both('fileSaveFailed'));
-      } finally {
-        saveLock.current = false;
-        setSavingFile(false);
-      }
+      if (exportFormat && (await files.saveExport(exportFormat, bytes, name))) setExportFormat(null);
     },
   };
-  async function save(): Promise<boolean> {
-    if (saveLock.current) return false;
-    saveLock.current = true;
-    setSavingFile(true);
-    try {
-      if (!(await saveFile(saveProject(doc), filename(doc.name) + '.routeproj', 'application/json')))
-        return false;
-      flushSync(() => setSavedDoc(doc));
-      setNotice(both(window.routeStudioDesktop ? 'desktopProjectDone' : 'projectDone'));
-      return currentDoc.current === doc;
-    } catch {
-      setProblem(both('fileSaveFailed'));
-      return false;
-    } finally {
-      saveLock.current = false;
-      flushSync(() => setSavingFile(false));
-    }
-  }
-  async function pickDesktopFile() {
-    try {
-      const file = await window.routeStudioDesktop!.openFile();
-      if (file) await openFile(new File([file.bytes], file.name));
-    } catch {
-      setProblem(both('readFailed'));
-    }
-  }
-  function addStation() {
-    if (doc.vertices.length < 2) {
-      setNotice(both('noVertices'));
-      return;
-    }
-    setPanel(null);
-    setTool('newStation');
-    setNotice(null);
-  }
-  function pickAnchor(a: Anchor) {
-    if (tool === 'insert') {
-      const next = insertVertex(doc, a);
-      if (next === doc) {
-        setNotice(both('invalidInsert'));
-        return;
-      }
-      const i = doc.vertices.findIndex((vertex) => vertex.id === a.vertexId);
-      change(next);
-      select({ type: 'vertex', id: next.vertices[i + 1].id }, true);
-    } else if (tool === 'newStation') {
-      const id = newId();
-      change({
-        ...doc,
-        stations: [...doc.stations, { id, name: t.newStation, kind: 'cp', boundary: true, anchor: a }],
-      });
-      select({ type: 'station', id }, true);
-      setNotice(both('stationAdded'));
-    } else if (tool === 'stationAnchor' && activeStation) {
-      change(updateStation(doc, activeStation.id, { anchor: a }));
-      select({ type: 'station', id: activeStation.id }, true);
-    }
-  }
-  function cancelTool() {
-    setTool('select');
-    setNotice(null);
-    setPanel(selected.type === 'route' ? null : 'inspector');
-  }
-  useEffect(() => {
-    const dismiss = (event: KeyboardEvent) => {
-      if (
-        locked ||
-        event.key !== 'Escape' ||
-        event.defaultPrevented ||
-        (event.target instanceof Element &&
-          event.target.closest('[role="dialog"], [role="menu"], [role="listbox"]'))
-      )
-        return;
-      if (tool !== 'select') cancelTool();
-      else setPanel(null);
-    };
-    window.addEventListener('keydown', dismiss);
-    return () => window.removeEventListener('keydown', dismiss);
-  }, [locked, tool, selected]);
   function applyPreferences(values: SettingsValues) {
     const themeSaved = changeTheme(values.theme);
     const mapSaved = saveBasemapPreferences(values.basemap);
@@ -479,43 +229,10 @@ export function Editor({
     setSettingsTab(null);
     setNotice({ en: workflowStrings.en.settingsSaved, zh: workflowStrings.zh.settingsSaved });
   }
-  const canDelete =
-    selected.type === 'vertex'
-      ? doc.vertices.length > 2
-      : selected.type === 'sample'
-        ? !!doc.elevation[selected.index]
-        : selected.type === 'station'
-          ? !!activeStation && !['start', 'finish'].includes(activeStation.kind)
-          : false;
-  function deleteSelected() {
-    if (!canDelete) return;
-    if (selected.type === 'vertex') change(deleteVertex(doc, selected.id));
-    else if (selected.type === 'sample')
-      change({ ...doc, elevation: doc.elevation.filter((_, i) => i !== selected.index) });
-    else if (selected.type === 'station')
-      change({ ...doc, stations: doc.stations.filter((s) => s.id !== selected.id) });
-    select({ type: 'route' }, true);
-  }
-  function startTool(next: Tool) {
-    if ((next === 'insert' || next === 'newStation') && doc.vertices.length < 2) return;
-    if (next === 'select') {
-      cancelTool();
-      return;
-    }
-    if (next === 'newStation') {
-      addStation();
-      return;
-    }
-    setTool(next);
-    setPanel(null);
-    setNotice(null);
-  }
   function openElevationTools() {
     setElevationSummary(null);
     setElevationPanel('tools');
   }
-  const mapCommand = (type: 'fit' | 'zoomIn' | 'zoomOut') =>
-    setViewCommand((previous) => ({ type, nonce: (previous?.nonce ?? 0) + 1 }));
   const commands: EditorCommands = {
     new: { run: () => requestReplace({ doc: emptyRoute(), source: '' }) },
     open: { run: () => (window.routeStudioDesktop ? void pickDesktopFile() : picker.current?.click()) },
@@ -561,14 +278,6 @@ export function Editor({
       disabled: !window.routeStudioDesktop,
     },
   };
-  const toolHelp = {
-    select: t.editing,
-    append: t.drawing,
-    insert: t.inserting,
-    newStation: t.placing,
-    stationAnchor: t.placing,
-    stationLocation: t.locating,
-  }[tool];
   return (
     <Theme
       appearance={scheme}
@@ -604,200 +313,28 @@ export function Editor({
             if (file && !locked) void openFile(file);
           }}
         />
-        <div className="workspace" data-panel={panel ?? ''}>
-          <RouteOutline
-            key={session}
-            doc={doc}
-            axis={axis}
-            selected={selected}
-            source={source}
-            t={t}
-            onSelect={select}
-            onAddStation={addStation}
-          />
-          <main className="canvas">
-            <div className="compact-panels">
-              <Button
-                variant={panel === 'outline' ? 'soft' : 'ghost'}
-                aria-pressed={panel === 'outline'}
-                onClick={() => setPanel(panel === 'outline' ? null : 'outline')}
-              >
-                <Layers size={14} />
-                {t.outline}
-              </Button>
-              <span className="selection-summary">
-                {selectionTitle}
-                {focusedMeters != null &&
-                  Number.isFinite(focusedMeters) &&
-                  ' · ' + (focusedMeters / 1000).toFixed(2) + ' km'}
-              </span>
-              <Button
-                variant={panel === 'inspector' ? 'soft' : 'ghost'}
-                aria-pressed={panel === 'inspector'}
-                onClick={() => setPanel(panel === 'inspector' ? null : 'inspector')}
-              >
-                <PanelsTopLeft size={14} />
-                {panel === 'inspector' ? t.close : t.editSelection}
-              </Button>
-            </div>
-            <section className="map-area">
-              <div className="map-tools">
-                <span className="pane-title">
-                  <MapIcon size={15} />
-                  {t.routeMap}
-                </span>
-                <SegmentedControl.Root
-                  className="tools"
-                  size="1"
-                  value={tool}
-                  aria-label={t.tools}
-                  onValueChange={(value) => startTool(value as Tool)}
-                >
-                  {(
-                    [
-                      ['select', MousePointer2, t.select],
-                      ['append', Plus, t.append],
-                      ['insert', Waypoints, t.insert],
-                      ['newStation', MapPin, t.addStation],
-                    ] as const
-                  ).map(([k, Icon, label]) => (
-                    <SegmentedControl.Item
-                      key={k}
-                      value={k}
-                      title={label}
-                      aria-disabled={(k === 'insert' || k === 'newStation') && doc.vertices.length < 2}
-                    >
-                      <span className="tool-label">
-                        <Icon size={14} />
-                        {label}
-                      </span>
-                    </SegmentedControl.Item>
-                  ))}
-                </SegmentedControl.Root>
-                <div className="course-totals" aria-label={t.info}>
-                  <span title={t.total}>
-                    {length.toFixed(2)} <small>km</small>
-                  </span>
-                  <span title={t.gain}>
-                    ↑ {gainText} <small>m</small>
-                  </span>
-                </div>
-                {tool !== 'select' && (
-                  <div className="map-mode" role="group" aria-label={t.tools}>
-                    <span>
-                      <strong>
-                        {
-                          {
-                            append: t.append,
-                            insert: t.insert,
-                            newStation: t.addStation,
-                            stationAnchor: t.pickRoutePosition,
-                            stationLocation: t.location,
-                          }[tool]
-                        }
-                      </strong>
-                      {activeStation &&
-                        (tool === 'stationAnchor' || tool === 'stationLocation') &&
-                        ` · ${selectionTitle}`}
-                      <span className="mode-hint"> · {toolHelp}</span>
-                    </span>
-                    <Button size="1" variant="soft" color="gray" onClick={cancelTool}>
-                      {t.cancel} · Esc
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <div className="map-frame">
-                <MapView
-                  key={session}
-                  doc={doc}
-                  lang={lang}
-                  scheme={scheme}
-                  tool={tool}
-                  axis={axis}
-                  revealSelection={revealSelection}
-                  basemap={basemap}
-                  storageFailed={preferencesFailed}
-                  onOpenSettings={() => setSettingsTab('map')}
-                  viewCommand={viewCommand}
-                  selectedVertexId={selected.type === 'vertex' ? selected.id : null}
-                  selectedStationId={activeStation?.id ?? null}
-                  focusAnchor={selected.type === 'sample' ? focus : null}
-                  profileHoverAnchor={hoveredSample === null ? null : doc.elevation[hoveredSample]?.anchor}
-                  onProbeDistance={setMapProbeDistance}
-                  onSelectVertex={(id) => select({ type: 'vertex', id })}
-                  onSelectStation={(id) => select({ type: 'station', id })}
-                  onMoveVertex={(id, p) => change(moveVertex(doc, id, p))}
-                  onAddVertex={(p) => {
-                    const next = appendVertex(doc, p);
-                    change(next);
-                    choose({ type: 'vertex', id: next.vertices.at(-1)!.id });
-                  }}
-                  onPickAnchor={pickAnchor}
-                  onPickLocation={(p) => {
-                    if (activeStation) {
-                      change(updateStation(doc, activeStation.id, { location: p }));
-                      select({ type: 'station', id: activeStation.id }, true);
-                    }
-                  }}
-                />
-                {!doc.vertices.length && tool !== 'append' && (
-                  <Card className="empty-overlay" size="3">
-                    <PanelsTopLeft size={25} />
-                    <h2>{t.empty}</h2>
-                    <p>{t.emptyHelp}</p>
-                    <div className="empty-actions">
-                      <Button onClick={commands.open.run}>
-                        <FolderOpen />
-                        {t.openRoute}
-                      </Button>
-                      <Button variant="surface" color="gray" onClick={commands.append.run}>
-                        <Plus />
-                        {t.append}
-                      </Button>
-                    </div>
-                  </Card>
-                )}
-              </div>
-            </section>
-            <ProfilePanel
-              t={t}
-              count={doc.elevation.length}
-              actionLabel={commandStrings[lang].elevation}
-              disabled={!doc.vertices.length}
-              onProcess={openElevationTools}
-              collapsed={profileCollapsed}
-              onCollapsedChange={setProfileCollapsed}
-            >
-              <ProfileView
-                doc={doc}
-                lang={lang}
-                selectedSampleIndex={selected.type === 'sample' ? selected.index : null}
-                focusAnchor={focus}
-                onSelectSample={(index) => select({ type: 'sample', index })}
-                onHoverSample={setHoveredSample}
-                hoveredSampleIndex={hoveredSample}
-                mapProbeDistance={mapProbeDistance}
-              />
-            </ProfilePanel>
-          </main>
-          <Inspector
-            lang={lang}
-            lookup={lookup}
-            magneticExpanded={magneticExpanded}
-            onMagneticExpanded={setMagneticExpanded}
-            onDelete={deleteSelected}
-            canDelete={canDelete}
-            doc={doc}
-            t={t}
-            selected={selected}
-            choose={(s) => select(s, true)}
-            issue={sameTarget(selected, issue?.target) ? issue?.[lang] : undefined}
-            change={change}
-            setTool={startTool}
-            status={status}
-          />
-        </div>
+        <EditorWorkspace
+          doc={doc}
+          lang={lang}
+          selection={selection}
+          source={source}
+          session={session}
+          scheme={scheme}
+          basemap={basemap}
+          preferencesFailed={preferencesFailed}
+          onOpenMapSettings={() => setSettingsTab('map')}
+          onOpenFile={commands.open.run}
+          gain={gain}
+          profileCollapsed={profileCollapsed}
+          onProfileCollapsedChange={setProfileCollapsed}
+          onElevationTools={openElevationTools}
+          lookup={lookup}
+          magneticExpanded={magneticExpanded}
+          onMagneticExpanded={setMagneticExpanded}
+          issue={issue}
+          change={change}
+          onStatus={status}
+        />
         <footer className="statusbar">
           <span className="status-dot" />
           <span className="status-copy" role="status">
@@ -930,35 +467,7 @@ export function Editor({
           }}
         />
       )}
-      {busy && (
-        <div className="overlay">
-          <Card>
-            <div className="processing" role="status">
-              <Spinner />
-              {t.busy}
-            </div>
-          </Card>
-        </div>
-      )}
-      {pending && (
-        <Modal className="dialog" title={t.discardTitle} onClose={() => setPending(null)}>
-          <p>{t.replace}</p>
-          <div className="dialog-actions">
-            <Button
-              variant="surface"
-              color="gray"
-
-              autoFocus
-              onClick={() => setPending(null)}
-            >
-              {t.cancel}
-            </Button>
-            <Button variant="solid" color="blue" onClick={() => replace(pending)}>
-              {t.confirm}
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <FileDialogs files={files} lang={lang} />
       {deviceOpen && (
         <DeviceRoutes
           device={device}
@@ -972,52 +481,6 @@ export function Editor({
         />
       )}
       <DesktopBluetooth lang={lang} />
-      {choices && (
-        <Modal className="dialog" title={t.selectTrack} onClose={() => setChoices(null)}>
-          <Choice
-            autoFocus
-            aria-label={t.route}
-            value={choices.index}
-            onValueChange={(value) => setChoices({ ...choices, index: Number(value), accept: true })}
-            options={[
-              ...choices.list.map((item, i) => ({
-                value: i,
-                label: (
-                  <>
-                    {item.name} · {item.pointCount} {t.vertices}
-                  </>
-                ),
-              })),
-            ]}
-          />
-          {choices.list[choices.index].hasUnconfirmedHeights && (
-            <>
-              <p>{t.unconfirmed}</p>
-              <label className="check-field">
-                <Checkbox
-                  checked={choices.accept}
-                  onCheckedChange={(value) => setChoices({ ...choices, accept: value === true })}
-                />
-                {t.acceptHeights}
-              </label>
-            </>
-          )}
-          <div className="dialog-actions">
-            <Button variant="surface" color="gray" onClick={() => setChoices(null)}>
-              {t.cancel}
-            </Button>
-            <Button
-              variant="solid"
-              color="blue"
-
-              onClick={() => void openFile(choices.file, choices.index, choices.accept)}
-            >
-              <Check />
-              {t.open}
-            </Button>
-          </div>
-        </Modal>
-      )}
     </Theme>
   );
 }

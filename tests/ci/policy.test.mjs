@@ -9,7 +9,12 @@ import { assertRequiredJobs, comparisonForEvent, requiresDesktopPackages } from 
 
 test('renderer, web tests and documentation use Linux desktop validation', () => {
   assert.equal(
-    requiresDesktopPackages(['src/app/Editor.tsx', 'tests/e2e/editor.spec.ts', 'README.md']),
+    requiresDesktopPackages([
+      'src/app/Editor.tsx',
+      'tests/e2e/editor.spec.ts',
+      'tests/services/declination.test.ts',
+      'README.md',
+    ]),
     false,
   );
   assert.equal(requiresDesktopPackages([]), false);
@@ -34,6 +39,12 @@ test('native, dependency, build, shared helper and unknown changes require every
     'src/app/useUpdates.ts',
     'src/app/UpdatesPanel.tsx',
     'src/app/commands.ts',
+    'src/features/editor/commands.ts',
+    'src/features/device/DesktopBluetooth.tsx',
+    'src/features/settings/useUpdates.ts',
+    'src/features/settings/UpdatesPanel.tsx',
+    'src/platform/files.ts',
+    'src/platform/storage/draft.ts',
     'src/i18n/en.commands.desktop.json',
     'src/i18n/en.updates.json',
     'new-build-system/config.json',

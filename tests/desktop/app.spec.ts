@@ -6,8 +6,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadProject } from '../../src/files/project';
-import { strings } from '../../src/app/strings';
-import { commandStrings, type CommandId } from '../../src/app/commands';
+import { strings } from '../../src/i18n/index';
+import { commandStrings, type CommandId } from '../../src/features/editor/commands';
 import type { Page } from '@playwright/test';
 import type { UpdateMode, UpdateState } from '../../electron/update-contracts';
 

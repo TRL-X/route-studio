@@ -4,10 +4,17 @@ import { execFileSync } from 'node:child_process';
 export function requiresDesktopPackages(paths) {
   return paths.some((path) => {
     // Native integrations and update UI still need the complete platform matrix.
-    if (/^src\/.*(desktop|updates)/i.test(path) || path === 'src/app/commands.ts') return true;
+    if (
+      /^src\/.*(desktop|updates)/i.test(path) ||
+      /^src\/platform\//.test(path) ||
+      /^src\/(app|features\/editor)\/commands\.ts$/.test(path)
+    )
+      return true;
     // Unknown paths default to full validation, including dependencies, build assets,
     // configuration, shared test helpers, Electron, scripts and workflows.
-    return !/^(src\/|tests\/(domain|device|files|maps|rte|e2e|fixtures)\/|docs\/|README\.md$)/.test(path);
+    return !/^(src\/|tests\/(domain|device|files|maps|rte|services|e2e|fixtures)\/|docs\/|README\.md$)/.test(
+      path,
+    );
   });
 }
 

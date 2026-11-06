@@ -1,7 +1,7 @@
 import { selectOption } from '../controls';
 import { expect, test } from '@playwright/test';
-import { strings } from '../../src/app/strings';
-import { commandStrings } from '../../src/app/commands';
+import { strings } from '../../src/i18n/index';
+import { commandStrings } from '../../src/features/editor/commands';
 import { setPreference } from '../preferences';
 import { loadProject } from '../../src/files/project';
 import { prepareRte, readRte } from '../../src/rte';
@@ -75,6 +75,50 @@ test('imports, edits, undoes, recovers a draft and downloads project and device 
   await page.getByRole('dialog').getByRole('button', { name: 'Replace' }).click();
   await expect(page.getByText(project.name, { exact: true })).toBeVisible();
   await expect(name).toHaveValue('Ridge checkpoint');
+});
+
+test('cancelled imports preserve edits and history while replacement starts a new document session', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await open(page, 'original.gpx', Buffer.from(gpx));
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await expect(name).toHaveValue('North ridge');
+  await name.fill('Working copy');
+  await name.press('Enter');
+
+  const kml =
+    '<kml><Document><Placemark><name>Unconfirmed route</name><LineString><coordinates>110,30,100 111,31,120</coordinates></LineString></Placemark></Document></kml>';
+  await open(page, 'unconfirmed.kml', Buffer.from(kml));
+  await page
+    .getByRole('dialog', { name: strings.en.selectTrack })
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click();
+  await expect(name).toHaveValue('Working copy');
+
+  const replacement = Buffer.from(gpx.replace('North ridge', 'Replacement route'));
+  await open(page, 'replacement.gpx', replacement);
+  await page
+    .getByRole('dialog', { name: strings.en.discardTitle })
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click();
+  await expect(name).toHaveValue('Working copy');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(name).toHaveValue('North ridge');
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect(name).toHaveValue('Working copy');
+
+  await open(page, 'replacement.gpx', replacement);
+  await page
+    .getByRole('dialog', { name: strings.en.discardTitle })
+    .getByRole('button', { name: 'Replace', exact: true })
+    .click();
+  await expect(name).toHaveValue('Replacement route');
+  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Redo', exact: true })).toBeDisabled();
+  await expect(page.getByText('Draft saved locally', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(name).toHaveValue('Replacement route');
 });
 
 test('incomplete elevation can be saved to a project and corrected before RTE download', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { Editor } from './app/Editor';
-import { loadDraft } from './files';
-import { initializeTheme } from './app/theme';
+import { loadDraft } from './platform/storage/draft';
+import { initializeTheme } from './ui/theme';
 initializeTheme();
 const root = createRoot(document.getElementById('root')!);
 loadDraft()

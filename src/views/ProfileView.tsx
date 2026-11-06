@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { distances } from '../domain/model';
 import type { Anchor, RouteDocument } from '../domain/model';
-import { strings, type Lang } from '../app/strings';
+import { strings, type Lang } from '../i18n/index';
 import './views.css';
 
 interface ProfileViewProps {

@@ -7,16 +7,16 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { anchorPoint, lonDelta } from '../domain/model';
 import type { Anchor, RouteDocument, Station, Vertex } from '../domain/model';
 import { orderedStations, stationPassages, type StationPassage } from '../domain/projection';
-import type { Tool } from '../app/Inspector';
-import { StationPassOptions } from '../app/StationPassOptions';
-import { strings, type Lang } from '../app/strings';
+import type { Tool } from '../features/editor/types';
+import { StationPassOptions } from '../features/editor/StationPassOptions';
+import { strings, type Lang } from '../i18n/index';
 import {
   basemapStyle,
   classifyBasemapFailure,
   type BasemapFailure,
   type BasemapPreferences,
 } from '../maps/basemap';
-import type { ColorScheme } from '../app/theme';
+import type { ColorScheme } from '../ui/theme';
 import { BasemapControls } from './BasemapControls';
 import { StationSymbol } from './StationSymbol';
 import './views.css';
