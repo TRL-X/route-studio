@@ -8,6 +8,7 @@ export type SmpRequest = (
   command: number,
   op: 'read' | 'write',
   fields: Fields,
+  protocolVersion?: 1 | 2,
 ) => Promise<Fields>;
 
 export class DeviceError extends Error {
@@ -45,17 +46,18 @@ export function requestClient(
   channel: BluetoothRemoteGATTCharacteristic,
   signal: AbortSignal,
   invalidate: (error: unknown) => void,
+  protocolVersion: 1 | 2 = 2,
 ): SmpRequest {
   let sequence = 0;
   let tail: Promise<unknown> = Promise.resolve();
-  const request: SmpRequest = async (group, command, operation, fields) => {
+  const request: SmpRequest = async (group, command, operation, fields, version = protocolVersion) => {
     signal.throwIfAborted();
     const body = encode(fields);
     if (body.length + 8 > 1024) throw new DeviceError('protocol');
     const frame = new Uint8Array(8 + body.length);
     const op = operation === 'write' ? 2 : 0;
     frame.set([
-      0x08 | op,
+      ((version - 1) << 3) | op,
       0,
       body.length >>> 8,
       body.length & 255,
@@ -138,6 +140,7 @@ export async function connectBluetooth(
   signal: AbortSignal,
   onLost: () => void,
   previous?: BluetoothDevice,
+  protocolVersion: 1 | 2 = 2,
 ): Promise<DeviceConnection> {
   signal.throwIfAborted();
   const cancelSelection = () => window.routeStudioDesktop?.cancelBluetooth();
@@ -172,7 +175,7 @@ export async function connectBluetooth(
     const channel = await service.getCharacteristic(characteristicId);
     await channel.startNotifications();
     active.throwIfAborted();
-    return { device, close, request: requestClient(channel, active, lost) };
+    return { device, close, request: requestClient(channel, active, lost, protocolVersion) };
   } catch (error) {
     close();
     throw error;

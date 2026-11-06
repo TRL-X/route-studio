@@ -1,4 +1,5 @@
-import { connectBluetooth, DeviceError, type DeviceConnection } from './mcumgr';
+import { DeviceError } from './mcumgr';
+import { BluetoothSession } from './bluetooth-session';
 import { RouteClient, routeFailure, type Catalog, type RouteStatus } from './routes';
 import { createUpload, terminalUpload, transferRoute, type UploadJob, type UploadProgress } from './upload';
 
@@ -18,7 +19,7 @@ export interface DeviceSnapshot {
   error?: unknown;
 }
 
-// Shared by the export view and device manager. Upload bytes stay fixed across views
+// Shared by the send preview and device manager. Upload bytes stay fixed across views
 // and reconnects; a pending transaction cannot be moved to a different device.
 export class DeviceSession {
   private state: DeviceSnapshot = {
@@ -31,9 +32,36 @@ export class DeviceSession {
     totalBytes: 0,
   };
   private listeners = new Set<() => void>();
-  private connection?: DeviceConnection;
-  private previous?: BluetoothDevice;
-  private lifetime = new AbortController();
+  private readonly bluetooth: BluetoothSession;
+  private readonly ownsBluetooth: boolean;
+  private readonly unsubscribe: () => void;
+  private bluetoothTarget?: string;
+  constructor(bluetooth?: BluetoothSession) {
+    this.ownsBluetooth = !bluetooth;
+    this.bluetooth = bluetooth ?? new BluetoothSession();
+    const sync = () => {
+      const connection = this.bluetooth.snapshot();
+      const target = this.bluetooth.rememberedDevice()?.id;
+      const changed =
+        connection.connected && this.bluetoothTarget !== undefined && target !== this.bluetoothTarget;
+      if (connection.connected) this.bluetoothTarget = target;
+      this.update({
+        connected: connection.connected,
+        remembered: connection.remembered,
+        deviceName: connection.deviceName,
+        ...(!connection.connected && { status: undefined, catalog: undefined }),
+        ...(changed && {
+          progress: undefined,
+          transferBytes: undefined,
+          completedId: undefined,
+          totalBytes: 0,
+          error: undefined,
+        }),
+      });
+    };
+    this.unsubscribe = this.bluetooth.subscribe(sync);
+    sync();
+  }
   private job?: UploadJob;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -47,11 +75,10 @@ export class DeviceSession {
     this.listeners.forEach((listener) => listener());
   }
   private client() {
-    if (!this.connection) throw new DeviceError('disconnected');
-    return new RouteClient(this.connection.request);
+    return new RouteClient(this.bluetooth.request('routes', 2));
   }
   private async run(busy: NonNullable<DeviceSnapshot['busy']>, action: () => Promise<void>) {
-    if (this.state.busy) return;
+    if (this.state.busy || !this.bluetooth.claim('routes')) return;
     this.update({ busy, error: undefined });
     try {
       await action();
@@ -59,29 +86,13 @@ export class DeviceSession {
       if (!(error instanceof DOMException && error.name === 'AbortError')) this.update({ error });
     } finally {
       this.update({ busy: null });
+      if (!this.job) this.bluetooth.release('routes');
     }
   }
   private async openConnection(chooseAnother = false) {
     if (chooseAnother)
       this.update({ progress: undefined, transferBytes: undefined, completedId: undefined, totalBytes: 0 });
-    this.disconnect();
-    this.lifetime = new AbortController();
-    // Called before any await in connect/send so browser selection keeps the user gesture.
-    this.connection = await connectBluetooth(
-      this.lifetime.signal,
-      () => {
-        this.connection = undefined;
-        this.update({
-          connected: false,
-          status: undefined,
-          catalog: undefined,
-          error: new DeviceError('disconnected'),
-        });
-      },
-      chooseAnother ? undefined : this.previous,
-    );
-    this.previous = this.connection.device;
-    this.update({ connected: true, remembered: true, deviceName: this.previous.name || this.previous.id });
+    await this.bluetooth.ensure('routes', chooseAnother);
   }
   connect = (chooseAnother = false) =>
     this.run('connecting', async () => {
@@ -89,15 +100,13 @@ export class DeviceSession {
       await this.openConnection(chooseAnother);
       await this.readCatalog();
     });
-  cancelConnection = () => this.lifetime.abort();
-  disconnect = () => {
-    this.connection?.close();
-    this.connection = undefined;
-    this.update({ connected: false, catalog: undefined, status: undefined });
-  };
+  cancelConnection = () => this.bluetooth.cancelConnection();
+  disconnect = () => this.bluetooth.disconnect();
   dispose = () => {
-    this.lifetime.abort();
-    this.disconnect();
+    this.unsubscribe();
+    this.bluetooth.release('routes');
+    if (this.ownsBluetooth) this.bluetooth.dispose();
+    this.listeners.clear();
   };
   private async readCatalog() {
     const client = this.client();
@@ -110,6 +119,7 @@ export class DeviceSession {
   refresh = () => this.run('refreshing', () => this.readCatalog());
   delete = (id: number, rev: bigint) =>
     this.run('deleting', async () => {
+      if (this.job) return;
       try {
         await this.client().delete(id, rev);
         if (id === this.state.completedId)
@@ -122,7 +132,7 @@ export class DeviceSession {
       await this.readCatalog();
     });
   send = (bytes: Uint8Array) =>
-    this.run(this.connection ? 'uploading' : 'connecting', async () => {
+    this.run(this.state.connected ? 'uploading' : 'connecting', async () => {
       if (this.job) return;
       // Freeze before the first await; exported bytes may be regenerated by the UI.
       const job = createUpload(bytes);
@@ -132,7 +142,7 @@ export class DeviceSession {
         progress: undefined,
         totalBytes: job.bytes.length,
       });
-      if (!this.connection) await this.openConnection();
+      if (!this.state.connected) await this.openConnection();
       this.update({ busy: 'uploading' });
       const status = await this.client().status();
       this.update({ status });
@@ -145,9 +155,9 @@ export class DeviceSession {
       await this.upload();
     });
   resume = () =>
-    this.run(this.connection ? 'uploading' : 'connecting', async () => {
+    this.run(this.state.connected ? 'uploading' : 'connecting', async () => {
       if (!this.job) return;
-      if (!this.connection) await this.openConnection();
+      if (!this.state.connected) await this.openConnection();
       this.update({ busy: 'uploading' });
       await this.upload();
     });
@@ -156,6 +166,20 @@ export class DeviceSession {
     this.job.cancelRequested = true;
     this.update({ cancelling: true });
     if (!this.state.busy) void this.resume();
+  };
+  abandon = () => {
+    if (this.state.busy) return;
+    this.job = undefined;
+    this.update({
+      pending: false,
+      progress: undefined,
+      transferBytes: undefined,
+      totalBytes: 0,
+      completedId: undefined,
+      cancelling: false,
+      error: undefined,
+    });
+    this.bluetooth.release('routes');
   };
   private async upload() {
     const job = this.job;

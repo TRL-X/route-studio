@@ -7,10 +7,12 @@ Edit routes, preserve work in project files, and send routes to a TRL-X device. 
 ## Editing routes
 
 1. Open a file through **Menu → File**, drop a file, or choose **Menu → File → New route**. For files containing multiple tracks or sessions, select a route to edit.
-2. Append, insert or drag route points. Add stations on the route, choosing the intended pass when a route visits the same location more than once. A station's route distance and landmark coordinates can be edited independently.
+2. Use the editing tools or **Menu → Edit** to append, insert or drag route points. Add stations on the route, choosing the intended pass when a route visits the same location more than once. A station's route distance and landmark coordinates can be edited independently.
 3. Imports with missing elevations prompt you to fill short gaps or preview a full online replacement. Gaps up to 1,000 m can be interpolated from existing heights; longer gaps or a missing profile need terrain data. Choose **Later** to keep editing, then return via **Elevation tools…** in the profile or **Menu → Route**. Online requests start only when you choose the online preview; review it before **Replace all elevations**. Both edits can be undone.
 4. Save a `.routeproj` to preserve unfinished edits, missing heights, station settings and magnetic data. Recovery drafts are saved locally; use project files for backups and transfer between computers.
 5. Open **Export…**, select RTE, GPX, KML or FIT, then resolve blocking issues and review the output before downloading. RTE processing defaults to 10 m elevation spacing, 2 m geometry tolerance and 10 m smoothing; these settings affect the export, not the project.
+
+The toolbar keeps **Menu**, **Undo**, **Redo**, the route name, **Save project** and **Export…** close to the editor. **Menu** groups file operations, editing, route tools and view options, followed by **Device** and **Settings…**. The **View** menu shows whether the elevation profile is visible. Device actions are available through the **Device** submenu.
 
 ## Resampling
 
@@ -18,7 +20,7 @@ Use **Menu → Route → Resample route points…** after drawing or editing a r
 
 ## Appearance and layout
 
-The interface uses Radix Themes with system fonts, neutral surfaces and a blue accent. **Settings… → General** controls language and appearance; appearance follows the system by default. The inspector groups related properties, and narrow windows provide **Route outline** and **Edit selection** panels. Drag the profile divider, or focus it and use arrow keys, to resize the chart.
+The interface uses Radix Themes with system fonts, neutral surfaces and a blue accent. **Menu → Settings… → General** controls language and appearance; appearance follows the system by default. The inspector groups related properties, and narrow windows provide **Route outline** and **Edit selection** panels. Drag the profile divider, or focus it and use arrow keys, to resize the chart.
 
 ## Keyboard controls
 
@@ -51,13 +53,33 @@ Edit this in the inspector through **Menu → Route → Route properties**. Auto
 
 ### Bluetooth
 
-Open **Device…** from the toolbar Bluetooth icon or the main **Menu** to connect, inspect capacity, refresh the route list, and delete unused routes. From the RTE preview, choose **Connect and send…**, or **Send to [device name]** when connected. Pairing is followed by sending automatically. **View device routes** and **Manage device routes** switch to the same device panel; **Back to export** restores the export settings. **Disconnect** and **Connect another device** are directly available in the device panel. The toolbar icon is blue when connected and gray with a slash when disconnected.
+Open **Menu → Device → Bluetooth connection…** to connect, disconnect or choose another device. The connection is shared by route sending, device route management and Bluetooth firmware updates. Closing a panel keeps the connection available for the next task.
 
-Route Studio uses Arcap Custom MCUmgr Group 64 to prepare a temporary file, transfers it through FS Group 8, and waits for device validation and catalog publication before reporting success. Names come from RTE metadata; no device path is required.
+Choose **Menu → Device → Send current route…** to review the current route in RTE format, adjust processing options and resolve validation issues. Choose **Connect and send…**, or **Send to [device name]** when connected. Pairing is followed by sending automatically. This preview uses the same conversion and validation as file export; **Export…** only saves files. Route Studio waits for device validation and catalog publication before reporting success. Names come from RTE metadata; no device path is required.
 
-After a disconnection, choose **Reconnect and continue**; the original export bytes are retained while the app stays open. Uploads can be cancelled before validation starts. Device restart or transaction expiry may require a fresh upload; refresh/close of the app loses the local recovery state.
+Choose **Menu → Device → Manage device routes…** to inspect capacity, refresh the route list and delete unused routes. **View device routes** and **Manage device routes** in a send result open this same panel.
+
+Active or interrupted transfers appear in the bottom status bar; select the task to reopen it. **Hide** closes a busy task panel without cancelling it. After a disconnection, choose **Reconnect and continue**; the original route data and processing settings are retained while the app stays open. Processing settings stay locked until the transfer finishes or is cancelled. Uploads can be cancelled before validation starts. Device restart or transaction expiry may require a fresh upload; refreshing or closing the app loses the local recovery state. Idle connections do not add controls to the toolbar or status bar.
+
+If a paused route transfer cannot be resumed or cancelled, **End task…** asks for confirmation before stopping local tracking and releasing the connection for another task, including USB recovery. This does not cancel processing on the device or delete data already written there. **Keep task** returns to the transfer. Check the device route list after reconnecting to determine its final state.
 
 Web use requires HTTPS or localhost and Web Bluetooth support; desktop use requires OS permission and a working adapter. Physical-device acceptance testing is still required on each platform.
+
+### Firmware updates and recovery
+
+Open **Menu → Device → Update device firmware…** for a Bluetooth update, or **Menu → Device → USB recovery…** for serial recovery. Each entry opens its own workflow directly. Select a local MCUboot `.bin` file intended for the connected device. Route Studio checks its structure and SHA-256 digest and displays the version and size; the bootloader is responsible for checking its signature and accepting the image. Files are limited to 64 MiB. HEX files, archives, encrypted or compressed images, and combined factory images are not supported. Firmware is not downloaded automatically.
+
+For **Bluetooth update**:
+
+1. Select a firmware file, then choose **Start update**. Route Studio uses the current Bluetooth connection or asks you to choose a device. **Connect Bluetooth** is also available to inspect the running version first.
+2. Route Studio uploads the file, requests a test restart, reconnects and checks the running firmware. **Pause upload** stops between complete requests. After a disconnection, choose **Continue update** with the same file and device; the device's returned offset determines where transfer continues. If the device has not finished restarting during automatic checks, choose **Reconnect and check** or **Check firmware status** once it is available.
+3. If the new firmware is running but unconfirmed, check that the device works correctly before choosing **Confirm firmware**. Firmware that confirms itself is recognized automatically. Success is reported only when the selected image is running and confirmed. A previous or different running image is reported separately.
+
+For **USB recovery**, first enter the bootloader's serial recovery mode using the device's instructions. In **Menu → Device → USB recovery…**, acknowledge that the device is in recovery mode and choose **Connect USB** to select its serial port. **Recover firmware** writes the selected image; recovery can overwrite the running firmware, so keep USB connected until it finishes. Then choose **Restart device** and check that it starts correctly. Recovery uses upload and reset commands without the Bluetooth test/confirm sequence, and does not verify application health. It does not require a Bluetooth connection.
+
+Bluetooth requires Web Bluetooth; USB requires Web Serial. Use HTTPS or localhost in a supporting browser, or the desktop app with the required OS permissions. USB recovery supports standard SMP over console framing at 115200 baud, not raw UART framing. The serial port picker does not filter by manufacturer or product.
+
+Firmware transfer state stays in memory while the app remains open. Closing or hiding a panel retains the selected file, connection and progress; reopen it from **Menu → Device** or the active task in the status bar. **End task…** asks for confirmation before stopping local tracking and releasing the connection for another task, including USB recovery. It keeps firmware already written to the device; an unconfirmed test image can still revert on a later restart. Choose **Keep task** to continue tracking it. Refreshing or closing the app loses local tracking state. The desktop app blocks closing or quitting during a firmware operation; pause or cancel the operation first. Device resets can also discard upload progress. Finish or cancel an active transfer before starting another transfer on the same connection. Selecting another file starts a new local workflow.
 
 ## Desktop files and windows
 

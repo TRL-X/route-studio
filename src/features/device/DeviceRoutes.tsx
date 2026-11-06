@@ -46,7 +46,12 @@ export function DeviceConnectionControls({ device, lang }: { device: DeviceContr
           </Button>
         )}
         {state.connected && (
-          <Button variant="soft" color="gray" disabled={!!state.busy} onClick={session.disconnect}>
+          <Button
+            variant="soft"
+            color="gray"
+            disabled={!!state.busy || state.pending}
+            onClick={session.disconnect}
+          >
             {t.disconnect}
           </Button>
         )}
@@ -89,6 +94,7 @@ export function DeviceTransfer({
   const { state, session } = device;
   const t = deviceStrings[lang];
   const progress = state.progress;
+  const [endingTask, setEndingTask] = useState(false);
   const percent = Math.floor(((progress?.off ?? 0) * 100) / Math.max(1, state.totalBytes));
   const message = state.cancelling
     ? t.cancelling
@@ -138,6 +144,31 @@ export function DeviceTransfer({
           </Button>
         </Flex>
       )}
+      {state.pending &&
+        !state.busy &&
+        (endingTask ? (
+          <Callout.Root color="amber">
+            <Callout.Text>{t.endTaskHelp}</Callout.Text>
+            <Flex gap="2" wrap="wrap">
+              <Button color="gray" variant="soft" onClick={() => setEndingTask(false)}>
+                {t.keepTask}
+              </Button>
+              <Button
+                color="amber"
+                onClick={() => {
+                  session.abandon();
+                  setEndingTask(false);
+                }}
+              >
+                {t.endTask}
+              </Button>
+            </Flex>
+          </Callout.Root>
+        ) : (
+          <Button color="gray" variant="surface" onClick={() => setEndingTask(true)}>
+            {t.endTask}…
+          </Button>
+        ))}
     </Flex>
   );
 }
@@ -146,12 +177,10 @@ export function DeviceRoutes({
   device,
   lang,
   onClose,
-  returnToExport = false,
 }: {
   device: DeviceControls;
   lang: Lang;
   onClose: () => void;
-  returnToExport?: boolean;
 }) {
   const { state, session } = device;
   const t = deviceStrings[lang];
@@ -160,7 +189,7 @@ export function DeviceRoutes({
     if (session.snapshot().connected) void session.refresh();
   }, [session]);
   return (
-    <Modal title={t.title} maxWidth="760px" busy={!!state.busy} onClose={onClose}>
+    <Modal title={t.title} maxWidth="760px" onClose={onClose}>
       <Flex direction="column" gap="4">
         <DeviceConnectionControls device={device} lang={lang} />
         <DeviceTransfer device={device} lang={lang} />
@@ -247,8 +276,8 @@ export function DeviceRoutes({
           </Callout.Root>
         )}
         <Flex justify="end">
-          <Button variant="soft" color="gray" disabled={!!state.busy} onClick={onClose}>
-            {returnToExport ? t.backToExport : t.close}
+          <Button variant="soft" color="gray" onClick={onClose}>
+            {state.busy ? t.hide : t.close}
           </Button>
         </Flex>
       </Flex>

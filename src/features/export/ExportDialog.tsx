@@ -74,11 +74,9 @@ export function ExportDialog({
   onDownload,
   saving,
   saveError,
-  device,
-  onManageDevice,
+  send,
 }: ExportControls & {
-  device: DeviceControls;
-  onManageDevice: () => void;
+  send?: { device: DeviceControls; onManage: () => void; onStart?: () => void };
   doc: RouteDocument;
   format: ExportFormat;
   projectGain: number | null;
@@ -90,7 +88,8 @@ export function ExportDialog({
 }) {
   const t = strings[lang];
   const copy = { en, zh }[lang];
-  const uploading = !!device.state.busy;
+  const uploading = !!send?.device.state.busy;
+  const settingsLocked = !!saving || uploading || !!send?.device.state.pending;
   const mag = declinationSettings(doc);
   const [job, setJob] = useState<{
     doc: RouteDocument;
@@ -150,17 +149,25 @@ export function ExportDialog({
     <ExportFrame
       format={format}
       lang={lang}
-      name={name}
+      name={send ? doc.name : name}
       onName={onName}
       onFormat={onFormat}
       onClose={onClose}
       onDownload={onDownload}
-      saving={saving || uploading}
+      saving={saving}
+      sendMode={!!send}
+      sending={uploading}
       saveError={saveError}
       bytes={ready?.bytes ?? trackFile?.bytes}
       extraAction={
-        format === 'rte' ? (
-          <DeviceUpload bytes={ready?.bytes} device={device} lang={lang} onManage={onManageDevice} />
+        send ? (
+          <DeviceUpload
+            bytes={ready?.bytes}
+            device={send.device}
+            lang={lang}
+            onManage={send.onManage}
+            onStart={send.onStart}
+          />
         ) : undefined
       }
     >
@@ -172,7 +179,7 @@ export function ExportDialog({
               <label>
                 {t.profileSampling}
                 <Choice
-                  disabled={saving || uploading}
+                  disabled={settingsLocked}
                   value={options.intervalM}
                   onValueChange={(value) => changeOption('intervalM', value)}
                   options={[
@@ -184,7 +191,7 @@ export function ExportDialog({
               <label>
                 {t.geomSimplify}
                 <Choice
-                  disabled={saving || uploading}
+                  disabled={settingsLocked}
                   value={options.toleranceM}
                   onValueChange={(value) => changeOption('toleranceM', value)}
                   options={[
@@ -196,7 +203,7 @@ export function ExportDialog({
               <label>
                 {t.smoothWindow}
                 <Choice
-                  disabled={saving || uploading}
+                  disabled={settingsLocked}
                   value={options.smoothingM}
                   onValueChange={(value) => changeOption('smoothingM', value)}
                   options={[
@@ -218,7 +225,7 @@ export function ExportDialog({
             <Text size="1" color="gray">
               {copy.magneticSummary}
             </Text>
-            <Button variant="surface" color="gray" onClick={onEditProperties} disabled={saving || uploading}>
+            <Button variant="surface" color="gray" onClick={onEditProperties} disabled={settingsLocked}>
               {copy.editProperties}
             </Button>
           </Flex>

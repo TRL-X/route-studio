@@ -300,7 +300,7 @@ test('the export footer stays available on a narrow screen and only the chosen r
   await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeDisabled();
   await dialog.getByLabel('File name').fill('Trail');
   await expect(dialog.getByRole('button', { name: 'Download RTE' })).toBeInViewport({ ratio: 1 });
-  await expect(dialog.getByRole('button', { name: 'Connect and send…' })).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole('button', { name: 'Connect and send…' })).toHaveCount(0);
   await expect(dialog.getByLabel('Device path')).toBeHidden();
   await dialog.press('Escape');
   await expect(dialog).toBeHidden();

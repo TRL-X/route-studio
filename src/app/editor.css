@@ -538,6 +538,10 @@ h2 {
 .save-error {
   color: var(--error);
 }
+.device-task-status {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .coord-system {
   font-size: 11px;
   margin-left: 4px;

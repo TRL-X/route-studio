@@ -93,6 +93,14 @@ async function nativeCommand(command: CommandId) {
   }, command);
 }
 
+async function softwareUpdates(page: Page, check = true) {
+  await nativeCommand('settings');
+  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await panel.getByRole('tab', { name: 'Software update', exact: true }).click();
+  if (check) await panel.getByRole('button', { name: 'Check for updates', exact: true }).click();
+  return panel;
+}
+
 test.beforeEach(async () => {
   // Runtime-skipped tests still run afterEach without launching their own app.
   child = undefined;
@@ -162,8 +170,7 @@ async function simulateUpdates(mode: UpdateMode) {
 test('manual updates show release notes and a browser download without installation controls', async ({}, testInfo) => {
   const page = await launch();
   await simulateUpdates('manual');
-  await nativeCommand('checkUpdates');
-  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const panel = await softwareUpdates(page);
   await expect(panel.getByRole('tab', { name: 'Software update' })).toHaveAttribute('data-state', 'active');
   await expect(panel.getByRole('status')).toContainText('0.2.0');
   await panel.getByText('Release notes', { exact: true }).click();
@@ -191,8 +198,7 @@ test('update installation waits for a successful project save and survives cance
   await name.fill('Keep this route');
   await name.press('Enter');
   await simulateUpdates('automatic');
-  await nativeCommand('checkUpdates');
-  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const panel = await softwareUpdates(page);
   await panel.getByRole('button', { name: 'Download update', exact: true }).click();
   await panel.getByRole('button', { name: 'Restart and install', exact: true }).click();
   await expect(panel.getByText('Save your project before restarting?')).toBeVisible();
@@ -280,8 +286,7 @@ test('packaged manual updater selects the matching asset and persists its prefer
     };
     return url;
   });
-  await nativeCommand('checkUpdates');
-  const panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const panel = await softwareUpdates(page);
   await expect(panel.getByRole('status')).toContainText('99.0.0');
   await panel.getByRole('button', { name: 'Download new version' }).click();
   await expect
@@ -371,8 +376,7 @@ test('packaged automatic updater preserves install guards and saves before invok
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.fill('Guarded update');
   await name.press('Enter');
-  await nativeCommand('checkUpdates');
-  let panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  let panel = await softwareUpdates(page);
   await panel.getByRole('button', { name: 'Download update', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Restart and install' })).toBeVisible();
   expect(await page.evaluate(async () => (await window.routeStudioDesktop!.installUpdate(false)).error)).toBe(
@@ -385,8 +389,7 @@ test('packaged automatic updater preserves install guards and saves before invok
     'busy',
   );
   await page.getByRole('button', { name: 'Close', exact: true }).click();
-  await nativeCommand('checkUpdates');
-  panel = page.getByRole('dialog', { name: 'Settings', exact: true });
+  panel = await softwareUpdates(page, false);
   const target = path.join(directory, 'guarded-update.routeproj');
   await desktop.evaluate(({ dialog }, filename) => {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
@@ -685,31 +688,112 @@ test('cancelled or failed native saves retain unsaved edits and the close remind
   await expect(page.getByRole('alert')).toContainText('Could not save the file.');
 });
 
-test('opens device routes from the native menu without a local route', async () => {
+test('keeps device actions in a submenu and opens route management without a local route', async ({}, testInfo) => {
   const page = await launch();
+  await expect(page.locator('.topbar').getByRole('button', { name: 'Settings…', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.locator('.topbar .device-status-button')).toHaveCount(0);
+  await page
+    .locator('.topbar')
+    .screenshot({ path: testInfo.outputPath('route-toolbar.png'), animations: 'disabled' });
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const menu = page.getByRole('menu', { name: 'Menu', exact: true });
   expect(
     await menu
       .getByRole('menuitem')
       .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') || item.textContent)),
-  ).toEqual(['File', 'Edit', 'Route', 'View', 'Device…', 'Check for updates…', 'Settings…']);
+  ).toEqual(['File', 'Edit', 'Route', 'View', 'Device', 'Settings…']);
   expect(
     await menu
-      .getByRole('menuitem', { name: 'Device…', exact: true })
+      .getByRole('menuitem', { name: 'Device', exact: true })
       .evaluate((item) => [
         item.previousElementSibling?.getAttribute('role'),
         item.nextElementSibling?.getAttribute('role'),
       ]),
   ).toEqual(['separator', 'separator']);
+  await menu.getByRole('menuitem', { name: 'Device', exact: true }).click();
+  const deviceMenu = page.getByRole('menu', { name: 'Device', exact: true });
+  await expect(deviceMenu.getByRole('menuitem')).toHaveText([
+    'Bluetooth connection…',
+    'Send current route…',
+    'Manage device routes…',
+    'Update device firmware…',
+    'USB recovery…',
+  ]);
+  await expect(
+    deviceMenu.getByRole('menuitem', { name: 'Send current route…', exact: true }),
+  ).toHaveAttribute('aria-disabled', 'true');
+  await page.screenshot({ path: testInfo.outputPath('device-submenu.png'), animations: 'disabled' });
   await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  expect(
+    await desktop.evaluate(({ Menu }) => {
+      const menu = Menu.getApplicationMenu()!;
+      return {
+        device: menu.items
+          .find((item) => item.label === 'Device')!
+          .submenu!.items.map((item) => (item.type === 'separator' ? '-' : item.id)),
+        edit: menu.items
+          .find((item) => item.label === 'Edit')!
+          .submenu!.items.filter((item) => item.id?.startsWith('command:'))
+          .map((item) => item.id),
+        route: menu.items
+          .find((item) => item.label === 'Route')!
+          .submenu!.items.filter((item) => item.id?.startsWith('command:'))
+          .map((item) => item.id),
+        directUpdate: !!menu.getMenuItemById('command:checkUpdates'),
+      };
+    }),
+  ).toEqual({
+    device: [
+      'command:deviceConnect',
+      '-',
+      'command:deviceSend',
+      'command:deviceRoutes',
+      '-',
+      'command:deviceFirmware',
+      'command:deviceRecovery',
+    ],
+    edit: [
+      'command:undo',
+      'command:redo',
+      'command:select',
+      'command:append',
+      'command:insert',
+      'command:addStation',
+      'command:deleteSelected',
+    ],
+    route: ['command:routeProperties', 'command:elevation', 'command:resample'],
+    directUpdate: false,
+  });
   await nativeCommand('deviceRoutes');
-  const manager = page.getByRole('dialog', { name: 'Device', exact: true });
+  const manager = page.getByRole('dialog', { name: 'Device routes', exact: true });
   await expect(manager).toBeVisible();
   await expect(manager.getByRole('button', { name: 'Connect device', exact: true })).toBeEnabled();
   await manager.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(manager).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('');
+});
+
+test('synchronizes the elevation profile checkbox between native and editor menus', async () => {
+  const page = await launch();
+  const nativeProfile = () =>
+    desktop.evaluate(({ Menu }) => {
+      const item = Menu.getApplicationMenu()!.getMenuItemById('command:toggleProfile')!;
+      return { type: item.type, checked: item.checked };
+    });
+  await expect.poll(nativeProfile).toEqual({ type: 'checkbox', checked: true });
+  await nativeCommand('toggleProfile');
+  await expect(page.locator('#profile-frame')).toBeHidden();
+  await expect.poll(nativeProfile).toEqual({ type: 'checkbox', checked: false });
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'View', exact: true }).click();
+  const showProfile = page.getByRole('menuitemcheckbox', { name: 'Show elevation profile', exact: true });
+  await expect(showProfile).not.toBeChecked();
+  await showProfile.click();
+  await expect(page.locator('#profile-frame')).toBeVisible();
+  await expect.poll(nativeProfile).toEqual({ type: 'checkbox', checked: true });
 });
 
 test('device chooser updates discovery results and cancels without selecting a device', async () => {
@@ -750,6 +834,73 @@ test('quitting with unsaved edits confirms once and exits without a destroyed-wi
     setImmediate(() => app.quit());
   });
   await expect.poll(() => child?.exitCode).toBe(0);
+});
+
+test('serial chooser updates ports and selects only the current user choice', async () => {
+  const page = await launch();
+  await desktop.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    contents.session.emit(
+      'select-serial-port',
+      { preventDefault() {} },
+      [{ portId: 'port-1', portName: 'COM1', displayName: 'USB serial' }],
+      contents,
+      (id: string) => {
+        (globalThis as unknown as { selectedPort: string }).selectedPort = id;
+      },
+    );
+  });
+  const chooser = page.getByRole('dialog', { name: 'Choose a serial port', exact: true });
+  await expect(chooser).toBeVisible();
+  await selectOption(chooser.getByRole('combobox'), 'port-1');
+  await desktop.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents;
+    contents.session.emit('serial-port-removed', {}, { portId: 'port-1', portName: 'COM1' }, contents);
+    contents.session.emit('serial-port-added', {}, { portId: 'port-2', portName: 'COM2' }, contents);
+  });
+  await expect(chooser.getByRole('button', { name: 'Connect', exact: true })).toBeDisabled();
+  await page.evaluate(() => window.routeStudioDesktop!.selectSerialPort('port-1'));
+  await expect(chooser).toBeVisible();
+  await selectOption(chooser.getByRole('combobox'), 'port-2');
+  await chooser.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(chooser).not.toBeVisible();
+  expect(await desktop.evaluate(() => (globalThis as unknown as { selectedPort: string }).selectedPort)).toBe(
+    'port-2',
+  );
+});
+
+test('firmware operations block closing and quitting until the transfer is paused', async () => {
+  const page = await launch();
+  await page.evaluate(() => window.routeStudioDesktop!.setDocumentState(false, 'en', true, true));
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
+  await desktop.evaluate(({ app }) => app.quit());
+  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
+  await page.evaluate(() => window.routeStudioDesktop!.setDocumentState(false, 'en', false, false));
+  await desktop.evaluate(({ app }) => {
+    setImmediate(() => app.quit());
+  });
+  await expect.poll(() => child?.exitCode).toBe(0);
+});
+
+test('Web Serial access uses the native chooser and cancellation settles the browser request', async () => {
+  const page = await launch();
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.textContent = 'Request serial test port';
+    button.onclick = () => {
+      void navigator.serial!.requestPort().catch((error: Error) => {
+        button.textContent = error.name;
+      });
+    };
+    document.body.append(button);
+  });
+  await page.getByRole('button', { name: 'Request serial test port' }).click();
+  const chooser = page.getByRole('dialog', { name: 'Choose a serial port', exact: true });
+  await expect(chooser).toBeVisible();
+  await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(chooser).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'NotFoundError', exact: true })).toBeVisible();
 });
 
 for (const disableWebGL of [false, true]) {

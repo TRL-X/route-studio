@@ -1,5 +1,8 @@
 {
   "title": "导出路线",
+  "sendTitle": "发送当前路线",
+  "routeName": "路线",
+  "hide": "隐藏",
   "editProperties": "编辑路线属性",
   "magneticSummary": "磁偏角随路线项目保存。"
 }

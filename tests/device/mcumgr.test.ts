@@ -33,7 +33,7 @@ class Channel extends EventTarget {
     }
   }
 }
-function setup() {
+function setup(protocolVersion: 1 | 2 = 2) {
   const channel = new Channel();
   const lifetime = new AbortController();
   const invalidate = vi.fn((error) => lifetime.abort(error));
@@ -41,6 +41,7 @@ function setup() {
     channel as unknown as BluetoothRemoteGATTCharacteristic,
     lifetime.signal,
     invalidate,
+    protocolVersion,
   );
   return { channel, lifetime, invalidate, request };
 }
@@ -75,6 +76,42 @@ test('a wrong response header invalidates the connection and rejects queued work
   expect(result.every((r) => r.status === 'rejected' && r.reason.kind === 'protocol')).toBe(true);
   expect(channel.frames).toHaveLength(1);
   expect(invalidate).toHaveBeenCalledOnce();
+});
+test('supports SMP v1 firmware requests without changing the default route transport', async () => {
+  const { channel, request } = setup(1);
+  channel.reply = (frame) => channel.respond(frame, encode({ images: [] }));
+  await request(1, 0, 'read', {});
+  await request(1, 0, 'write', { hash: new Uint8Array(32), confirm: false });
+  expect(channel.frames.map((frame) => [frame[0], frame[5], frame[6], frame[7]])).toEqual([
+    [0, 1, 0, 0],
+    [2, 1, 1, 0],
+  ]);
+});
+test('does not retry a mutation when the response uses a different SMP version', async () => {
+  const { channel, request, invalidate } = setup(1);
+  channel.reply = (frame) => {
+    const wrongVersion = frame.slice();
+    wrongVersion[0] |= 0x08;
+    channel.respond(wrongVersion, encode({}));
+  };
+  await expect(request(0, 5, 'write', {})).rejects.toMatchObject({ kind: 'protocol' });
+  expect(channel.frames).toHaveLength(1);
+  expect(invalidate).toHaveBeenCalledOnce();
+});
+test('interleaves per-request SMP versions through one serialized connection', async () => {
+  const { channel, request, invalidate } = setup();
+  channel.reply = (frame) => channel.respond(frame, encode({}));
+  await Promise.all([
+    request(64, 0, 'read', {}, 2),
+    request(1, 0, 'read', {}, 1),
+    request(64, 1, 'read', {}, 2),
+  ]);
+  expect(channel.frames.map((frame) => [frame[0], frame[5], frame[6]])).toEqual([
+    [8, 64, 0],
+    [0, 1, 1],
+    [8, 64, 2],
+  ]);
+  expect(invalidate).not.toHaveBeenCalled();
 });
 test('timeouts close the transport rather than accepting a late response as a retry', async () => {
   vi.useFakeTimers();

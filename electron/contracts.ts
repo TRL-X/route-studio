@@ -8,6 +8,12 @@ export interface BluetoothChoice {
   deviceName: string;
 }
 
+export interface SerialChoice {
+  portId: string;
+  portName: string;
+  displayName?: string;
+}
+
 export interface PairingRequest {
   deviceId: string;
   pairingKind: 'confirm' | 'confirmPin' | 'providePin';
@@ -20,7 +26,7 @@ export interface DesktopAPI {
   setTheme: (theme: 'system' | 'light' | 'dark') => void;
   openFile: () => Promise<DesktopFile | null>;
   saveFile: (file: DesktopFile) => Promise<boolean>;
-  setDocumentState: (dirty: boolean, language: 'en' | 'zh', busy: boolean) => void;
+  setDocumentState: (dirty: boolean, language: 'en' | 'zh', busy: boolean, transferBusy?: boolean) => void;
   getUpdateState: () => Promise<UpdateState>;
   checkForUpdates: () => Promise<UpdateState>;
   setUpdateAutoCheck: (enabled: boolean) => Promise<UpdateState>;
@@ -35,6 +41,9 @@ export interface DesktopAPI {
   onBluetoothPairing: (listener: (request: PairingRequest | null) => void) => () => void;
   respondBluetoothPairing: (response: { confirmed: boolean; pin?: string }) => void;
   cancelBluetooth: () => void;
+  onSerialPorts: (listener: (ports: SerialChoice[] | null) => void) => () => void;
+  selectSerialPort: (id: string) => void;
+  cancelSerial: () => void;
 }
 import type { CommandId, DesktopCommandState } from './commands.js';
 import type { UpdateState } from './update-contracts.js';
