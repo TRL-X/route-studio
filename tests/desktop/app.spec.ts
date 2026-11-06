@@ -627,6 +627,27 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   expect(await readFile(exported, 'utf8')).toContain('Saved desktop route');
 });
 
+for (const [description, filename] of [
+  ['POSIX punctuation', '鲲鹏径（第四段）-深圳远足径专区发布20260303更新?    .kml'],
+  ['a name longer than the save suggestion limit', 'r'.repeat(181) + '.kml'],
+]) {
+  test(`opens a native KML file with ${description}`, async () => {
+    test.skip(process.platform === 'win32' && filename.includes('?'), 'Windows disallows question marks');
+    const page = await launch();
+    const source = path.join(directory, filename);
+    await writeFile(
+      source,
+      '<kml><Document><Placemark><name>Native KML route</name><LineString><altitudeMode>absolute</altitudeMode><coordinates>114,22,10 114.01,22.01,20</coordinates></LineString></Placemark></Document></kml>',
+    );
+    await desktop.evaluate(({ dialog }, filename) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
+    }, source);
+    await nativeCommand('open');
+    await expect(page.getByRole('heading', { name: 'Native KML route', exact: true })).toBeVisible();
+    await expect(page.getByText('Could not read the file.', { exact: true })).not.toBeVisible();
+  });
+}
+
 test('cancelled or failed native saves retain unsaved edits and the close reminder', async () => {
   const page = await launch();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
