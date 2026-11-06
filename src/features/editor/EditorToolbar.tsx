@@ -1,8 +1,6 @@
 import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
-import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { Bluetooth, BluetoothOff, ArrowDownToLine, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
-import type { DeviceSnapshot } from '../../device/session';
-import { deviceStrings } from '../device/deviceStrings';
+import { Fragment, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
+import { ArrowDownToLine, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
 import type { Lang } from '../../i18n/index';
 import { RouteTitle } from './RouteTitle';
 import {
@@ -21,7 +19,6 @@ interface ToolbarProps {
   lang: Lang;
   locked: boolean;
   commands: EditorCommands;
-  device: DeviceSnapshot;
 }
 
 function editingText() {
@@ -34,20 +31,8 @@ function editingText() {
   );
 }
 
-export function EditorToolbar({ title, onRename, lang, locked, commands, device }: ToolbarProps) {
+export function EditorToolbar({ title, onRename, lang, locked, commands }: ToolbarProps) {
   const t = commandStrings[lang];
-  const deviceCopy = deviceStrings[lang];
-  const deviceLabel = (
-    device.busy === 'connecting'
-      ? deviceCopy.toolbarConnecting
-      : device.busy === 'uploading'
-        ? deviceCopy.toolbarSending
-        : device.pending
-          ? deviceCopy.toolbarPaused
-          : device.connected
-            ? deviceCopy.toolbarConnected
-            : deviceCopy.toolbarDisconnected
-  ).replace('{name}', device.deviceName);
 
   const desktop = window.routeStudioDesktop;
   const [zoom, setZoom] = useState(() => desktop?.getZoomFactor() ?? 1);
@@ -127,7 +112,10 @@ export function EditorToolbar({ title, onRename, lang, locked, commands, device 
       (textEditing && (id === 'undo' || id === 'redo')) || (!locked && !commands[id].disabled),
     ]),
   );
-  const commandState = JSON.stringify({ language: lang, enabled });
+  const checked = Object.fromEntries(
+    commandIds.filter((id) => commands[id].checked !== undefined).map((id) => [id, commands[id].checked]),
+  );
+  const commandState = JSON.stringify({ language: lang, enabled, checked });
   useEffect(() => {
     desktop?.setCommandState(JSON.parse(commandState));
   }, [desktop, commandState]);
@@ -190,39 +178,42 @@ export function EditorToolbar({ title, onRename, lang, locked, commands, device 
               }}
             >
               {commandGroups.map((group) => (
-                <DropdownMenu.Sub key={group}>
-                  <DropdownMenu.SubTrigger>{t[group]}</DropdownMenu.SubTrigger>
-                  <DropdownMenu.SubContent data-focus-return={menuTriggerId}>
-                    {commandDefinitions
-                      .filter((command) => command.group === group)
-                      .map(({ id, accelerator }) => (
-                        <DropdownMenu.Item
-                          key={id}
-                          aria-label={t[id]}
-                          disabled={locked || commands[id].disabled}
-                          shortcut={commandShortcut(accelerator, mac)}
-                          onSelect={() => execute(id)}
-                        >
-                          {t[id]}
-                        </DropdownMenu.Item>
-                      ))}
-                  </DropdownMenu.SubContent>
-                </DropdownMenu.Sub>
+                <Fragment key={group}>
+                  {group === 'device' && <DropdownMenu.Separator />}
+                  <DropdownMenu.Sub>
+                    <DropdownMenu.SubTrigger>{t[group]}</DropdownMenu.SubTrigger>
+                    <DropdownMenu.SubContent data-focus-return={menuTriggerId}>
+                      {commandDefinitions
+                        .filter((command) => command.group === group)
+                        .map(({ id, accelerator, separatorBefore, type }) => (
+                          <Fragment key={id}>
+                            {separatorBefore && <DropdownMenu.Separator />}
+                            {type === 'checkbox' ? (
+                              <DropdownMenu.CheckboxItem
+                                aria-label={t[id]}
+                                disabled={locked || commands[id].disabled}
+                                checked={commands[id].checked ?? false}
+                                onSelect={() => execute(id)}
+                              >
+                                {t[id]}
+                              </DropdownMenu.CheckboxItem>
+                            ) : (
+                              <DropdownMenu.Item
+                                aria-label={t[id]}
+                                disabled={locked || commands[id].disabled}
+                                shortcut={commandShortcut(accelerator, mac)}
+                                onSelect={() => execute(id)}
+                              >
+                                {t[id]}
+                              </DropdownMenu.Item>
+                            )}
+                          </Fragment>
+                        ))}
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Sub>
+                </Fragment>
               ))}
               <DropdownMenu.Separator />
-              <DropdownMenu.Item
-                aria-label={t.deviceRoutes}
-                disabled={locked || commands.deviceRoutes.disabled}
-                onSelect={() => execute('deviceRoutes')}
-              >
-                {t.deviceRoutes}
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator />
-              {desktop && (
-                <DropdownMenu.Item disabled={locked} onSelect={() => execute('checkUpdates')}>
-                  {t.checkUpdates}
-                </DropdownMenu.Item>
-              )}
               <DropdownMenu.Item
                 aria-label={t.settings}
                 shortcut={mac ? '⌘,' : 'Ctrl+,'}
@@ -261,18 +252,6 @@ export function EditorToolbar({ title, onRename, lang, locked, commands, device 
           <RouteTitle name={title} lang={lang} locked={locked} onRename={onRename} />
         </div>
         <div className="top-actions">
-          <IconButton
-            variant="ghost"
-            color={device.connected ? 'blue' : 'gray'}
-            className="device-status-button"
-            aria-label={deviceLabel}
-            title={deviceLabel}
-            aria-haspopup="dialog"
-            disabled={locked}
-            onClick={() => execute('deviceRoutes')}
-          >
-            {device.connected ? <Bluetooth /> : <BluetoothOff />}
-          </IconButton>
           <Button
             variant="surface"
             color="gray"
@@ -293,16 +272,6 @@ export function EditorToolbar({ title, onRename, lang, locked, commands, device 
             <ArrowDownToLine />
             {t.export}
           </Button>
-          <IconButton
-            variant="ghost"
-            color="gray"
-            aria-label={t.settings}
-            title={t.settings}
-            disabled={locked || commands.settings.disabled}
-            onClick={() => execute('settings')}
-          >
-            <Settings />
-          </IconButton>
         </div>
       </header>
     </>

@@ -32,11 +32,15 @@ export function ExportFrame({
   extraAction,
   saving,
   saveError,
+  sendMode = false,
+  sending = false,
 }: ExportControls & {
   format: ExportFormat;
   bytes?: Uint8Array<ArrayBuffer>;
   children: ReactNode;
   extraAction?: ReactNode;
+  sendMode?: boolean;
+  sending?: boolean;
 }) {
   const t = strings[lang];
   const copy = { en, zh }[lang];
@@ -46,52 +50,66 @@ export function ExportFrame({
     .trim();
   const invalidName = !baseName || /[\\/:*?"<>|\u0000-\u001f]/.test(baseName);
   return (
-    <Modal className="export-dialog" maxWidth="560px" title={copy.title} onClose={onClose} busy={saving}>
+    <Modal
+      className="export-dialog"
+      maxWidth="560px"
+      title={sendMode ? copy.sendTitle : copy.title}
+      onClose={onClose}
+      busy={saving}
+    >
       <IconButton
         variant="ghost"
         color="gray"
         className="dialog-close"
-        aria-label={t.close}
+        aria-label={sending ? copy.hide : t.close}
         onClick={onClose}
         disabled={saving}
       >
         <X />
       </IconButton>
       <Flex direction="column" gap="4" minHeight="0" overflowY="auto" pb="4">
-        <label>
-          <Text as="div" size="2" color="gray" mb="1">
-            {t.exportFormat}
+        {sendMode ? (
+          <Text size="2" color="gray">
+            {copy.routeName} · {name}
           </Text>
-          <Choice
-            aria-label={t.exportFormat}
-            value={format}
-            disabled={saving}
-            onValueChange={(next) => onFormat(next as ExportFormat)}
-            options={(['rte', 'gpx', 'kml', 'fit'] as const).map((value) => ({
-              value,
-              label: value.toUpperCase(),
-            }))}
-          />
-        </label>
-        <label>
-          <Text as="div" size="2" color="gray" mb="1">
-            {t.exportFilename}
-          </Text>
-          <TextField.Root
-            value={name}
-            disabled={saving}
-            onChange={(e) => onName(e.target.value)}
-            maxLength={100}
-            aria-invalid={invalidName}
-            aria-describedby={invalidName ? 'export-filename-error' : undefined}
-          >
-            <TextField.Slot side="right">.{format}</TextField.Slot>
-          </TextField.Root>
-        </label>
-        {invalidName && (
-          <Text size="2" color="red" id="export-filename-error" role="alert">
-            {t.invalidExportName}
-          </Text>
+        ) : (
+          <>
+            <label>
+              <Text as="div" size="2" color="gray" mb="1">
+                {t.exportFormat}
+              </Text>
+              <Choice
+                aria-label={t.exportFormat}
+                value={format}
+                disabled={saving}
+                onValueChange={(next) => onFormat(next as ExportFormat)}
+                options={(['rte', 'gpx', 'kml', 'fit'] as const).map((value) => ({
+                  value,
+                  label: value.toUpperCase(),
+                }))}
+              />
+            </label>
+            <label>
+              <Text as="div" size="2" color="gray" mb="1">
+                {t.exportFilename}
+              </Text>
+              <TextField.Root
+                value={name}
+                disabled={saving}
+                onChange={(e) => onName(e.target.value)}
+                maxLength={100}
+                aria-invalid={invalidName}
+                aria-describedby={invalidName ? 'export-filename-error' : undefined}
+              >
+                <TextField.Slot side="right">.{format}</TextField.Slot>
+              </TextField.Root>
+            </label>
+            {invalidName && (
+              <Text size="2" color="red" id="export-filename-error" role="alert">
+                {t.invalidExportName}
+              </Text>
+            )}
+          </>
         )}
         {children}
         {saveError && <p role="alert">{saveError}</p>}
@@ -104,17 +122,19 @@ export function ExportFrame({
               ? (bytes.byteLength / 1024).toLocaleString(lang, { maximumFractionDigits: 1 }) + ' KiB'
               : '—'}
           </Text>
-          <Button
-            variant="surface"
-            color="gray"
-            disabled={!bytes || invalidName || saving}
-            onClick={() => {
-              if (bytes) onDownload(bytes, baseName);
-            }}
-          >
-            <ArrowDownToLine />
-            {t.downloadFormat.replace('{format}', format.toUpperCase())}
-          </Button>
+          {!sendMode && (
+            <Button
+              variant="surface"
+              color="gray"
+              disabled={!bytes || invalidName || saving}
+              onClick={() => {
+                if (bytes) onDownload(bytes, baseName);
+              }}
+            >
+              <ArrowDownToLine />
+              {t.downloadFormat.replace('{format}', format.toUpperCase())}
+            </Button>
+          )}
           {extraAction}
         </footer>
       </Flex>

@@ -15,7 +15,7 @@ import {
   resourcePath,
   validFilename,
 } from './security.js';
-import type { BluetoothChoice, DesktopFile, PairingRequest } from './contracts.js';
+import type { BluetoothChoice, DesktopFile, PairingRequest, SerialChoice } from './contracts.js';
 import {
   commandDefinitions,
   commandGroups,
@@ -43,12 +43,16 @@ let closing = false;
 let quitRequested = false;
 let documentStateKnown = false;
 let activityBusy = true;
+let transferBusy = false;
 let updates: UpdateService | undefined;
 let bluetoothDevices: BluetoothChoice[] = [];
 let bluetoothCallback: ((id: string) => void) | undefined;
 let pairingCallback: ((response: { confirmed: boolean; pin?: string }) => void) | undefined;
 let bluetoothTimer: ReturnType<typeof setTimeout> | undefined;
 let pairingTimer: ReturnType<typeof setTimeout> | undefined;
+let serialPorts: SerialChoice[] = [];
+let serialCallback: ((id: string) => void) | undefined;
+let serialTimer: ReturnType<typeof setTimeout> | undefined;
 let commandState: DesktopCommandState = {
   language,
   enabled: Object.fromEntries(commandIds.map((id) => [id, false])) as Record<CommandId, boolean>,
@@ -72,6 +76,8 @@ async function updateCommandMenu() {
     id: `command:${id}`,
     label: labels[id],
     accelerator: commandDefinitions.find((command) => command.id === id)?.accelerator,
+    type: commandDefinitions.find((command) => command.id === id)?.type,
+    checked: commandState.checked?.[id] ?? false,
     enabled: commandState.enabled[id],
     click: () => {
       if (
@@ -89,7 +95,9 @@ async function updateCommandMenu() {
   const groups: Electron.MenuItemConstructorOptions[] = commandGroups.map((group) => {
     const submenu: Electron.MenuItemConstructorOptions[] = commandDefinitions
       .filter((command) => command.group === group)
-      .map(({ id }) => item(id));
+      .flatMap(({ id, separatorBefore }) =>
+        separatorBefore ? [{ type: 'separator' }, item(id)] : [item(id)],
+      );
     if (group === 'file' && process.platform !== 'darwin')
       submenu.push({ type: 'separator' }, item('settings'));
     if (group === 'edit')
@@ -111,7 +119,6 @@ async function updateCommandMenu() {
       );
     return { label: labels[group], submenu };
   });
-  groups.push({ label: labels.deviceRoutes.replace(/…$/, ''), submenu: [item('deviceRoutes')] });
   if (process.platform === 'darwin')
     groups.unshift({
       label: app.name,
@@ -119,7 +126,6 @@ async function updateCommandMenu() {
         { role: 'about' },
         { type: 'separator' },
         item('settings'),
-        item('checkUpdates'),
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
@@ -130,7 +136,6 @@ async function updateCommandMenu() {
         { role: 'quit' },
       ],
     });
-  if (process.platform !== 'darwin') groups.push({ label: labels.help, submenu: [item('checkUpdates')] });
   Menu.setApplicationMenu(Menu.buildFromTemplate([...groups, { role: 'windowMenu' }]));
 }
 
@@ -186,6 +191,17 @@ function cancelBluetooth() {
   }
 }
 
+function cancelSerial() {
+  const callback = serialCallback;
+  serialCallback = undefined;
+  serialPorts = [];
+  clearTimeout(serialTimer);
+  if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
+    callback?.('');
+    window.webContents.send('desktop:serial-ports', null);
+  }
+}
+
 async function externalLink(value: string) {
   try {
     const url = new URL(value);
@@ -197,6 +213,7 @@ async function externalLink(value: string) {
 
 function createWindow() {
   dirty = false;
+  transferBusy = false;
   documentStateKnown = false;
   activityBusy = true;
   closing = false;
@@ -227,11 +244,19 @@ function createWindow() {
     },
   });
   window = current;
+  const nativeSession = current.webContents.session;
   current.webContents.on('render-process-gone', () => {
     documentStateKnown = false;
+    transferBusy = false;
+    cancelSerial();
   });
   current.once('ready-to-show', () => current.show());
   current.on('close', (event) => {
+    if (transferBusy) {
+      event.preventDefault();
+      quitRequested = false;
+      return;
+    }
     if (!dirty || closing) return;
     event.preventDefault();
     if (fileDialogOpen) return;
@@ -261,8 +286,12 @@ function createWindow() {
       });
   });
   current.on('closed', () => {
+    nativeSession.off('select-serial-port', selectSerial);
+    nativeSession.off('serial-port-added', serialAdded);
+    nativeSession.off('serial-port-removed', serialRemoved);
     window = null;
     cancelBluetooth();
+    cancelSerial();
     disableCommands();
   });
   current.webContents.on('will-navigate', (event, url) => {
@@ -281,12 +310,21 @@ function createWindow() {
   current.webContents.on('will-attach-webview', (event) => event.preventDefault());
   current.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) {
+      transferBusy = false;
       cancelBluetooth();
+      cancelSerial();
       disableCommands();
     }
   });
-  // Bluetooth is granted by the explicit device chooser below, not the generic permission handlers.
-  current.webContents.session.setPermissionCheckHandler(() => false);
+  // Serial access still requires selection in the explicit port chooser.
+  current.webContents.session.setPermissionCheckHandler(
+    (contents, permission, origin, details) =>
+      permission === 'serial' &&
+      contents === current.webContents &&
+      details.isMainFrame &&
+      trustedURL(details.requestingUrl ?? origin) &&
+      trustedURL(origin),
+  );
   current.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) =>
     callback(false),
   );
@@ -319,6 +357,45 @@ function createWindow() {
     };
     current.webContents.send('desktop:bluetooth-pairing', request);
   });
+  const portChoice = ({ portId, portName, displayName }: Electron.SerialPort): SerialChoice => ({
+    portId,
+    portName,
+    displayName,
+  });
+  const selectSerial = (
+    event: Electron.Event,
+    ports: Electron.SerialPort[],
+    contents: Electron.WebContents,
+    callback: (id: string) => void,
+  ) => {
+    event.preventDefault();
+    if (contents !== current.webContents || !trustedURL(contents.getURL())) {
+      callback('');
+      return;
+    }
+    cancelSerial();
+    serialCallback = callback;
+    serialPorts = ports.map(portChoice);
+    serialTimer = setTimeout(cancelSerial, 60000);
+    contents.send('desktop:serial-ports', serialPorts);
+  };
+  const serialAdded = (_event: Electron.Event, port: Electron.SerialPort, contents: Electron.WebContents) => {
+    if (!serialCallback || contents !== current.webContents) return;
+    serialPorts = [...serialPorts.filter((item) => item.portId !== port.portId), portChoice(port)];
+    contents.send('desktop:serial-ports', serialPorts);
+  };
+  const serialRemoved = (
+    _event: Electron.Event,
+    port: Electron.SerialPort,
+    contents: Electron.WebContents,
+  ) => {
+    if (!serialCallback || contents !== current.webContents) return;
+    serialPorts = serialPorts.filter((item) => item.portId !== port.portId);
+    contents.send('desktop:serial-ports', serialPorts);
+  };
+  current.webContents.session.on('select-serial-port', selectSerial);
+  current.webContents.session.on('serial-port-added', serialAdded);
+  current.webContents.session.on('serial-port-removed', serialRemoved);
   void current.loadURL(devURL ?? appURL);
 }
 
@@ -414,11 +491,13 @@ ipcMain.on('desktop:state', (event, state) => {
     !state ||
     typeof state.dirty !== 'boolean' ||
     typeof state.busy !== 'boolean' ||
+    (state.transferBusy !== undefined && typeof state.transferBusy !== 'boolean') ||
     !['en', 'zh'].includes(state.language)
   )
     return;
   dirty = state.dirty;
   activityBusy = state.busy;
+  transferBusy = state.transferBusy ?? false;
   documentStateKnown = true;
   language = state.language;
   window!.setDocumentEdited(dirty);
@@ -430,10 +509,21 @@ ipcMain.on('desktop:commands', (event, state: DesktopCommandState) => {
     !['en', 'zh'].includes(state.language) ||
     !state.enabled ||
     commandIds.some((id) => typeof state.enabled[id] !== 'boolean') ||
-    Object.keys(state.enabled).length !== commandIds.length
+    Object.keys(state.enabled).length !== commandIds.length ||
+    (state.checked !== undefined &&
+      (!state.checked ||
+        typeof state.checked !== 'object' ||
+        Array.isArray(state.checked) ||
+        Object.entries(state.checked).some(
+          ([id, checked]) => !commandIds.includes(id as CommandId) || typeof checked !== 'boolean',
+        )))
   )
     return;
-  commandState = { language: state.language, enabled: { ...state.enabled } };
+  commandState = {
+    language: state.language,
+    enabled: { ...state.enabled },
+    checked: { ...state.checked },
+  };
   void updateCommandMenu().catch(console.error);
 });
 ipcMain.on('desktop:bluetooth-select', (event, id) => {
@@ -463,6 +553,19 @@ ipcMain.on('desktop:bluetooth-response', (event, response) => {
 });
 ipcMain.on('desktop:bluetooth-cancel', (event) => {
   if (trustedSender(event)) cancelBluetooth();
+});
+ipcMain.on('desktop:serial-select', (event, id) => {
+  if (!trustedSender(event) || typeof id !== 'string' || !serialCallback) return;
+  if (id && !serialPorts.some((port) => port.portId === id)) return;
+  const callback = serialCallback;
+  serialCallback = undefined;
+  serialPorts = [];
+  clearTimeout(serialTimer);
+  window!.webContents.send('desktop:serial-ports', null);
+  callback(id);
+});
+ipcMain.on('desktop:serial-cancel', (event) => {
+  if (trustedSender(event)) cancelSerial();
 });
 
 for (const action of ['state', 'check', 'auto-check', 'download', 'open', 'install'] as const) {
@@ -522,6 +625,7 @@ app
           fileDialogOpen ||
           bluetoothCallback ||
           pairingCallback ||
+          serialCallback ||
           !window ||
           window.isDestroyed() ||
           window.webContents.isDestroyed()

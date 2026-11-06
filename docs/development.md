@@ -41,7 +41,7 @@ npm run desktop:typecheck
 npm run test:desktop
 ```
 
-`check` covers formatting, unit tests, type checks and production build. Browser tests cover editing, recovery and file conversion. Desktop tests use temporary profiles and simulated dialogs/Bluetooth; set `DESKTOP_EXECUTABLE` to test a packaged executable. Linux CI requires Chromium's OS dependencies and `xvfb-run --auto-servernum npm run test:desktop`. Desktop traces go to `desktop-test-results/`.
+`check` covers formatting, unit tests, type checks and production build. Browser tests cover editing, recovery, file conversion and firmware workflows. Desktop tests use temporary profiles and simulated dialogs/Bluetooth; set `DESKTOP_EXECUTABLE` to test a packaged executable. Linux CI requires Chromium's OS dependencies and `xvfb-run --auto-servernum npm run test:desktop`. Desktop traces go to `desktop-test-results/`.
 
 ### Test locations
 
@@ -65,4 +65,4 @@ npm run test:desktop
 - Restart desktop development after editing `electron/`; React changes reload automatically.
 - If a browser or desktop test fails, inspect the retained trace in `test-results/` or `desktop-test-results/`.
 
-Automated device tests simulate Bluetooth and firmware. Physical-device acceptance testing is required on each platform; see [device requirements](user-guide.md#bluetooth). Installed-app upgrade checks are described in [releasing](releasing.md#release-verification).
+Automated device tests simulate Bluetooth, serial streams and firmware responses. Firmware unit tests cover image validation, upload offsets and serial framing; browser workflows exercise local file selection, Bluetooth upload/test/reconnect/confirm, rollback reporting and USB recovery. Menu and task tests cover the separate file export and route send previews, shared Bluetooth connection, and hiding or reopening an active transfer without changing its payload. These tests do not establish signature trust, radio throughput, USB driver compatibility or recovery from interrupted flash writes. Physical-device acceptance testing is required on each platform; see [device requirements](user-guide.md#bluetooth) and [firmware workflows](user-guide.md#firmware-updates-and-recovery). Installed-app upgrade checks are described in [releasing](releasing.md#release-verification).

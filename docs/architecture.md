@@ -2,7 +2,7 @@
 
 [Documentation](README.md) · [Project overview](../README.md)
 
-Route Studio uses one React editor in a browser and in an Electron renderer. Vite builds the static editor; Electron adds native dialogs, menus, Bluetooth selection and software updates. Route parsing and editing run locally. Network clients access map, terrain, magnetic declination and release services directly; this repository has no application backend.
+Route Studio uses one React editor in a browser and in an Electron renderer. Vite builds the static editor; Electron adds native dialogs, menus, Bluetooth and serial port selection, and software updates. Route parsing and editing run locally. Network clients access map, terrain, magnetic declination and release services directly; this repository has no application backend.
 
 This guide describes the current source layout and dependencies. See [development](development.md) for commands, [file formats](formats.md) for compatibility, and [releasing](releasing.md) for distribution.
 
@@ -21,7 +21,7 @@ This guide describes the current source layout and dependencies. See [developmen
 | [src/domain/](../src/domain/)                                             | Route model, geometry edits, station projection, elevation repair, resampling, terrain planning and declination rules.     |
 | [src/files/](../src/files/)                                               | FIT/GPX/KML conversion and project serialization.                                                                          |
 | [src/rte/](../src/rte/)                                                   | RTE binary/CBOR encoding, validation, metadata, export processing and conversion to/from the route model.                  |
-| [src/device/](../src/device/)                                             | Web Bluetooth transport, MCUmgr requests, route catalog operations, uploads and shared device session state.               |
+| [src/device/](../src/device/)                                             | Web Bluetooth and Web Serial transports, MCUmgr clients, route transfers, firmware parsing and upgrade sessions.           |
 | [src/maps/](../src/maps/)                                                 | Basemap provider configuration, style construction and locally stored map preferences.                                     |
 | [src/i18n/](../src/i18n/)                                                 | English and Simplified Chinese strings, language selection and shared localized text types.                                |
 | [electron/](../electron/)                                                 | Main process, preload bridge, desktop contracts, command definitions, security and update services.                        |
@@ -41,7 +41,8 @@ flowchart LR
         Editor --> History[Document session and history]
         Editor --> Files[File workflows]
         History --> Storage[Project serialization and IndexedDB drafts]
-        Editor --> Device[DeviceSession and Web Bluetooth]
+        Editor --> Device[Route and firmware sessions]
+        Device --> Transports[Web Bluetooth and Web Serial]
     end
     Files -->|IORequest| Worker[io.worker.ts]
     Worker -->|IOResult| Files
@@ -79,7 +80,7 @@ The shared save lock covers both project and export writes. Native cancellation 
 
 [contracts.ts](../electron/contracts.ts) defines `DesktopAPI`; [desktop.d.ts](../src/desktop.d.ts) adds its optional renderer global. [preload.cts](../electron/preload.cts) exposes the API through `contextBridge`. It maps methods and subscriptions to specific IPC channels rather than exposing the Node filesystem or arbitrary IPC access.
 
-[main.cts](../electron/main.cts) owns the application window, native file dialogs, menu, Bluetooth selection/pairing callbacks and update integration. Shared command IDs and shortcuts live in [electron/commands.ts](../electron/commands.ts); [src/features/editor/commands.ts](../src/features/editor/commands.ts) re-exports them for the editor. The renderer reports command availability and document dirty/busy state, which the main process uses for menus, closing and update installation.
+[main.cts](../electron/main.cts) owns the application window, native file dialogs, menu, Bluetooth selection/pairing, serial port selection and update integration. Shared command IDs and shortcuts live in [electron/commands.ts](../electron/commands.ts); [src/features/editor/commands.ts](../src/features/editor/commands.ts) re-exports them for the editor. The renderer reports command availability and document dirty/busy state, which the main process uses for menus, closing and update installation.
 
 The renderer uses context isolation, sandboxing, disabled Node integration and a restricted `app://route-studio/` protocol with CSP. Only the main frame can use the file bridge, and it cannot supply filesystem paths. HTTP/HTTPS links open in the system browser.
 
@@ -121,17 +122,21 @@ The document session compares the current document object with its saved baselin
 
 ### Preview and export
 
-[ExportDialog.tsx](../src/features/export/ExportDialog.tsx) requests a preview and output bytes for the current document, format and options. It aborts obsolete jobs and checks that a result still matches the current inputs before presenting it.
+[ExportDialog.tsx](../src/features/export/ExportDialog.tsx) requests a preview and output bytes for the current document, format and options. It aborts obsolete jobs and checks that a result still matches the current inputs before presenting it. File export presents format, filename and download controls. The separate **Send current route** command reuses the same preview and settings in RTE-only mode with a device send action. Starting a send retains the document and processing settings for that transfer, so reopening a pending task preserves its preview while the editor remains usable.
 
 RTE export calls `prepareRte` in [src/rte/index.ts](../src/rte/index.ts), with processing options from [processing.ts](../src/rte/processing.ts). GPX/KML/FIT export calls `exportTrack` in [src/files/export.ts](../src/files/export.ts). These operations derive output from the document; export resampling, simplification and smoothing do not rewrite the project. The separate route resampling tool applies its result as an undoable edit.
 
-[platform/files.ts](../src/platform/files.ts) uses the native save bridge on desktop and a Blob download in the browser. RTE bytes can also be passed to the shared device session for upload.
+[platform/files.ts](../src/platform/files.ts) uses the native save bridge on desktop and a Blob download in the browser. The send preview passes validated RTE bytes to the device session for upload.
 
 ## External services and local state
 
 Map rendering and styles are handled by [MapView.tsx](../src/views/MapView.tsx) and [basemap.ts](../src/maps/basemap.ts). Terrain planning lives in `src/domain/`; sampling and online tile access live in [copernicus.ts](../src/services/terrain/copernicus.ts) and [copernicus-online.ts](../src/services/terrain/copernicus-online.ts). Magnetic HTTP lookup lives in `src/services/declination.ts`.
 
-[DeviceSession](../src/device/session.ts) is shared by the export view and device manager through [useDeviceRoutes.ts](../src/features/device/useDeviceRoutes.ts). [mcumgr.ts](../src/device/mcumgr.ts) owns Web Bluetooth/SMP transport, [routes.ts](../src/device/routes.ts) implements Arcap Custom MCUmgr Group 64, and [upload.ts](../src/device/upload.ts) transfers bytes through FS Group 8 before device validation and catalog publication. Pending bytes and transaction state stay in memory across views and reconnects; they are not persisted across app restarts.
+[useDevices.ts](../src/features/device/useDevices.ts) creates the route and firmware sessions around one [BluetoothSession](../src/device/bluetooth-session.ts), which owns the physical connection and reserves it for active transfers. [DeviceSession](../src/device/session.ts) is shared by the send preview and device route manager. [mcumgr.ts](../src/device/mcumgr.ts) owns Web Bluetooth/SMP transport, [routes.ts](../src/device/routes.ts) implements route catalog operations, and [upload.ts](../src/device/upload.ts) transfers bytes before device validation and catalog publication. Pending bytes and transaction state stay in memory across views and reconnects; they are not persisted across app restarts. The editor exposes device actions in a submenu and shows active or interrupted tasks in the status bar.
+
+[firmware.ts](../src/device/firmware.ts) validates local MCUboot containers and SHA-256 digests and implements standard Image Group 1 and OS reset commands. The upload-session digest covers the complete file; image state requests identify the image by its MCUboot digest. Signature verification and image acceptance remain the bootloader's responsibility. [FirmwareSession](../src/device/firmware-session.ts) coordinates file selection, resumable upload, test/restart, reconnection, confirmation and recovery state independently of route catalog commands. Route and firmware sessions reuse the shared Bluetooth connection; switching or closing panels does not disconnect it. Connecting alone does not query the route catalog.
+
+[serial.ts](../src/device/serial.ts) carries SMP over Web Serial using console framing: length and CRC16-XMODEM, Base64 lines, and start/continuation markers. It serializes requests and validates response headers and CRCs. USB recovery uploads directly through the bootloader and offers reset without requiring image state, test or confirmation support. [FirmwareDialog](../src/features/device/FirmwareDialog.tsx) opens in a fixed Bluetooth update or USB recovery mode according to its menu entry; [DesktopSerial](../src/features/device/DesktopSerial.tsx) presents the Electron serial chooser through the narrow preload bridge. USB recovery uses its own connection. Active firmware operations participate in editor and desktop-update interlocks. File bytes and progress are retained only in memory.
 
 Language, appearance and map preferences use local storage separately from project data. Desktop draft/preference storage belongs to the Electron profile. Update preferences are stored by the main process in `updates.json` under Electron's user-data directory. See the [user guide](user-guide.md#online-services-and-device-upload) for network data exposure, credentials and device requirements.
 

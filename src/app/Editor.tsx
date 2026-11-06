@@ -8,8 +8,12 @@ import { fillShortElevationGaps, type ImportElevationAssessment } from '../domai
 import { emptyRoute, type RouteDocument } from '../domain/model';
 import { ascent } from '../domain/summary';
 import type { ExportFormat } from '../files/export';
-import { useDeviceRoutes } from '../features/device/useDeviceRoutes';
+import { useDevices } from '../features/device/useDevices';
+import { BluetoothConnection } from '../features/device/BluetoothConnection';
+import { DeviceTaskStatus } from '../features/device/DeviceTaskStatus';
 import { DeviceRoutes } from '../features/device/DeviceRoutes';
+import { FirmwareDialog } from '../features/device/FirmwareDialog';
+import { DesktopSerial } from '../features/device/DesktopSerial';
 import { ExportDialog } from '../features/export/ExportDialog';
 import { defaultExportOptions } from '../rte/processing';
 import { EditorToolbar } from '../features/editor/EditorToolbar';
@@ -33,6 +37,7 @@ import { type EditorCommands } from '../features/editor/commands';
 import { ResampleDialog, resampleStrings } from '../features/resample/ResampleDialog';
 
 type Problem = Localized & { target?: Selection };
+type DevicePanel = 'connection' | 'send' | 'routes' | 'firmware' | 'recovery';
 export function Editor({
   restored,
   recoveryError,
@@ -43,9 +48,10 @@ export function Editor({
   const documentSession = useDocumentSession(restored, recoveryError);
   const { history, dispatch, doc, currentDoc, dirty, source, session, draftState } = documentSession;
   const updates = useUpdates();
-  const device = useDeviceRoutes();
-  const [deviceOpen, setDeviceOpen] = useState(false);
-  const [returnToExport, setReturnToExport] = useState<ExportFormat | null>(null);
+  const { device, firmware, connection } = useDevices();
+  const [devicePanel, setDevicePanel] = useState<DevicePanel | null>(null);
+  const [sendSnapshot, setSendSnapshot] = useState<RouteDocument | null>(null);
+  const [sendOptions, setSendOptions] = useState(defaultExportOptions);
   const [lang, setLang] = useState<Lang>(initialLanguage);
   const t = strings[lang];
   const { theme, scheme, changeTheme } = useTheme();
@@ -87,8 +93,7 @@ export function Editor({
     save,
   } = files;
   const locked =
-    deviceOpen ||
-    !!device.state.busy ||
+    !!devicePanel ||
     busy ||
     savingFile ||
     !!pending ||
@@ -116,11 +121,15 @@ export function Editor({
   const lookup = useDeclinationLookup(
     doc,
     dispatch,
-    exportFormat === 'rte' || (selected.type === 'route' && magneticExpanded),
+    exportFormat === 'rte' ||
+      (devicePanel === 'send' && !sendSnapshot) ||
+      (selected.type === 'route' && magneticExpanded),
   );
   const status = (msg: string) => setNotice({ en: msg, zh: msg });
   const updateBlocked =
-    deviceOpen ||
+    !!devicePanel ||
+    !!firmware.state.busy ||
+    firmware.state.pending ||
     !!device.state.busy ||
     device.state.pending ||
     busy ||
@@ -130,9 +139,10 @@ export function Editor({
     !!pending ||
     !!choices ||
     !!resampleSource;
+  const transferBusy = !!firmware.state.busy || !!device.state.busy;
   useLayoutEffect(() => {
-    window.routeStudioDesktop?.setDocumentState(dirty, lang, updateBlocked);
-  }, [dirty, lang, updateBlocked]);
+    window.routeStudioDesktop?.setDocumentState(dirty, lang, updateBlocked, transferBusy);
+  }, [dirty, lang, updateBlocked, transferBusy]);
   function change(next: RouteDocument) {
     if (next === doc) return;
     setIssue(null);
@@ -180,6 +190,10 @@ export function Editor({
   }, [lang]);
   function replace(next: Replacement) {
     setExportOptions(defaultExportOptions);
+    if (!device.state.busy && !device.state.pending) {
+      setSendSnapshot(null);
+      setSendOptions(defaultExportOptions);
+    }
     setExportName(null);
     setExportFormat(null);
     setElevationPanel(next.elevationAssessment ? 'import' : null);
@@ -233,6 +247,12 @@ export function Editor({
     setElevationSummary(null);
     setElevationPanel('tools');
   }
+  const deviceOccupied = !!connection.state.task || !!connection.state.busy;
+  const firmwarePanel = firmware.state.mode === 'usb' ? 'recovery' : 'firmware';
+  async function openFirmware(mode: 'ble' | 'usb') {
+    await firmware.session.setMode(mode);
+    if (firmware.session.snapshot().mode === mode) setDevicePanel(mode === 'usb' ? 'recovery' : 'firmware');
+  }
   const commands: EditorCommands = {
     new: { run: () => requestReplace({ doc: emptyRoute(), source: '' }) },
     open: { run: () => (window.routeStudioDesktop ? void pickDesktopFile() : picker.current?.click()) },
@@ -262,12 +282,37 @@ export function Editor({
     fitRoute: { run: () => mapCommand('fit'), disabled: !doc.vertices.length },
     mapZoomIn: { run: () => mapCommand('zoomIn') },
     mapZoomOut: { run: () => mapCommand('zoomOut') },
-    toggleProfile: { run: () => setProfileCollapsed((value) => !value) },
-    deviceRoutes: {
+    toggleProfile: {
+      run: () => setProfileCollapsed((value) => !value),
+      checked: !profileCollapsed,
+    },
+    deviceConnect: {
+      run: () => setDevicePanel('connection'),
+      disabled: deviceOccupied,
+    },
+    deviceSend: {
       run: () => {
-        setReturnToExport(null);
-        setDeviceOpen(true);
+        if (!device.state.busy && !device.state.pending) {
+          setSendSnapshot(null);
+        }
+        setDevicePanel('send');
       },
+      disabled:
+        connection.state.task === 'firmware' ||
+        !!connection.state.busy ||
+        (!device.state.pending && doc.vertices.length < 2),
+    },
+    deviceRoutes: {
+      run: () => setDevicePanel('routes'),
+      disabled: connection.state.task === 'firmware' || !!connection.state.busy,
+    },
+    deviceFirmware: {
+      run: () => void openFirmware('ble'),
+      disabled: deviceOccupied && (connection.state.task !== 'firmware' || firmware.state.mode !== 'ble'),
+    },
+    deviceRecovery: {
+      run: () => void openFirmware('usb'),
+      disabled: deviceOccupied && (connection.state.task !== 'firmware' || firmware.state.mode !== 'usb'),
     },
     settings: { run: () => setSettingsTab('general') },
     checkUpdates: {
@@ -299,7 +344,6 @@ export function Editor({
           lang={lang}
           locked={locked}
           commands={commands}
-          device={device.state}
         />
         <input
           ref={picker}
@@ -349,6 +393,23 @@ export function Editor({
               )}
             </Button>
           )}
+          <DeviceTaskStatus
+            device={device}
+            firmware={firmware}
+            connection={connection}
+            lang={lang}
+            onOpen={(task) =>
+              setDevicePanel(
+                task === 'firmware'
+                  ? firmwarePanel
+                  : task === 'routes'
+                    ? sendSnapshot
+                      ? 'send'
+                      : 'routes'
+                    : 'connection',
+              )
+            }
+          />
           <span className="coord-system">WGS 84</span>
         </footer>
         {problem && (
@@ -371,12 +432,6 @@ export function Editor({
       </div>
       {exportFormat && (
         <ExportDialog
-          device={device}
-          onManageDevice={() => {
-            setReturnToExport(exportFormat);
-            setExportFormat(null);
-            setDeviceOpen(true);
-          }}
           format={exportFormat}
           doc={doc}
           {...exportControls}
@@ -391,6 +446,35 @@ export function Editor({
           onOptions={setExportOptions}
           onLocate={(error) => {
             setExportFormat(null);
+            setIssue(error);
+            select(error.target ?? { type: 'route' }, true);
+          }}
+        />
+      )}
+      {devicePanel === 'send' && (
+        <ExportDialog
+          format="rte"
+          doc={sendSnapshot ?? doc}
+          {...exportControls}
+          onClose={() => setDevicePanel(null)}
+          saving={false}
+          saveError={undefined}
+          send={{
+            device,
+            onManage: () => setDevicePanel('routes'),
+            onStart: () => setSendSnapshot((current) => current ?? doc),
+          }}
+          lookup={sendSnapshot ? { pending: false } : lookup}
+          onEditProperties={() => {
+            setDevicePanel(null);
+            select({ type: 'route' }, true);
+            setMagneticExpanded(true);
+          }}
+          projectGain={sendSnapshot ? ascent(sendSnapshot) : gain}
+          options={sendOptions}
+          onOptions={setSendOptions}
+          onLocate={(error) => {
+            setDevicePanel(null);
             setIssue(error);
             select(error.target ?? { type: 'route' }, true);
           }}
@@ -468,19 +552,17 @@ export function Editor({
         />
       )}
       <FileDialogs files={files} lang={lang} />
-      {deviceOpen && (
-        <DeviceRoutes
-          device={device}
-          lang={lang}
-          returnToExport={returnToExport !== null}
-          onClose={() => {
-            setDeviceOpen(false);
-            if (returnToExport) setExportFormat(returnToExport);
-            setReturnToExport(null);
-          }}
-        />
+      {devicePanel === 'connection' && (
+        <BluetoothConnection connection={connection} lang={lang} onClose={() => setDevicePanel(null)} />
+      )}
+      {devicePanel === 'routes' && (
+        <DeviceRoutes device={device} lang={lang} onClose={() => setDevicePanel(null)} />
+      )}
+      {(devicePanel === 'firmware' || devicePanel === 'recovery') && (
+        <FirmwareDialog firmware={firmware} lang={lang} onClose={() => setDevicePanel(null)} />
       )}
       <DesktopBluetooth lang={lang} />
+      <DesktopSerial lang={lang} />
     </Theme>
   );
 }

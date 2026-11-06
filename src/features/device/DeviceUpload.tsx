@@ -11,16 +11,18 @@ export function DeviceUpload({
   device,
   lang,
   onManage,
+  onStart,
 }: {
   bytes?: Uint8Array;
   device: DeviceControls;
   lang: Lang;
   onManage: () => void;
+  onStart?: () => void;
 }) {
   const { state, session } = device;
   const t = deviceStrings[lang];
   const supported = window.isSecureContext && !!navigator.bluetooth?.requestDevice;
-  // Export can be regenerated when returning from device management. Only show
+  // The preview can be regenerated when returning from device management. Only show
   // success for the exact payload that was sent, not another route or set of options.
   const samePayload = useMemo(
     () =>
@@ -59,7 +61,10 @@ export function DeviceUpload({
         disabled={!supported || !!state.busy || (!state.pending && (!bytes || done))}
         onClick={() => {
           if (state.pending) void session.resume();
-          else if (bytes) void session.send(bytes);
+          else if (bytes) {
+            onStart?.();
+            void session.send(bytes);
+          }
         }}
       >
         {done ? <Check /> : <Send />}

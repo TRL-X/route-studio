@@ -1,7 +1,7 @@
 import { selectOption } from '../controls';
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { download, open, openExport } from './files';
+import { deviceCommand, download, open, openExport, openSend } from './files';
 import { Firmware } from '../device/firmware';
 import { devicePeer } from './device-peer';
 
@@ -14,7 +14,8 @@ test('uploads through Group 64, resumes lost ACKs, and shares the connection wit
   await page.goto('/');
   await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
   const local = await download(page, 'Download RTE');
-  const dialog = await openExport(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const dialog = await openSend(page);
   await expect(dialog.getByLabel('Device path')).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Connect device', exact: true })).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Refresh routes' })).toHaveCount(0);
@@ -53,7 +54,7 @@ test('manages paginated routes without a local project and protects in-use and s
   }));
   await devicePeer(page, firmware);
   await page.goto('/');
-  await page.locator('.device-status-button').click();
+  await deviceCommand(page, 'Manage device routes…');
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Connect device', exact: true }).click();
   await expect(dialog.getByRole('rowheader')).toHaveCount(6);
@@ -79,7 +80,7 @@ test('shows validation failure and can cancel a resumed upload without committin
   await devicePeer(page, firmware);
   await page.goto('/');
   await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
-  const dialog = await openExport(page);
+  const dialog = await openSend(page);
   await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
   const send = dialog.getByRole('button', { name: 'Send to AR Cap', exact: true });
   await expect(dialog.getByRole('alert')).toContainText(
@@ -93,18 +94,19 @@ test('shows validation failure and can cancel a resumed upload without committin
   await send.click();
   await expect(dialog.getByRole('button', { name: 'Reconnect and continue' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Manage device routes' }).click();
-  const manager = page.getByRole('dialog', { name: 'Device', exact: true });
+  const manager = page.getByRole('dialog', { name: 'Device routes', exact: true });
   await manager.getByRole('button', { name: 'Reconnect device' }).click();
   await manager.getByRole('button', { name: 'Cancel upload' }).click();
   await expect(manager.getByText('Upload cancelled.', { exact: true })).toBeVisible();
-  await manager.getByRole('button', { name: 'Back to export' }).click();
+  await manager.getByRole('button', { name: 'Close', exact: true }).click();
+  await openSend(page);
   await expect(dialog.getByText('Upload cancelled.', { exact: true })).toBeVisible();
   await expect(send).toBeEnabled();
   expect(firmware.calls.filter((c) => c.group === 64 && c.cmd === 3)).toHaveLength(committed);
   expect(firmware.received).toHaveLength(0);
 });
 
-test('uses one management panel, preserves export settings, and shows global device status', async ({
+test('keeps file export separate, shares Bluetooth across tasks, and preserves send options', async ({
   page,
 }) => {
   const firmware = new Firmware();
@@ -114,33 +116,44 @@ test('uses one management panel, preserves export settings, and shows global dev
   ];
   await devicePeer(page, firmware);
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Device · Not connected', exact: true })).toBeVisible();
-  await expect(page.locator('.statusbar .device-status-button')).toHaveCount(0);
-  await expect(page.locator('.topbar .device-status-button')).toBeInViewport({ ratio: 1 });
-  await expect(page.locator('.device-status-button')).toHaveText('');
-  await expect(page.locator('.device-status-button')).toHaveAttribute('data-accent-color', 'gray');
-  await expect(page.locator('.device-status-button .lucide-bluetooth-off')).toHaveCount(1);
+  await expect(page.locator('.topbar .device-status-button')).toHaveCount(0);
+  await expect(page.locator('.topbar').getByRole('button', { name: 'Settings…', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator('.statusbar').getByRole('button', { name: /Route transfer|Firmware update|USB recovery/ }),
+  ).toHaveCount(0);
+  await deviceCommand(page, 'Bluetooth connection…');
+  const connection = page.getByRole('dialog', { name: 'Bluetooth connection', exact: true });
+  await connection.getByRole('button', { name: 'Connect device', exact: true }).click();
+  await expect(connection.getByText('Connected · AR Cap', { exact: true })).toBeVisible();
+  expect(firmware.calls).toHaveLength(0);
+  await connection.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(
+    page.locator('.statusbar').getByRole('button', { name: /Route transfer|Firmware update|USB recovery/ }),
+  ).toHaveCount(0);
   await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
-  const dialog = await openExport(page);
-  await dialog.getByLabel('File name').fill('My export');
+  const fileExport = await openExport(page);
+  await expect(fileExport.getByRole('button', { name: 'Download RTE', exact: true })).toBeEnabled();
+  await expect(fileExport.getByRole('button', { name: /send/i })).toHaveCount(0);
+  await fileExport.getByLabel('File name').fill('My export');
+  await fileExport.getByRole('button', { name: 'Close', exact: true }).click();
+  const dialog = await openSend(page);
+  await expect(dialog.getByLabel('File name')).toHaveCount(0);
+  await expect(dialog.getByLabel('Format', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: /Download/ })).toHaveCount(0);
   await dialog.getByText('Route processing options').click();
   await selectOption(dialog.getByLabel('Elevation sample spacing'), '20');
-  await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Send to AR Cap', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('Not enough storage');
   await dialog.getByRole('button', { name: 'Manage device routes' }).click();
-  const manager = page.getByRole('dialog', { name: 'Device', exact: true });
+  const manager = page.getByRole('dialog', { name: 'Device routes', exact: true });
   await expect(page.getByRole('dialog')).toHaveCount(1);
   await expect(manager.getByRole('rowheader', { name: 'Old route', exact: true })).toBeVisible();
-  await expect(manager.getByRole('button', { name: 'Connect another device' })).toBeVisible();
-  await manager.getByRole('button', { name: 'Disconnect', exact: true }).click();
-  await manager.getByRole('button', { name: 'Reconnect device' }).click();
-  await expect(page.locator('.device-status-button')).toHaveAttribute('aria-label', 'AR Cap · Connected');
-  await expect(page.locator('.device-status-button')).toHaveAttribute('data-accent-color', 'blue');
-  await expect(page.locator('.device-status-button .lucide-bluetooth')).toHaveCount(1);
+  await expect(manager.getByRole('button', { name: 'Firmware…', exact: true })).toHaveCount(0);
   firmware.freeBytes = 10000000;
-  await manager.getByRole('button', { name: 'Back to export' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(1);
-  await expect(dialog.getByLabel('File name')).toHaveValue('My export');
+  await manager.getByRole('button', { name: 'Close', exact: true }).click();
+  await openSend(page);
   await dialog.getByText('Route processing options').click();
   await expect(dialog.getByLabel('Elevation sample spacing')).toHaveAttribute('data-value', '20');
   await dialog.getByRole('button', { name: 'Send to AR Cap', exact: true }).click();
@@ -149,20 +162,107 @@ test('uses one management panel, preserves export settings, and shows global dev
   await manager.getByRole('button', { name: 'Delete Device route', exact: true }).click();
   await manager.getByRole('button', { name: 'Delete route', exact: true }).click();
   await expect(manager.getByRole('rowheader', { name: 'Device route', exact: true })).toHaveCount(0);
-  await manager.getByRole('button', { name: 'Back to export' }).click();
+  await manager.getByRole('button', { name: 'Close', exact: true }).click();
+  await openSend(page);
   await expect(dialog.getByRole('button', { name: 'Send to AR Cap', exact: true })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await openExport(page);
+  await expect(fileExport.getByLabel('File name')).toHaveValue('My export');
 });
 
-test('keeps the compact send action and device status visible at narrow widths', async ({ page }) => {
+test('reopens a paused route transfer from the status bar without changing its preview', async ({ page }) => {
+  const firmware = new Firmware();
+  firmware.lose = 'write';
+  await devicePeer(page, firmware);
+  await page.goto('/');
+  await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
+  const dialog = await openSend(page);
+  const routeLabel = await dialog.getByText(/^Route · /).textContent();
+  await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Reconnect and continue' })).toBeEnabled();
+  await dialog.getByText('Route processing options').click();
+  await expect(dialog.getByLabel('Elevation sample spacing')).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Route', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Route properties', exact: true }).click();
+  const name = page.locator('.inspector').getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Edited while the transfer is paused');
+  await name.press('Enter');
+  await page
+    .locator('.statusbar')
+    .getByRole('button', { name: /^Route transfer · / })
+    .click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(routeLabel!, { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Reconnect and continue' }).click();
+  await expect(dialog.getByRole('button', { name: 'Sent to AR Cap', exact: true })).toBeDisabled();
+  expect(firmware.items).toHaveLength(1);
+});
+
+test('hides an active route transfer without cancelling it or showing a stale firmware error', async ({
+  page,
+}) => {
+  const firmware = new Firmware();
+  const request = firmware.request;
+  let releaseUpload!: () => void;
+  let uploadStarted!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseUpload = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    uploadStarted = resolve;
+  });
+  firmware.request = async (...args) => {
+    if (args[0] === 8 && args[1] === 0) {
+      uploadStarted();
+      await held;
+    }
+    return request(...args);
+  };
+  await devicePeer(page, firmware);
+  await page.goto('/');
+  await deviceCommand(page, 'Update device firmware…');
+  const firmwareDialog = page.getByRole('dialog', { name: 'Firmware update', exact: true });
+  await firmwareDialog.getByLabel('Firmware file', { exact: true }).setInputFiles({
+    name: 'broken.bin',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('not firmware'),
+  });
+  await expect(firmwareDialog.getByRole('alert')).toContainText('Select a valid MCUboot .bin file');
+  await firmwareDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
+  const dialog = await openSend(page);
+  await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
+  await started;
+  try {
+    await dialog.getByRole('button', { name: 'Hide', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.statusbar').getByRole('button', { name: /^Firmware update · / })).toHaveCount(
+      0,
+    );
+    await page
+      .locator('.statusbar')
+      .getByRole('button', { name: /^Route transfer · / })
+      .click();
+    await expect(dialog.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
+  } finally {
+    releaseUpload();
+  }
+  await expect(dialog.getByRole('button', { name: 'Sent to AR Cap', exact: true })).toBeDisabled();
+  expect(firmware.items).toHaveLength(1);
+  expect(firmware.calls.filter(({ group, cmd }) => group === 64 && cmd === 4)).toHaveLength(0);
+});
+
+test('keeps the send action visible at narrow widths without device toolbar controls', async ({ page }) => {
   const firmware = new Firmware();
   await devicePeer(page, firmware);
   await page.goto('/');
   await page.setViewportSize({ width: 360, height: 600 });
-  await expect(page.getByRole('button', { name: 'Device · Not connected', exact: true })).toBeInViewport({
-    ratio: 1,
-  });
+  await expect(page.locator('.topbar .device-status-button')).toHaveCount(0);
   await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
-  const dialog = await openExport(page);
+  const dialog = await openSend(page);
   await expect(dialog.getByRole('button', { name: 'Connect and send…', exact: true })).toBeInViewport({
     ratio: 1,
   });
@@ -171,6 +271,45 @@ test('keeps the compact send action and device status visible at narrow widths',
   await expect(dialog.getByRole('button', { name: 'View device routes' })).toBeInViewport({ ratio: 1 });
   await expect(dialog).toBeInViewport({ ratio: 1 });
   expect(
-    (await dialog.getByRole('heading', { name: 'Export route', exact: true }).boundingBox())!.height,
+    (await dialog.getByRole('heading', { name: 'Send current route', exact: true }).boundingBox())!.height,
   ).toBeGreaterThanOrEqual(18);
+});
+
+test('can end a disconnected route validation task to open USB recovery without cancelling remote work', async ({
+  page,
+}) => {
+  const firmware = new Firmware();
+  firmware.lose = 'commit';
+  await devicePeer(page, firmware);
+  await page.goto('/');
+  await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
+  const dialog = await openSend(page);
+  await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'End task…', exact: true })).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Cancel upload', exact: true })).toBeDisabled();
+  expect(firmware.state).toBe('verifying');
+  const written = firmware.received.slice();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Device', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'USB recovery…', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page
+    .locator('.statusbar')
+    .getByRole('button', { name: /^Route transfer · / })
+    .click();
+  await dialog.getByRole('button', { name: 'End task…', exact: true }).click();
+  await expect(dialog.getByText(/does not cancel processing or remove data/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Keep task', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Reconnect and continue', exact: true })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'End task…', exact: true }).click();
+  await dialog.getByRole('button', { name: 'End task', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'End task…', exact: true })).toHaveCount(0);
+  expect(firmware.received).toEqual(written);
+  expect(firmware.state).toBe('verifying');
+  expect(firmware.calls.filter(({ group, cmd }) => group === 64 && cmd === 4)).toHaveLength(0);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await deviceCommand(page, 'USB recovery…');
+  await expect(page.getByRole('dialog', { name: 'USB recovery', exact: true })).toBeVisible();
 });

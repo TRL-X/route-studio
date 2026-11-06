@@ -29,6 +29,19 @@ export async function openExport(page: Page) {
   await expect(page.getByRole('dialog')).toBeVisible();
   return page.getByRole('dialog');
 }
+
+export async function deviceCommand(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Device', exact: true }).click();
+  await page.getByRole('menuitem', { name, exact: true }).click();
+}
+
+export async function openSend(page: Page) {
+  await deviceCommand(page, 'Send current route…');
+  const dialog = page.getByRole('dialog', { name: 'Send current route', exact: true });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
 export async function openMagnetics(page: Page) {
   const dialog = page.getByRole('dialog');
   if (await dialog.isVisible()) {

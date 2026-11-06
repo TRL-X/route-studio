@@ -1,5 +1,8 @@
 {
   "title": "Export route",
+  "sendTitle": "Send current route",
+  "routeName": "Route",
+  "hide": "Hide",
   "editProperties": "Edit route properties",
   "magneticSummary": "Magnetic declination is saved with the route."
 }
