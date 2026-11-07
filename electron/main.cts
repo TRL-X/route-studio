@@ -31,6 +31,15 @@ protocol.registerSchemesAsPrivileged([
 // Linux Chromium requires this switch for Web Bluetooth. Keep normal web security enabled.
 if (process.platform === 'linux') app.commandLine.appendSwitch('enable-experimental-web-platform-features');
 
+// Windows confirm-only and PIN-match pairing must be enabled before Chromium starts.
+if (process.platform === 'win32') {
+  const features = app.commandLine.getSwitchValue('enable-features');
+  app.commandLine.appendSwitch(
+    'enable-features',
+    [features, 'WebBluetoothConfirmPairingSupport'].filter(Boolean).join(','),
+  );
+}
+
 const userDataPath = app.commandLine.getSwitchValue('user-data-dir');
 if (userDataPath) app.setPath('userData', path.resolve(userDataPath));
 
