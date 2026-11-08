@@ -4,7 +4,7 @@ import { connectBluetooth, DeviceError, type Fields, type SmpRequest } from '../
 import { connectSerial } from '../../src/device/serial';
 import { FirmwareSession } from '../../src/device/firmware-session';
 import { parseFirmware } from '../../src/device/firmware';
-import { BluetoothSession } from '../../src/device/bluetooth-session';
+import { DeviceConnectionSession } from '../../src/device/connection-session';
 import { DeviceSession } from '../../src/device/session';
 import { Firmware as RoutePeer } from './firmware';
 
@@ -14,7 +14,7 @@ vi.mock('../../src/device/mcumgr', async (original) => ({
 }));
 vi.mock('../../src/device/serial', () => ({ connectSerial: vi.fn() }));
 
-async function setup(bluetooth?: BluetoothSession, routes?: RoutePeer) {
+async function setup(bluetooth?: DeviceConnectionSession, routes?: RoutePeer) {
   const bytes = new Uint8Array(32 + 800 + 40);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, 0x96f3b83d, true);
@@ -44,6 +44,7 @@ async function setup(bluetooth?: BluetoothSession, routes?: RoutePeer) {
   };
   const request: SmpRequest = async (group, cmd, op, fields, version) => {
     state.calls.push({ group, cmd, op, fields, version });
+    if (group === 0 && cmd === 6) return { buf_size: 1024, buf_count: 4 };
     if (group === 64 || group === 8) {
       if (!routes) return { rc: 8 };
       try {
@@ -96,10 +97,11 @@ async function setup(bluetooth?: BluetoothSession, routes?: RoutePeer) {
       request,
     };
   });
+  const serialPort = {} as Awaited<ReturnType<typeof connectSerial>>['port'];
   vi.mocked(connectSerial).mockImplementation(async (_signal, lost) => {
     state.lost = lost;
     return {
-      port: {} as Awaited<ReturnType<typeof connectSerial>>['port'],
+      port: serialPort,
       name: 'Serial',
       close: state.close,
       request,
@@ -194,7 +196,7 @@ test('a completed transfer must appear with the selected image hash before trial
   await session.upload();
   expect(session.snapshot()).toMatchObject({ phase: 'paused', error: { code: 'uploadMismatch' } });
   await session.testAndRestart();
-  expect(state.calls.some((call) => call.group === 0)).toBe(false);
+  expect(state.calls.some((call) => call.group === 0 && call.cmd === 5)).toBe(false);
 });
 
 test('reopening a firmware task preserves its error and does not perform device work', async () => {
@@ -208,8 +210,8 @@ test('reopening a firmware task preserves its error and does not perform device 
   const unsubscribe = session.subscribe(changed);
   const calls = state.calls.length;
   const connections = vi.mocked(connectBluetooth).mock.calls.length;
-  await session.setMode('ble');
-  await session.setMode('usb');
+  await session.setMode('application');
+  await session.setMode('recovery');
   expect(session.snapshot()).toBe(snapshot);
   expect(changed).not.toHaveBeenCalled();
   expect(state.calls).toHaveLength(calls);
@@ -239,7 +241,7 @@ test('does not restart when the device does not mark the selected image pending'
   await session.upload();
   await session.testAndRestart();
   expect(session.snapshot()).toMatchObject({ phase: 'uploaded', error: { code: 'uploadMismatch' } });
-  expect(state.calls.some((call) => call.group === 0)).toBe(false);
+  expect(state.calls.some((call) => call.group === 0 && call.cmd === 5)).toBe(false);
 });
 
 test('a late disconnect callback from an old connection cannot clear the new connection', async () => {
@@ -254,7 +256,7 @@ test('a late disconnect callback from an old connection cannot clear the new con
 
 test('USB recovery works without image-list/test/confirm support and tracks restart separately', async () => {
   const { session, state } = await setup();
-  await session.setMode('usb');
+  await session.setMode('recovery');
   await session.connect();
   await session.upload();
   expect(session.snapshot()).toMatchObject({ phase: 'recovered', recoveryRestarted: false });
@@ -264,13 +266,15 @@ test('USB recovery works without image-list/test/confirm support and tracks rest
   await session.restartRecovery();
   expect(session.snapshot()).toMatchObject({ phase: 'recovered', connected: false, recoveryRestarted: true });
   expect(
-    state.calls.every((call) => (call.group === 1 && call.cmd === 1) || (call.group === 0 && call.cmd === 5)),
+    state.calls.every(
+      (call) => (call.group === 1 && call.cmd === 1) || (call.group === 0 && [5, 6].includes(call.cmd)),
+    ),
   ).toBe(true);
 });
 
 test('a rejected USB reset does not claim a restart was requested successfully', async () => {
   const { session, state } = await setup();
-  await session.setMode('usb');
+  await session.setMode('recovery');
   await session.connect();
   await session.upload();
   state.rejectReset = true;
@@ -307,12 +311,12 @@ test('closing a late connection after cancellation never starts a transfer', asy
 });
 
 test('shares one Bluetooth connection and isolates unsupported route capabilities from firmware', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const { session, state } = await setup(bluetooth);
   const routes = new DeviceSession(bluetooth);
   const before = vi.mocked(connectBluetooth).mock.calls.length;
   await bluetooth.connect();
-  expect(state.calls).toHaveLength(0);
+  expect(state.calls).toHaveLength(1);
   await routes.connect();
   const routeError = routes.snapshot().error;
   expect(routeError).toMatchObject({ kind: 'device', rc: 8 });
@@ -323,13 +327,14 @@ test('shares one Bluetooth connection and isolates unsupported route capabilitie
   expect(vi.mocked(connectBluetooth).mock.calls.length - before).toBe(1);
   expect(state.close).not.toHaveBeenCalled();
   expect(state.calls.map((call) => [call.group, call.version])).toEqual([
+    [0, 2],
     [64, 2],
-    [1, 1],
+    [1, 2],
   ]);
 });
 
 test('shares the same connection between route catalog and firmware inspection', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const { session, state } = await setup(bluetooth, new RoutePeer());
   const routes = new DeviceSession(bluetooth);
   const before = vi.mocked(connectBluetooth).mock.calls.length;
@@ -343,7 +348,7 @@ test('shares the same connection between route catalog and firmware inspection',
 });
 
 test('selecting a new idle Bluetooth target clears results from the previous target', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const { session, state, image } = await setup(bluetooth);
   const routes = new DeviceSession(bluetooth);
   state.images = [{ slot: 0, version: image.version, hash: image.imageHash, active: true, confirmed: true }];
@@ -362,7 +367,7 @@ test('selecting a new idle Bluetooth target clears results from the previous tar
 });
 
 test('reserves a disconnected route transaction against firmware, deletion, and target switching', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const peer = new RoutePeer();
   const { session, state } = await setup(bluetooth, peer);
   const routes = new DeviceSession(bluetooth);
@@ -386,7 +391,7 @@ test('reserves a disconnected route transaction against firmware, deletion, and 
 });
 
 test('ending a disconnected route transaction unlocks USB recovery without changing remote bytes', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const peer = new RoutePeer();
   const { session, state } = await setup(bluetooth, peer);
   const routes = new DeviceSession(bluetooth);
@@ -406,15 +411,15 @@ test('ending a disconnected route transaction unlocks USB recovery without chang
     error: undefined,
   });
   expect(bluetooth.snapshot().task).toBeNull();
-  await session.setMode('usb');
+  await session.setMode('recovery');
   await session.connect();
-  expect(session.snapshot()).toMatchObject({ mode: 'usb', connected: true });
-  expect(state.calls).toHaveLength(requestCount);
+  expect(session.snapshot()).toMatchObject({ mode: 'recovery', connected: true });
+  expect(state.calls).toHaveLength(requestCount + 1);
   expect(peer.received).toEqual(bytes);
 });
 
 test('freezes the firmware target, transport and file until a paused task is explicitly discarded', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const { session, state, file } = await setup(bluetooth, new RoutePeer());
   const routes = new DeviceSession(bluetooth);
   await session.connect();
@@ -422,44 +427,50 @@ test('freezes the firmware target, transport and file until a paused task is exp
   await session.upload();
   const image = session.snapshot().image;
   const before = state.calls.length;
-  await session.setMode('usb');
+  await session.setMode('recovery');
   await session.selectFile({ ...file, name: 'replacement.bin' });
   await session.chooseAnother();
   await routes.send(new Uint8Array(10));
   await bluetooth.connect(true);
-  expect(session.snapshot()).toMatchObject({ mode: 'ble', image, filename: file.name, pending: true });
+  expect(session.snapshot()).toMatchObject({
+    mode: 'application',
+    image,
+    filename: file.name,
+    pending: true,
+  });
   expect(state.calls).toHaveLength(before);
   expect(bluetooth.snapshot().task).toBe('firmware');
   session.abandon();
   expect(session.snapshot()).toMatchObject({ image: undefined, phase: 'ready', pending: false });
   expect(bluetooth.snapshot().task).toBeNull();
-  await session.setMode('usb');
-  expect(session.snapshot().mode).toBe('usb');
+  await session.setMode('recovery');
+  expect(session.snapshot().mode).toBe('recovery');
 });
 
-test('USB recovery keeps Bluetooth connected but excludes route operations until discard', async () => {
-  const bluetooth = new BluetoothSession();
+test('USB recovery closes the normal connection and excludes routes until application mode is restored', async () => {
+  const bluetooth = new DeviceConnectionSession();
   const { session, state } = await setup(bluetooth, new RoutePeer());
   const routes = new DeviceSession(bluetooth);
   await routes.connect();
-  await session.setMode('usb');
-  expect(bluetooth.snapshot().connected).toBe(true);
+  await session.setMode('recovery');
+  expect(bluetooth.snapshot().connected).toBe(false);
   await session.connect();
   state.loseUpload = true;
   await session.upload();
-  expect(session.snapshot()).toMatchObject({ mode: 'usb', phase: 'paused', connected: false });
-  expect(bluetooth.snapshot()).toMatchObject({ connected: true, task: 'firmware' });
+  expect(session.snapshot()).toMatchObject({ mode: 'recovery', phase: 'paused', connected: false });
+  expect(bluetooth.snapshot()).toMatchObject({ connected: false, task: 'firmware' });
   const before = state.calls.length;
   await routes.refresh();
   expect(state.calls).toHaveLength(before);
   session.abandon();
-  await routes.refresh();
+  await session.setMode('application');
+  await routes.connect();
   expect(routes.snapshot().catalog).toBeDefined();
   expect(state.calls.length).toBeGreaterThan(before);
 });
 
 test('ending an unreachable trial boot releases USB recovery without mutating the target', async () => {
-  const bluetooth = new BluetoothSession();
+  const bluetooth = new DeviceConnectionSession();
   const { session, state } = await setup(bluetooth);
   await session.connect();
   await session.upload();
@@ -470,15 +481,15 @@ test('ending an unreachable trial boot releases USB recovery without mutating th
   expect(state.calls).toHaveLength(before);
   expect(bluetooth.snapshot().task).toBeNull();
   expect(session.snapshot()).toMatchObject({ phase: 'ready', pending: false, image: undefined });
-  await session.setMode('usb');
-  expect(session.snapshot().mode).toBe('usb');
+  await session.setMode('recovery');
+  expect(session.snapshot().mode).toBe('recovery');
   expect(state.calls).toHaveLength(before);
 });
 
 test('one update action uploads, trial boots and reconnects without automatically confirming', async () => {
   vi.useFakeTimers();
   try {
-    const bluetooth = new BluetoothSession();
+    const bluetooth = new DeviceConnectionSession();
     const { session, state } = await setup(bluetooth);
     const updating = session.update();
     await vi.runAllTimersAsync();
@@ -527,6 +538,99 @@ test('cancelling automatic reconnect does not start a later retry', async () => 
     await updating;
     expect(session.snapshot()).toMatchObject({ phase: 'awaitingReconnect', busy: null, error: undefined });
     expect(vi.mocked(connectBluetooth).mock.calls).toHaveLength(before);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('normal USB performs upload, test boot, reconnect and confirmation using SMP v2', async () => {
+  vi.useFakeTimers();
+  try {
+    const connection = new DeviceConnectionSession();
+    const { session, state } = await setup(connection);
+    connection.select('usb');
+    const updating = session.update();
+    await vi.runAllTimersAsync();
+    await updating;
+    expect(session.snapshot()).toMatchObject({ mode: 'application', transport: 'usb', phase: 'unconfirmed' });
+    expect(state.calls.every((call) => call.version === 2)).toBe(true);
+    await session.confirm();
+    expect(session.snapshot().phase).toBe('complete');
+    session.dispose();
+    connection.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+test('waits through a three-minute swap without sending another reset or upload', async () => {
+  vi.useFakeTimers();
+  try {
+    const { session, state } = await setup();
+    const start = Date.now();
+    const original = vi.mocked(connectBluetooth).getMockImplementation()!;
+    vi.mocked(connectBluetooth).mockImplementation(async (...args) => {
+      if (state.calls.some((call) => call.group === 0 && call.cmd === 5) && Date.now() - start < 180000)
+        throw new DeviceError('disconnected');
+      return original(...args);
+    });
+    const updating = session.update();
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(session.snapshot()).toMatchObject({
+      phase: 'awaitingReconnect',
+      busy: 'connecting',
+      pending: true,
+    });
+    const uploaded = state.calls.filter((call) => call.group === 1 && call.cmd === 1).length;
+    await vi.advanceTimersByTimeAsync(65000);
+    await updating;
+    expect(session.snapshot()).toMatchObject({ phase: 'unconfirmed', busy: null, error: undefined });
+    expect(state.calls.filter((call) => call.group === 0 && call.cmd === 5)).toHaveLength(1);
+    expect(state.calls.filter((call) => call.group === 1 && call.cmd === 1)).toHaveLength(uploaded);
+    session.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+test('boot timeout keeps the task and continue-waiting only checks the existing update', async () => {
+  vi.useFakeTimers();
+  try {
+    const { session, state } = await setup();
+    session.connectionSession.configure({ bootWaitMs: 1000, bootInitialDelayMs: 0, bootRetryDelayMs: 100 });
+    state.rollback = true;
+    const updating = session.update();
+    await vi.runAllTimersAsync();
+    await updating;
+    expect(session.snapshot()).toMatchObject({
+      phase: 'awaitingReconnect',
+      pending: true,
+      error: { code: 'bootTimeout' },
+    });
+    const resets = state.calls.filter((call) => call.group === 0 && call.cmd === 5).length;
+    const uploads = state.calls.filter((call) => call.group === 1 && call.cmd === 1).length;
+    const waiting = session.continueWaiting();
+    await vi.runAllTimersAsync();
+    await waiting;
+    expect(state.calls.filter((call) => call.group === 0 && call.cmd === 5)).toHaveLength(resets);
+    expect(state.calls.filter((call) => call.group === 1 && call.cmd === 1)).toHaveLength(uploads);
+    session.dispose();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('upload-only policy can be followed by an explicit test-and-restart action', async () => {
+  vi.useFakeTimers();
+  try {
+    const { session, state } = await setup();
+    session.connectionSession.configure({ activation: 'upload-only' });
+    await session.update();
+    expect(session.snapshot().phase).toBe('uploaded');
+    expect(state.calls.some((call) => call.group === 0 && call.cmd === 5)).toBe(false);
+    const activation = session.activate();
+    await vi.runAllTimersAsync();
+    await activation;
+    expect(session.snapshot().phase).toBe('unconfirmed');
+    session.dispose();
   } finally {
     vi.useRealTimers();
   }

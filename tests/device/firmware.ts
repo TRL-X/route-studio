@@ -35,6 +35,7 @@ export class Firmware {
   }
   request: SmpRequest = async (group, cmd, op, fields) => {
     this.calls.push({ group, cmd, op, fields });
+    if (group === 0 && cmd === 6 && op === 'read') return { buf_size: 1024, buf_count: 4 };
     if (group === 64) {
       if (op !== (cmd <= 1 ? 'read' : 'write')) throw new Error('Wrong operation');
       if (cmd === 0 && fields.upload_id === undefined)
@@ -74,7 +75,7 @@ export class Firmware {
         if (fields.if_rev !== undefined && fields.if_rev !== this.rev) return this.fail(11);
         const cursor = fields.cursor as number;
         if (cursor && fields.if_rev === undefined) throw new Error('Missing revision');
-        const items = this.items.slice(cursor, cursor + 4);
+        const items = this.items.slice(cursor, cursor + (fields.limit as number));
         return {
           rev: this.rev,
           items,

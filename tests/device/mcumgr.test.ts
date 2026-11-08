@@ -126,3 +126,22 @@ test('disconnection rejects an outstanding request', async () => {
   channel.reply = () => lifetime.abort(new DeviceError('disconnected'));
   await expect(request(64, 0, 'read', {})).rejects.toMatchObject({ kind: 'disconnected' });
 });
+
+test('a verified 247-byte ATT MTU uses 244-byte writes, preserving SMP packet boundaries', async () => {
+  const { defaultProfile } = await import('../../src/device/config');
+  const profile = { ...defaultProfile('application-ble'), bleWritePayloadBytes: 244 };
+  const channel = new Channel();
+  const lifetime = new AbortController();
+  const request = requestClient(
+    channel as unknown as BluetoothRemoteGATTCharacteristic,
+    lifetime.signal,
+    (error) => lifetime.abort(error),
+    2,
+    profile,
+  );
+  channel.reply = (frame) => channel.respond(frame, encode({ off: 900 }));
+  expect(await request(1, 1, 'write', { off: 0, data: new Uint8Array(900) })).toEqual({ off: 900 });
+  expect(channel.writes[0].length).toBe(244);
+  expect(channel.writes.every((fragment) => fragment.length <= 244)).toBe(true);
+  expect(channel.frames).toHaveLength(1);
+});

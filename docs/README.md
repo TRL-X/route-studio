@@ -7,7 +7,8 @@ Find instructions for using Route Studio, working on its code, and publishing de
 ## Use the editor
 
 - [User guide](user-guide.md): editing, saving, resampling, appearance and keyboard controls.
-- [Online services and device upload](user-guide.md#online-services-and-device-upload): maps, terrain, magnetic lookup and Bluetooth.
+- [Online services and device upload](user-guide.md#online-services-and-device-upload): maps, terrain, magnetic lookup and BLE/USB.
+- [Device profiles](device-profiles.md): connection defaults, compatibility and upgrade waiting policies.
 - [File formats](formats.md): supported inputs and outputs, data preservation and RTE compatibility.
 - [Software updates](user-guide.md#software-updates): updating an installed desktop app.
 

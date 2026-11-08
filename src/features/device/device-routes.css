@@ -24,8 +24,3 @@
 .device-upload-status .device-manage-link {
   margin: 0;
 }
-
-/* Leave room for the dialog overlay's vertical padding when status adds a row. */
-.export-dialog:has(.device-upload-status) {
-  max-height: min(800px, calc(100dvh - 64px));
-}

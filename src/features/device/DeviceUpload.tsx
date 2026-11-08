@@ -21,7 +21,7 @@ export function DeviceUpload({
 }) {
   const { state, session } = device;
   const t = deviceStrings[lang];
-  const supported = window.isSecureContext && !!navigator.bluetooth?.requestDevice;
+  const supported = session.supported();
   // The preview can be regenerated when returning from device management. Only show
   // success for the exact payload that was sent, not another route or set of options.
   const samePayload = useMemo(

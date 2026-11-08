@@ -2,7 +2,7 @@
 
 A route editor for TRL-X devices, available on the web and as an Electron desktop app. Import FIT, GPX, KML or RTE, edit geometry, stations and elevations, then export RTE, GPX, KML or FIT. The interface supports English and Simplified Chinese.
 
-Save editable work as `.routeproj` files and send exported RTE routes to a device over Bluetooth. The installed desktop app works offline for local editing and conversion; maps, terrain and magnetic lookup require internet access.
+Save editable work as `.routeproj` files and send exported RTE routes to a device over Bluetooth or USB. The installed desktop app works offline for local editing and conversion; maps, terrain and magnetic lookup require internet access.
 
 ## Quick start
 

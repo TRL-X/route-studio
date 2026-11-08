@@ -1,0 +1,4 @@
+.device-dialog {
+  max-height: min(800px, calc(100dvh - 64px));
+  overflow-wrap: anywhere;
+}

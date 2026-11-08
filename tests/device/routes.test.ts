@@ -77,3 +77,18 @@ test('distinguishes global SMP errors and route/FS group errors', () => {
   }
   expect(() => checked({ rc: '0' })).toThrow(DeviceError);
 });
+
+test('maps only explicitly configured v1 route errors into group errors', async () => {
+  const { defaultProfile } = await import('../../src/device/config');
+  const mapped = new RouteClient(async () => ({ rc: 101 }), {
+    ...defaultProfile('application-usb'),
+    protocolVersion: 1,
+    routeV1Errors: { '101': 11 },
+  });
+  await expect(mapped.delete(1, 0n)).rejects.toMatchObject({ group: 64, rc: 11 });
+  const unmapped = new RouteClient(async () => ({ rc: 2 }), {
+    ...defaultProfile('application-usb'),
+    protocolVersion: 1,
+  });
+  await expect(unmapped.delete(1, 0n)).rejects.toMatchObject({ group: 0, rc: 2 });
+});

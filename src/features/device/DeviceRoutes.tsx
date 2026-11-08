@@ -1,6 +1,7 @@
 import { Button, Flex, Text, Table, Badge, Callout, Progress } from '@radix-ui/themes';
 import { useEffect, useState } from 'react';
-import { Bluetooth, RefreshCw } from 'lucide-react';
+import { Bluetooth, Cable, RefreshCw } from 'lucide-react';
+import { ConnectionSettings } from './ConnectionSettings';
 import { Modal } from '../../ui/Modal';
 import { DeviceError } from '../../device/mcumgr';
 import type { DeviceControls } from './useDeviceRoutes';
@@ -8,18 +9,19 @@ import type { DeviceRoute } from '../../device/routes';
 import type { Lang } from '../../i18n/index';
 import { deviceError, deviceStrings } from './deviceStrings';
 import './device-routes.css';
+import './device-dialog.css';
 
 export function DeviceConnectionControls({ device, lang }: { device: DeviceControls; lang: Lang }) {
   const { state, session } = device;
   const t = deviceStrings[lang];
-  if (!window.isSecureContext || !navigator.bluetooth?.requestDevice)
-    return (
-      <Text size="2" color="gray">
-        {t.unsupported}
-      </Text>
-    );
   return (
     <Flex direction="column" gap="2">
+      <ConnectionSettings session={session.connectionSession} lang={lang} />
+      {!session.supported() && (
+        <Text size="2" color="gray">
+          {t.unsupported}
+        </Text>
+      )}
       <Text size="2" role="status">
         {state.busy === 'connecting'
           ? t.connecting
@@ -27,7 +29,7 @@ export function DeviceConnectionControls({ device, lang }: { device: DeviceContr
             ? t.connected.replace('{name}', state.deviceName)
             : state.remembered
               ? t.disconnected
-              : t.connect}
+              : t.notConnected}
       </Text>
       <Flex gap="2" wrap="wrap">
         {state.busy === 'connecting' ? (
@@ -40,8 +42,8 @@ export function DeviceConnectionControls({ device, lang }: { device: DeviceContr
             {t.refresh}
           </Button>
         ) : (
-          <Button disabled={!!state.busy} onClick={() => void session.connect()}>
-            <Bluetooth size={16} />
+          <Button disabled={!!state.busy || !session.supported()} onClick={() => void session.connect()}>
+            {state.transport === 'usb' ? <Cable size={16} /> : <Bluetooth size={16} />}
             {state.remembered ? t.reconnect : t.connect}
           </Button>
         )}
@@ -189,7 +191,7 @@ export function DeviceRoutes({
     if (session.snapshot().connected) void session.refresh();
   }, [session]);
   return (
-    <Modal title={t.title} maxWidth="760px" onClose={onClose}>
+    <Modal className="device-dialog" title={t.title} maxWidth="760px" onClose={onClose}>
       <Flex direction="column" gap="4">
         <DeviceConnectionControls device={device} lang={lang} />
         <DeviceTransfer device={device} lang={lang} />

@@ -5,6 +5,7 @@ import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { declinationSettings } from '../../domain/declination';
 import type { DeviceControls } from '../device/useDeviceRoutes';
 import { DeviceUpload } from '../device/DeviceUpload';
+import { ConnectionSettings } from '../device/ConnectionSettings';
 import type { LookupState } from '../declination/useDeclinationLookup';
 import en from '../../i18n/en.export.json';
 import zh from '../../i18n/zh-CN.export.json';
@@ -171,6 +172,9 @@ export function ExportDialog({
         ) : undefined
       }
     >
+      {send && !send.device.state.connected && !send.device.state.pending && (
+        <ConnectionSettings session={send.device.session.connectionSession} lang={lang} />
+      )}
       {format === 'rte' && (
         <>
           <details>

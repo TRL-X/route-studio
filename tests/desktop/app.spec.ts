@@ -715,7 +715,7 @@ test('keeps device actions in a submenu and opens route management without a loc
   await menu.getByRole('menuitem', { name: 'Device', exact: true }).click();
   const deviceMenu = page.getByRole('menu', { name: 'Device', exact: true });
   await expect(deviceMenu.getByRole('menuitem')).toHaveText([
-    'Bluetooth connection…',
+    'Device connection…',
     'Send current route…',
     'Manage device routes…',
     'Update device firmware…',

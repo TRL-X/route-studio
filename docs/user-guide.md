@@ -51,9 +51,9 @@ The [Planetary Computer GLO-30 collection](https://planetarycomputer.microsoft.c
 
 Edit this in the inspector through **Menu → Route → Route properties**. Automatic lookup sends the route's distance midpoint and selected UTC date to BGS WMM2025. Results are saved in the project for offline use. Retry, enter a manual value (east positive), or omit declination if unavailable. Imported RTE magnetic metadata stays unchanged until edited.
 
-### Bluetooth
+### Device connections
 
-Open **Menu → Device → Bluetooth connection…** to connect, disconnect or choose another device. The connection is shared by route sending, device route management and Bluetooth firmware updates. Closing a panel keeps the connection available for the next task.
+Open **Menu → Device → Device connection…** and choose **Bluetooth** or **USB** to connect, disconnect or choose another device. The connection is shared by route sending, device route management and normal firmware updates. Closing a panel keeps the connection available for the next task.
 
 Choose **Menu → Device → Send current route…** to review the current route in RTE format, adjust processing options and resolve validation issues. Choose **Connect and send…**, or **Send to [device name]** when connected. Pairing is followed by sending automatically. This preview uses the same conversion and validation as file export; **Export…** only saves files. Route Studio waits for device validation and catalog publication before reporting success. Names come from RTE metadata; no device path is required.
 
@@ -63,23 +63,33 @@ Active or interrupted transfers appear in the bottom status bar; select the task
 
 If a paused route transfer cannot be resumed or cancelled, **End task…** asks for confirmation before stopping local tracking and releasing the connection for another task, including USB recovery. This does not cancel processing on the device or delete data already written there. **Keep task** returns to the transfer. Check the device route list after reconnecting to determine its final state.
 
-Web use requires HTTPS or localhost and Web Bluetooth support; desktop use requires OS permission and a working adapter. Physical-device acceptance testing is still required on each platform.
+USB normal mode requires an SMP server in the running application, with the same route, filesystem, image and OS commands as Bluetooth. MCUboot recovery alone does not provide route management. Web use requires HTTPS or localhost and Web Bluetooth or Web Serial support; desktop use requires the corresponding OS permissions and hardware. Physical-device acceptance testing is still required on each platform.
 
 ### Firmware updates and recovery
 
-Open **Menu → Device → Update device firmware…** for a Bluetooth update, or **Menu → Device → USB recovery…** for serial recovery. Each entry opens its own workflow directly. Select a local MCUboot `.bin` file intended for the connected device. Route Studio checks its structure and SHA-256 digest and displays the version and size; the bootloader is responsible for checking its signature and accepting the image. Files are limited to 64 MiB. HEX files, archives, encrypted or compressed images, and combined factory images are not supported. Firmware is not downloaded automatically.
+Open **Menu → Device → Update device firmware…** for a normal Bluetooth or USB update, or **Menu → Device → USB recovery…** for serial recovery. Each entry opens its own workflow directly. Select a local MCUboot `.bin` file intended for the connected device. Route Studio checks its structure and SHA-256 digest and displays the version and size; the bootloader is responsible for checking its signature and accepting the image. The default local file limit is 64 MiB and can be changed in the connection profile. HEX files, archives, encrypted or compressed images, and combined factory images are not supported. Firmware is not downloaded automatically.
 
-For **Bluetooth update**:
+For **normal firmware updates**:
 
-1. Select a firmware file, then choose **Start update**. Route Studio uses the current Bluetooth connection or asks you to choose a device. **Connect Bluetooth** is also available to inspect the running version first.
-2. Route Studio uploads the file, requests a test restart, reconnects and checks the running firmware. **Pause upload** stops between complete requests. After a disconnection, choose **Continue update** with the same file and device; the device's returned offset determines where transfer continues. If the device has not finished restarting during automatic checks, choose **Reconnect and check** or **Check firmware status** once it is available.
+1. Select a firmware file, then choose **Start update**. Route Studio uses the current device connection or asks you to choose a device. **Connect Bluetooth** or **Connect USB** is also available to inspect the running version first.
+2. Route Studio uploads the file, requests a test restart, reconnects and checks the running firmware. **Pause upload** stops between complete requests. After a disconnection, choose **Continue update** with the same file and device; the device's returned offset determines where transfer continues. After restart, Route Studio waits up to five minutes by default for the application to return, allowing time for MCUboot sector swapping. Expiry keeps the task pending; **Continue waiting** starts another waiting period without another upload or reset. **Reconnect and check** or **Check firmware status** explicitly checks the running image.
 3. If the new firmware is running but unconfirmed, check that the device works correctly before choosing **Confirm firmware**. Firmware that confirms itself is recognized automatically. Success is reported only when the selected image is running and confirmed. A previous or different running image is reported separately.
 
-For **USB recovery**, first enter the bootloader's serial recovery mode using the device's instructions. In **Menu → Device → USB recovery…**, acknowledge that the device is in recovery mode and choose **Connect USB** to select its serial port. **Recover firmware** writes the selected image; recovery can overwrite the running firmware, so keep USB connected until it finishes. Then choose **Restart device** and check that it starts correctly. Recovery uses upload and reset commands without the Bluetooth test/confirm sequence, and does not verify application health. It does not require a Bluetooth connection.
+For **USB recovery**, first enter the bootloader's serial recovery mode using the device's instructions. In **Menu → Device → USB recovery…**, acknowledge that the device is in recovery mode and choose **Connect USB** to select its serial port. **Recover firmware** writes the selected image; recovery can overwrite the running firmware, so keep USB connected until it finishes. Then choose **Restart device** and check that it starts correctly. Recovery uses upload and reset commands without the normal test/confirm sequence, and does not verify application health. It does not require a Bluetooth connection.
 
-Bluetooth requires Web Bluetooth; USB requires Web Serial. Use HTTPS or localhost in a supporting browser, or the desktop app with the required OS permissions. USB recovery supports standard SMP over console framing at 115200 baud, not raw UART framing. The serial port picker does not filter by manufacturer or product.
+Bluetooth requires Web Bluetooth; USB requires Web Serial. Use HTTPS or localhost in a supporting browser, or the desktop app with the required OS permissions. USB defaults to standard SMP over console framing at 115200 baud. Raw binary framing and optional VID/PID filters are available in the connection profile and must match the device. Normal connections default to SMP v2; MCUboot recovery defaults to v1. Both can be changed before connecting. Entering recovery closes the normal connection; only one endpoint is active.
 
 Firmware transfer state stays in memory while the app remains open. Closing or hiding a panel retains the selected file, connection and progress; reopen it from **Menu → Device** or the active task in the status bar. **End task…** asks for confirmation before stopping local tracking and releasing the connection for another task, including USB recovery. It keeps firmware already written to the device; an unconfirmed test image can still revert on a later restart. Choose **Keep task** to continue tracking it. Refreshing or closing the app loses local tracking state. The desktop app blocks closing or quitting during a firmware operation; pause or cancel the operation first. Device resets can also discard upload progress. Finish or cancel an active transfer before starting another transfer on the same connection. Selecting another file starts a new local workflow.
+
+### Connection profiles
+
+**Advanced connection settings** exposes a JSON profile for the selected connection. Bluetooth application mode, USB application mode and USB recovery save independent profiles in local storage. Disconnect and finish any pending task before applying changes. The protocol version is also available as a direct selector. **Load defaults** prepares a default profile; **Apply settings** validates and saves it. The full field reference is in [Device profiles](device-profiles.md).
+
+In the send preview, connection settings appear above the route processing options. On smaller windows, scroll the preview to edit settings; the send action stays in the bottom bar.
+
+On connection, Route Studio queries MCUmgr parameters and displays whether the buffer limit came from the device or a profile fallback. Only an explicit unsupported-command response permits fallback; malformed replies, timeouts and other errors remain errors. A reported buffer count does not enable concurrent requests. Upload data is sized to fit the actual encoded SMP request and the peer limit.
+
+Web Bluetooth does not expose the negotiated ATT MTU. The safe default is 20 bytes per GATT write; a verified 247-byte ATT MTU allows a 244-byte write payload. Selecting 244 does not request a larger MTU. Reconnects reuse the original authorized device/serial-port handle, never a different port selected only by VID/PID. If the OS exposes a rebooted device as a new endpoint, automatic reconnection may need manual intervention; cross-transport migration of pending tasks is not supported.
 
 ## Desktop files and windows
 

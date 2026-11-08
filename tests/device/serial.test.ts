@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { decode, encode } from 'cborg';
 import { connectSerial, encodeSerialPacket, SerialDecoder, serialCrc16 } from '../../src/device/serial';
+import { defaultProfile } from '../../src/device/config';
 import type { SerialPort } from '../../src/device/serial-types';
 
 class Port extends EventTarget implements SerialPort {
@@ -95,13 +96,20 @@ test('serializes requests and reads fragmented replies using SMP v1', async () =
     requests.push(packet);
     port.respond(packet, { off: 512, padding: 'a'.repeat(300) });
   };
-  const connection = await connectSerial(abort.signal, lost);
+  const connection = await connectSerial(abort.signal, lost, undefined, defaultProfile('recovery-usb'));
   const replies = await Promise.all([
     connection.request(1, 1, 'write', { off: 0, data: new Uint8Array(256), len: 512 }),
     connection.request(0, 5, 'write', {}),
   ]);
   expect(serial.requestPort).toHaveBeenCalledOnce();
-  expect(port.open).toHaveBeenCalledWith({ baudRate: 115200, bufferSize: 4096, flowControl: 'none' });
+  expect(port.open).toHaveBeenCalledWith({
+    baudRate: 115200,
+    bufferSize: 4096,
+    flowControl: 'none',
+    dataBits: 8,
+    stopBits: 1,
+    parity: 'none',
+  });
   expect(port.setSignals).toHaveBeenCalledWith({ dataTerminalReady: true });
   expect(requests.map((p) => [p[0], p[5], p[6], p[7]])).toEqual([
     [2, 1, 0, 1],
@@ -122,7 +130,7 @@ test('invalid response headers reject queued work and release the port', async (
     port.respond(packet, {}, (reply) => {
       reply[6]++;
     });
-  const connection = await connectSerial(abort.signal, lost);
+  const connection = await connectSerial(abort.signal, lost, undefined, defaultProfile('recovery-usb'));
   const result = await Promise.allSettled([
     connection.request(1, 0, 'read', {}),
     connection.request(1, 0, 'read', {}),
@@ -136,7 +144,7 @@ test('invalid response headers reject queued work and release the port', async (
 
 test('cancellation interrupts a pending read and releases stream locks', async () => {
   const { port, abort, lost } = setup();
-  const connection = await connectSerial(abort.signal, lost);
+  const connection = await connectSerial(abort.signal, lost, undefined, defaultProfile('recovery-usb'));
   const pending = connection.request(1, 0, 'read', {});
   const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   await vi.waitFor(() => expect(port.writes.length).toBeGreaterThan(0));
@@ -152,7 +160,7 @@ test('cancellation interrupts a pending read and releases stream locks', async (
 test('timeout invalidates the transport and rejects later operations', async () => {
   vi.useFakeTimers();
   const { abort, lost, port } = setup();
-  const connection = await connectSerial(abort.signal, lost);
+  const connection = await connectSerial(abort.signal, lost, undefined, defaultProfile('recovery-usb'));
   const pending = expect(connection.request(1, 0, 'read', {})).rejects.toMatchObject({ kind: 'timeout' });
   await vi.advanceTimersByTimeAsync(60000);
   await pending;
@@ -173,7 +181,7 @@ test('a signal cancelled while opening closes the newly opened port', async () =
 
 test('a disconnected serial device rejects the request and closes without holding locks', async () => {
   const { port, abort, lost } = setup();
-  const connection = await connectSerial(abort.signal, lost);
+  const connection = await connectSerial(abort.signal, lost, undefined, defaultProfile('recovery-usb'));
   const rejected = expect(connection.request(1, 0, 'read', {})).rejects.toMatchObject({
     kind: 'disconnected',
   });
@@ -189,7 +197,7 @@ test('a disconnected serial device rejects the request and closes without holdin
 
 test('reconnecting waits for the previous port close before attempting to open', async () => {
   const { port, abort, lost } = setup();
-  const connection = await connectSerial(abort.signal, lost);
+  const connection = await connectSerial(abort.signal, lost, undefined, defaultProfile('recovery-usb'));
   let finishClose!: () => void;
   port.close.mockImplementation(
     () =>
@@ -208,4 +216,47 @@ test('reconnecting waits for the previous port close before attempting to open',
   await closing;
   await rejected;
   expect(port.open).toHaveBeenCalledOnce();
+});
+
+test('normal USB defaults to SMP v2 and supports explicit per-request v1', async () => {
+  const { port, abort, lost } = setup();
+  const versions: number[] = [];
+  port.onRequest = (packet) => {
+    versions.push(packet[0]);
+    port.respond(packet, {});
+  };
+  const connection = await connectSerial(abort.signal, lost);
+  await connection.request(64, 0, 'read', {});
+  await connection.request(0, 0, 'write', {}, 1);
+  expect(versions).toEqual([8, 2]);
+  await connection.close();
+});
+test('raw USB uses binary SMP without console framing and honors serial settings', async () => {
+  const { PacketDecoder } = await import('../../src/device/smp');
+  const { port, abort, lost } = setup();
+  // The fixture normally decodes console lines. Replace its parser with a raw stream parser.
+  port.decoder = new PacketDecoder(1024) as unknown as SerialDecoder;
+  port.onRequest = (packet) => {
+    const body = encode({ buf_size: 1024, buf_count: 4 });
+    const reply = new Uint8Array(body.length + 8);
+    reply.set(packet.subarray(0, 8));
+    reply[0]++;
+    new DataView(reply.buffer).setUint16(2, body.length);
+    reply.set(body, 8);
+    port.controller.enqueue(reply.subarray(0, 5));
+    port.controller.enqueue(reply.subarray(5));
+  };
+  const profile = {
+    ...defaultProfile('application-usb'),
+    serialFraming: 'raw' as const,
+    baudRate: 921600,
+    dtr: 'preserve' as const,
+    rts: 'clear' as const,
+  };
+  const connection = await connectSerial(abort.signal, lost, undefined, profile);
+  expect(await connection.request(0, 6, 'read', {})).toEqual({ buf_size: 1024, buf_count: 4 });
+  expect(port.writes[0][0]).toBe(8);
+  expect(port.open).toHaveBeenCalledWith(expect.objectContaining({ baudRate: 921600 }));
+  expect(port.setSignals).toHaveBeenCalledWith({ requestToSend: false });
+  await connection.close();
 });
