@@ -3,7 +3,7 @@ import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { Choice } from '../../ui/Choice';
 import { Modal } from '../../ui/Modal';
-import { strings, type Copy, type Lang } from '../../i18n';
+import { parenthetical, strings, type Copy, type Lang } from '../../i18n';
 import type { useRouteFiles } from './useRouteFiles';
 
 function ReplaceRouteDialog({
@@ -99,11 +99,7 @@ export function FileDialogs({ files, lang }: { files: ReturnType<typeof useRoute
             options={[
               ...choices.list.map((item, i) => ({
                 value: i,
-                label: (
-                  <>
-                    {item.name} · {item.pointCount} {t.vertices}
-                  </>
-                ),
+                label: item.name + parenthetical(lang, `${item.pointCount} ${t.vertices}`),
               })),
             ]}
           />

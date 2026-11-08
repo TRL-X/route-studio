@@ -12,7 +12,7 @@ import { MapView } from '../../views/MapView';
 import { Modal } from '../../ui/Modal';
 import { NumberInput } from '../../ui/NumberInput';
 import { runIO } from '../../workers/io';
-import { strings, type Lang } from '../../i18n/index';
+import { punctuation, strings, type Lang } from '../../i18n/index';
 import type { ColorScheme } from '../../ui/theme';
 import en from '../../i18n/en.resample.json';
 import zh from '../../i18n/zh-CN.resample.json';
@@ -214,7 +214,8 @@ export function ResampleDialog({
                 </div>
               </dl>
               <Text size="2" color="gray">
-                {copy.coverage} ·{' '}
+                {copy.coverage}
+                {punctuation[lang].colon}
                 {((1 - result.shortSegments.length / (result.document.vertices.length - 1)) * 100).toFixed(1)}
                 %
               </Text>
@@ -231,8 +232,8 @@ export function ResampleDialog({
                     .replace('{current}', String(shortIndex + 1))
                     .replace('{total}', String(result.shortSegments.length))
                     .replace('{distance}', (exception.startM / 1000).toFixed(3))
-                    .replace('{spacing}', exception.spacingM.toFixed(2))}{' '}
-                  · {copy[exception.reason]}
+                    .replace('{spacing}', exception.spacingM.toFixed(2))
+                    .replace('{reason}', copy[exception.reason])}
                 </Callout.Text>
                 <Flex gap="2" wrap="wrap" mt="2">
                   <Button

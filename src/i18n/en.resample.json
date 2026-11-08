@@ -17,7 +17,7 @@
   "apply": "Apply resampling",
   "done": "Route points resampled. Undo restores the original route.",
   "exceptions": "{count} short segments retained",
-  "exceptionPosition": "{current} / {total} · original route {distance} km · {spacing} m",
+  "exceptionPosition": "{current} / {total}, at {distance} km on the original route, spacing {spacing} m. {reason}",
   "station": "Preserves a station position.",
   "shape": "Preserves the route shape or a turn.",
   "endpoint": "Preserves the route endpoints.",

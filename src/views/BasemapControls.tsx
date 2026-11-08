@@ -1,6 +1,6 @@
 import { Badge, Button, Callout, Flex, Tooltip } from '@radix-ui/themes';
 import { Layers } from 'lucide-react';
-import { strings, type Lang } from '../i18n/index';
+import { parenthetical, punctuation, strings, type Lang } from '../i18n/index';
 import type { BasemapFailure, BasemapPreferences } from '../maps/basemap';
 
 export function BasemapControls({
@@ -44,8 +44,10 @@ export function BasemapControls({
         >
           <Layers aria-hidden="true" />
           <span>
-            {t.basemap}: {providerName}
-            {!preferences.enabled ? ` · ${t.off}` : ''}
+            {t.basemap}
+            {punctuation[lang].colon}
+            {providerName}
+            {!preferences.enabled && parenthetical(lang, t.off)}
           </span>
         </Button>
         {message && (

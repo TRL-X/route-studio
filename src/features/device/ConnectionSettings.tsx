@@ -1,6 +1,6 @@
 import { Button, Flex, Text, TextArea } from '@radix-ui/themes';
 import { useEffect, useId, useState, useSyncExternalStore } from 'react';
-import type { Lang } from '../../i18n';
+import { parenthetical, type Lang } from '../../i18n';
 import type { DeviceConnectionSession } from '../../device/connection-session';
 import { defaultProfile, profileKey } from '../../device/config';
 import { Choice } from '../../ui/Choice';
@@ -86,8 +86,10 @@ export function ConnectionSettings({
                   '{count}',
                   state.parameters.bufferCount === undefined ? '—' : String(state.parameters.bufferCount),
                 )}
-              {' · '}
-              {state.parameters.source === 'device' ? t.deviceParameters : t.profileParameters}
+              {parenthetical(
+                lang,
+                state.parameters.source === 'device' ? t.deviceParameters : t.profileParameters,
+              )}
             </Text>
           )}
           <Flex direction="column" gap="1">

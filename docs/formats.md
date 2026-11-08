@@ -1,6 +1,6 @@
 # File formats
 
-[Documentation](README.md) · [Project overview](../README.md)
+[Documentation](README.md) / [Project overview](../README.md)
 
 Route Studio imports FIT, GPX, KML and RTE and exports RTE, GPX, KML and FIT. Save a `.routeproj` to preserve the complete editable project, including unfinished edits and missing heights.
 

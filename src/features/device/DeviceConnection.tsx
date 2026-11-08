@@ -3,7 +3,7 @@ import { Bluetooth, Cable } from 'lucide-react';
 import { ConnectionSettings } from './ConnectionSettings';
 import { transportSupported } from '../../device/config';
 import { Modal } from '../../ui/Modal';
-import type { Lang } from '../../i18n';
+import { parenthetical, type Lang } from '../../i18n';
 import type { ConnectionControls } from './useDevices';
 import { deviceError, deviceStrings } from './deviceStrings';
 import './device-dialog.css';
@@ -33,7 +33,8 @@ export function DeviceConnection({
             : state.connected
               ? t.connected.replace(
                   '{name}',
-                  `${state.deviceName} · ${state.transport === 'usb' ? 'USB' : t.bluetooth}`,
+                  () =>
+                    state.deviceName + parenthetical(lang, state.transport === 'usb' ? 'USB' : t.bluetooth),
                 )
               : state.remembered
                 ? t.disconnected

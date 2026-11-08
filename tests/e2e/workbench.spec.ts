@@ -87,7 +87,7 @@ test('selects and inspects independently in a narrow workbench', async ({ page }
   const profile = page.getByRole('group', { name: 'Elevation profile' });
   await page.getByRole('button', { name: 'Route outline', exact: true }).click();
   await page.getByRole('button', { name: /Ridge Pass.*Checkpoint/ }).click();
-  await expect(page.locator('.selection-summary')).toHaveText('Ridge Pass · 5.66 km');
+  await expect(page.locator('.selection-summary')).toHaveText('Ridge Pass (5.66 km)');
   await expect(page.locator('.inspector')).toBeHidden();
   await expect(map).toBeVisible();
   await page.getByRole('button', { name: 'Edit selection' }).click();

@@ -17,7 +17,7 @@ import type { RouteDocument } from '../../domain/model';
 import type { ExportPreview } from '../../rte';
 import { exportChoices, type ExportOptions, type ProfilePoint } from '../../rte/processing';
 import { runIO, type IOResult } from '../../workers/io';
-import { strings, type Copy } from '../../i18n/index';
+import { parenthetical, punctuation, strings, type Copy } from '../../i18n/index';
 
 type ExportResult = Extract<IOResult, { type: 'binary' | 'track-file' | 'error' }>;
 type ExportError = Extract<IOResult, { type: 'error' }>;
@@ -221,10 +221,11 @@ export function ExportDialog({
           </details>
           <Flex direction="column" gap="2">
             <Text size="2" weight="medium">
-              {t.magTitle} ·{' '}
+              {t.magTitle}
+              {punctuation[lang].colon}
               {mag.mode === 'auto' ? t.magAuto : mag.mode === 'manual' ? t.magManual : t.magOmit}
               {preview?.declinationCdeg !== undefined &&
-                ' · ' + (preview.declinationCdeg / 100).toFixed(2) + '°'}
+                parenthetical(lang, `${(preview.declinationCdeg / 100).toFixed(2)}°`)}
             </Text>
             <Text size="1" color="gray">
               {copy.magneticSummary}
@@ -280,7 +281,8 @@ export function ExportDialog({
                 {t.exportPreview}
               </Heading>
               <small>
-                {(preview.totalM / 1000).toLocaleString(lang, { maximumFractionDigits: 4 })} km ·{' '}
+                {(preview.totalM / 1000).toLocaleString(lang, { maximumFractionDigits: 4 })} km
+                {punctuation[lang].comma}
                 {t.stageCount.replace('{count}', display(preview.stages))}
               </small>
             </header>

@@ -1,6 +1,6 @@
 # Device profiles
 
-[Documentation](README.md) · [Device connections](user-guide.md#device-connections)
+[Documentation](README.md) / [Device connections](user-guide.md#device-connections)
 
 Open **Advanced connection settings** in a device panel to edit and apply a JSON profile. Profiles are stored separately for application Bluetooth, application USB and MCUboot USB recovery. Omitted fields receive the scenario defaults; unknown fields and invalid values are rejected. Restore defaults with **Load defaults**, then **Apply settings**. Changes require a disconnected, idle session and apply to the next connection. An active or interrupted task retains its profile until explicitly ended.
 

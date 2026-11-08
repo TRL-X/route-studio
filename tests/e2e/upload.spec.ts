@@ -24,7 +24,7 @@ test('sends a route using the previous normal transport after closing USB recove
   await expect(send.getByLabel('Connection method', { exact: true })).toHaveAttribute('data-value', 'usb');
   await expect(send.getByLabel('Protocol version', { exact: true })).toHaveAttribute('data-value', '2');
   await send.getByRole('button', { name: 'Connect and send…', exact: true }).click();
-  await expect(send.getByText('Route added to device · Device route')).toBeVisible();
+  await expect(send.getByText('Route added to device (Device route)')).toBeVisible();
 });
 
 test('uploads through Group 64, resumes lost ACKs, and shares the connection with device routes', async ({
@@ -48,14 +48,14 @@ test('uploads through Group 64, resumes lost ACKs, and shares the connection wit
     dialog.getByRole('button', { name: 'Device is validating the route…', exact: true }),
   ).toBeDisabled();
   await expect(dialog.getByRole('button', { name: 'Cancel upload' })).toBeDisabled();
-  await expect(dialog.getByText('Route added to device · Device route')).toBeVisible();
+  await expect(dialog.getByText('Route added to device (Device route)')).toBeVisible();
   expect(firmware.received).toEqual(new Uint8Array(local.bytes));
   expect(firmware.items).toHaveLength(1);
   expect(firmware.calls.filter((c) => c.group === 64 && c.cmd === 2)).toHaveLength(1);
   await expect(dialog.getByRole('button', { name: 'Sent to AR Cap', exact: true })).toBeDisabled();
   await dialog.getByRole('button', { name: 'View device routes' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(1);
-  await expect(page.getByRole('dialog').getByText('Connected · AR Cap')).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Connected to AR Cap')).toBeVisible();
   await expect(page.getByRole('rowheader', { name: 'Device route', exact: true })).toBeVisible();
 });
 
@@ -146,7 +146,7 @@ test('keeps file export separate, shares Bluetooth across tasks, and preserves s
   await deviceCommand(page, 'Device connection…');
   const connection = page.getByRole('dialog', { name: 'Device connection', exact: true });
   await connection.getByRole('button', { name: 'Connect device', exact: true }).click();
-  await expect(connection.getByText('Connected · AR Cap · Bluetooth', { exact: true })).toBeVisible();
+  await expect(connection.getByText('Connected to AR Cap (Bluetooth)', { exact: true })).toBeVisible();
   expect(firmware.calls).toHaveLength(1);
   await connection.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(
@@ -197,7 +197,7 @@ test('reopens a paused route transfer from the status bar without changing its p
   await page.goto('/');
   await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
   const dialog = await openSend(page);
-  const routeLabel = await dialog.getByText(/^Route · /).textContent();
+  const routeLabel = await dialog.getByText(/^Route: /).textContent();
   await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Reconnect and continue' })).toBeEnabled();
   await dialog.getByText('Route processing options').click();
@@ -212,7 +212,7 @@ test('reopens a paused route transfer from the status bar without changing its p
   await name.press('Enter');
   await page
     .locator('.statusbar')
-    .getByRole('button', { name: /^Route transfer · / })
+    .getByRole('button', { name: /^Route transfer \(/ })
     .click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText(routeLabel!, { exact: true })).toBeVisible();
@@ -259,12 +259,12 @@ test('hides an active route transfer without cancelling it or showing a stale fi
   try {
     await dialog.getByRole('button', { name: 'Hide', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.locator('.statusbar').getByRole('button', { name: /^Firmware update · / })).toHaveCount(
+    await expect(page.locator('.statusbar').getByRole('button', { name: /^Firmware update \(/ })).toHaveCount(
       0,
     );
     await page
       .locator('.statusbar')
-      .getByRole('button', { name: /^Route transfer · / })
+      .getByRole('button', { name: /^Route transfer \(/ })
       .click();
     await expect(dialog.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
   } finally {
@@ -326,7 +326,7 @@ test('can end a disconnected route validation task to open USB recovery without 
   await page.keyboard.press('Escape');
   await page
     .locator('.statusbar')
-    .getByRole('button', { name: /^Route transfer · / })
+    .getByRole('button', { name: /^Route transfer \(/ })
     .click();
   await dialog.getByRole('button', { name: 'End task…', exact: true }).click();
   await expect(dialog.getByText(/Data already sent stays on the device/)).toBeVisible();
@@ -355,7 +355,7 @@ test('sends, resumes and deletes a route through normal USB', async ({ page }) =
   await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Reconnect and continue', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Reconnect and continue', exact: true }).click();
-  await expect(dialog.getByText('Route added to device · Device route')).toBeVisible();
+  await expect(dialog.getByText('Route added to device (Device route)')).toBeVisible();
   await dialog.getByRole('button', { name: 'View device routes', exact: true }).click();
   const manager = page.getByRole('dialog', { name: 'Device routes', exact: true });
   await manager.getByRole('button', { name: 'Delete Device route', exact: true }).click();

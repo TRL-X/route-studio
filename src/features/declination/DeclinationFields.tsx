@@ -11,7 +11,7 @@ import {
 } from '../../domain/declination';
 import { RteError } from '../../rte/check';
 import { Field } from '../../ui/Field';
-import type { Copy, Lang } from '../../i18n/index';
+import { parenthetical, punctuation, type Copy, type Lang } from '../../i18n/index';
 import type { LookupState } from './useDeclinationLookup';
 
 export function DeclinationFields({
@@ -80,13 +80,14 @@ export function DeclinationFields({
           />
           {lookup.reference && (
             <p className="hint">
-              {t.magMidpoint} · {lookup.reference.referenceLatE7 / 1e7}°,{' '}
-              {lookup.reference.referenceLonE7 / 1e7}°
+              {t.magMidpoint}
+              {punctuation[lang].colon}
+              {lookup.reference.referenceLatE7 / 1e7}°, {lookup.reference.referenceLonE7 / 1e7}°
             </p>
           )}
           <p aria-live="polite" className={lookup.error ? 'field-issue' : 'hint'}>
             {autoResult
-              ? (autoResult.declinationCdeg / 100).toFixed(2) + '° · ' + settings.source
+              ? `${(autoResult.declinationCdeg / 100).toFixed(2)}°${parenthetical(lang, settings.source)}`
               : lookup.error
                 ? t[lookup.error]
                 : lookup.pending

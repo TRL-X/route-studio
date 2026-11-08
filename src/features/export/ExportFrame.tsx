@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Modal } from '../../ui/Modal';
 import { ArrowDownToLine, X } from 'lucide-react';
 import type { ExportFormat } from '../../files/export';
-import { strings, type Lang } from '../../i18n/index';
+import { punctuation, strings, type Lang } from '../../i18n/index';
 import { Choice } from '../../ui/Choice';
 import en from '../../i18n/en.export.json';
 import zh from '../../i18n/zh-CN.export.json';
@@ -70,7 +70,9 @@ export function ExportFrame({
       <Flex direction="column" gap="4" minHeight="0" overflowY="auto" pb="4">
         {sendMode ? (
           <Text size="2" color="gray">
-            {copy.routeName} · {name}
+            {copy.routeName}
+            {punctuation[lang].colon}
+            {name}
           </Text>
         ) : (
           <>
@@ -117,7 +119,8 @@ export function ExportFrame({
       <Flex asChild justify="end" align="center" wrap="wrap" gap="3" pt="3" flexShrink="0">
         <footer>
           <Text size="2" color="gray" mr="auto">
-            {t.fileSize} ·{' '}
+            {t.fileSize}
+            {punctuation[lang].colon}
             {bytes
               ? (bytes.byteLength / 1024).toLocaleString(lang, { maximumFractionDigits: 1 }) + ' KiB'
               : '—'}

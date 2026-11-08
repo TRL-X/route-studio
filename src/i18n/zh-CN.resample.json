@@ -17,7 +17,7 @@
   "apply": "应用重采样",
   "done": "路线点已重采样，可一步撤销恢复原路线。",
   "exceptions": "保留了 {count} 段短线段",
-  "exceptionPosition": "{current} / {total} · 原路线 {distance} km · 间距 {spacing} m",
+  "exceptionPosition": "{current} / {total}，原路线 {distance} km 处，间距 {spacing} m。{reason}",
   "station": "用于保留站点位置。",
   "shape": "用于保留路线形状或转弯。",
   "endpoint": "用于保留路线起终点。",

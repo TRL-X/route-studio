@@ -1,6 +1,6 @@
 # Architecture
 
-[Documentation](README.md) · [Project overview](../README.md)
+[Documentation](README.md) / [Project overview](../README.md)
 
 Route Studio uses one React editor in a browser and in an Electron renderer. Vite builds the static editor; Electron adds native dialogs, menus, Bluetooth and serial port selection, and software updates. Route parsing and editing run locally. Network clients access map, terrain, magnetic declination and release services directly; this repository has no application backend.
 

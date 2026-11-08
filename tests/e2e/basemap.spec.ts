@@ -89,7 +89,7 @@ test('applies a personal Key, preserves the view, restores settings and excludes
   await panel.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(page.locator('.rv-graticule')).toBeVisible();
   await page.reload();
-  await page.getByRole('button', { name: 'Basemap: Tianditu · Off', exact: true }).click();
+  await page.getByRole('button', { name: 'Basemap: Tianditu (Off)', exact: true }).click();
   await expect(input).toBeEmpty();
   await expect(panel.getByLabel('Show basemap')).not.toBeChecked();
 });
@@ -156,7 +156,7 @@ test('requires a Key, cancels on Escape, and fits narrow layouts in Chinese', as
   await expect(panel).not.toBeVisible();
   for (const width of [1440, 800, 480]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole('button', { name: '底图: OpenFreeMap', exact: true }).click();
+    await page.getByRole('button', { name: '底图：OpenFreeMap', exact: true }).click();
     const chinese = page.getByRole('dialog', { name: '设置', exact: true });
     await selectOption(chinese.getByLabel('地图提供商'), 'tianditu');
     await expect(chinese.getByRole('button', { name: '应用', exact: true })).toBeInViewport();

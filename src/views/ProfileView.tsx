@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { distances } from '../domain/model';
 import type { Anchor, RouteDocument } from '../domain/model';
-import { strings, type Lang } from '../i18n/index';
+import { parenthetical, punctuation, strings, type Lang } from '../i18n/index';
 import './views.css';
 
 interface ProfileViewProps {
@@ -236,8 +236,9 @@ export function ProfileView({
       {readout && (
         <span className="rv-readout">
           {formatDistance(readout.distance)}
-          {readout.height !== undefined &&
-            ' · ' + (readout.height === null ? t.missingHeight : readout.height.toFixed(1) + ' m')}
+          {readout.height === null
+            ? parenthetical(lang, t.missingHeight)
+            : readout.height !== undefined && punctuation[lang].comma + readout.height.toFixed(1) + ' m'}
         </span>
       )}
       {!known && <div className="rv-no-profile">{t.noElevationData}</div>}
