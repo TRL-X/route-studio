@@ -110,6 +110,11 @@ export async function connectSerial(
   let port: SerialPort;
   try {
     port = previous ?? (await navigator.serial.requestPort({ filters: profile.usbFilters }));
+  } catch (error) {
+    // Normalize chooser dismissal before opening the port so real connection failures still surface.
+    if (error instanceof DOMException && error.name === 'NotFoundError')
+      throw new DOMException(error.message, 'AbortError');
+    throw error;
   } finally {
     signal.removeEventListener('abort', cancelSelection);
   }
