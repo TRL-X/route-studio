@@ -8,22 +8,23 @@ describe('GPX', () => {
       <trkseg><trkpt lat="20" lon="110"><ele>-12</ele></trkpt><trkpt lat="20" lon="112"><ele>0</ele></trkpt></trkseg>
       <trkseg><trkpt lat="21" lon="110"/><trkpt lat="22" lon="110"/></trkseg>
     </trk>
-    <rte><name>Alternative</name><rtept lat="30" lon="110"/><rtept lat="30" lon="111"/></rte>
-    <wpt lat="20.1" lon="111"><name>Water</name></wpt></gpx>`;
+    <rte><name>Alternative · West</name><rtept lat="30" lon="110"/><rtept lat="30" lon="111"/></rte>
+    <wpt lat="20.1" lon="111"><name>Water · Refill</name></wpt></gpx>`;
 
   it('offers segments and planned routes separately, preserving source heights and landmarks', () => {
     const choices = parseRoutes(gpx, 'race.gpx');
     expect(choices.map((item) => item.name)).toEqual([
-      'North & South · 1',
-      'North & South · 2',
-      'Alternative',
+      'North & South (1)',
+      'North & South (2)',
+      'Alternative · West',
     ]);
     const doc = choices[0].open();
     expect(choices[0].pointCount).toBe(2);
+    expect(doc.name).toBe('North & South (1)');
     expect(doc.elevation.map((s) => s.height)).toEqual([-12, 0]);
     expect(doc.stations.map((s) => s.kind)).toEqual(['start', 'cp', 'finish']);
     expect(doc.stations[1]).toMatchObject({
-      name: 'Water',
+      name: 'Water · Refill',
       boundary: true,
       location: { lat: 20.1, lon: 111 },
     });

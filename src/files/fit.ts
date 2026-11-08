@@ -180,8 +180,8 @@ export async function parseFitRoutes(bytes: ArrayBuffer, filename: string): Prom
     const group = records.filter(
       ({ time }) => time !== undefined && time >= start && time <= end && time < next,
     );
-    const label = typeof sport === 'string' ? ' · ' + sport : '';
-    return group.length ? [trackChoice(`${name} · ${i + 1}${label}`, group)] : [];
+    const sportSuffix = typeof sport === 'string' ? `, ${sport}` : '';
+    return group.length ? [trackChoice(`${name} (${i + 1}${sportSuffix})`, group)] : [];
   });
   if (!choices.length) throw new RouteFileError('fit-no-gps');
   return choices;

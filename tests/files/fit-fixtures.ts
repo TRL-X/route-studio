@@ -20,13 +20,14 @@ const timestamp = (number: number, offset: number) => field(number, Uint32, epoc
 export function multisportActivity({
   summaryTime,
   omitElapsedTime = false,
-}: { summaryTime?: number; omitElapsedTime?: boolean } = {}): Uint8Array {
+  omitSport = false,
+}: { summaryTime?: number; omitElapsedTime?: boolean; omitSport?: boolean } = {}): Uint8Array {
   const encoder = file(4);
   const session = (start: number, end: number, sport: number) =>
     encoder.writeMessage(18, [
       timestamp(2, start),
       timestamp(253, summaryTime ?? end),
-      field(5, Enum, sport),
+      ...(omitSport ? [] : [field(5, Enum, sport)]),
       ...(omitElapsedTime ? [] : [field(7, Uint32, (end - start) * 1000)]),
     ]);
   // Some devices write the summaries first. A shared timestamp belongs to the new session.

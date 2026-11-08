@@ -38,13 +38,18 @@ describe('FIT import', () => {
     { when: 'after the session ends', summaryTime: 30 },
   ])('uses elapsed time when summaries are written $when', async ({ summaryTime }) => {
     const choices = await parse(multisportActivity({ summaryTime }));
-    expect(choices.map((c) => c.name)).toEqual(['trail · 1 · running', 'trail · 2 · cycling']);
+    expect(choices.map((c) => c.name)).toEqual(['trail (1, running)', 'trail (2, cycling)']);
     expect(choices.map((c) => c.pointCount)).toEqual([2, 2]);
     // Exclude fixes outside the sessions; the shared 10-second fix belongs only to cycling.
     expect(choices.map((c) => c.open().vertices.map((v) => v.lat))).toEqual([
       [0, expect.closeTo(0.01, 6)],
       [expect.closeTo(2, 6), expect.closeTo(2.01, 6)],
     ]);
+  });
+
+  it('uses only the session number when sport is absent', async () => {
+    const choices = await parse(multisportActivity({ omitSport: true }));
+    expect(choices.map((c) => c.name)).toEqual(['trail (1)', 'trail (2)']);
   });
 
   it('keeps the timestamp fallback for legacy session summaries without elapsed time', async () => {

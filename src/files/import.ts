@@ -83,7 +83,7 @@ function readGpx(root: XmlElement, fallback: string) {
     const segments = list(track.trkseg);
     segments.forEach((segment, index) => {
       lines.push({
-        name: segments.length > 1 ? `${name} · ${index + 1}` : name,
+        name: segments.length > 1 ? `${name} (${index + 1})` : name,
         points: list(object(segment).trkpt).map(gpxPoint),
         heights: 'unknown-reference',
       });
@@ -282,7 +282,7 @@ function matchLandmarks(doc: RouteDocument, landmarks: Landmark[]): (Anchor | nu
 
 function applyEndpointMark(endpoint: Station, mark: Landmark, namedForRole: boolean) {
   const role = endpoint.kind === 'start' ? 'Start' : 'Finish';
-  const name = namedForRole ? mark.name : `${role} · ${mark.name}`;
+  const name = namedForRole ? mark.name : `${role} - ${mark.name}`;
   if (endpoint.name === role || name.length >= endpoint.name.length) {
     endpoint.name = name;
     endpoint.location = mark.location;
