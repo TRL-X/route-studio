@@ -41,6 +41,7 @@ export function useRouteFiles({
   doc,
   currentDoc,
   dirty,
+  protectRecovered,
   onReplace,
   onSaved,
   onNotice,
@@ -49,15 +50,16 @@ export function useRouteFiles({
   doc: RouteDocument;
   currentDoc: RefObject<RouteDocument>;
   dirty: boolean;
+  protectRecovered: boolean;
   onReplace: (next: Replacement) => void;
-  onSaved: (doc: RouteDocument) => void;
+  onSaved: (doc: RouteDocument, confirmed: boolean) => void;
   onNotice: (notice: Localized) => void;
   onProblem: (problem: Localized) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [savingFile, setSavingFile] = useState(false);
   const [fileSaveError, setFileSaveError] = useState<Localized | null>(null);
-  const [pending, setPending] = useState<Replacement | null>(null);
+  const [pending, setPending] = useState<{ next: Replacement; recovered: boolean } | null>(null);
   const [choices, setChoices] = useState<ImportChoice | null>(null);
   const ioLock = useRef(false);
   const saveLock = useRef(false);
@@ -68,7 +70,7 @@ export function useRouteFiles({
   }
 
   function requestReplace(next: Replacement) {
-    if (dirty) setPending(next);
+    if (dirty || protectRecovered) setPending({ next, recovered: protectRecovered });
     else replace(next);
   }
 
@@ -104,18 +106,19 @@ export function useRouteFiles({
     }
   }
 
-  async function save(): Promise<boolean> {
+  async function save({ showProblem = true } = {}): Promise<boolean> {
     if (saveLock.current) return false;
     saveLock.current = true;
     setSavingFile(true);
     try {
       if (!(await saveFile(saveProject(doc), routeFilename(doc.name) + '.routeproj', 'application/json')))
         return false;
-      flushSync(() => onSaved(doc));
-      onNotice(both(window.routeStudioDesktop ? 'desktopProjectDone' : 'projectDone'));
+      const confirmed = !!window.routeStudioDesktop;
+      flushSync(() => onSaved(doc, confirmed));
+      onNotice(both(confirmed ? 'desktopProjectDone' : 'projectDone'));
       return currentDoc.current === doc;
     } catch {
-      onProblem(both('fileSaveFailed'));
+      if (showProblem) onProblem(both('fileSaveFailed'));
       return false;
     } finally {
       saveLock.current = false;

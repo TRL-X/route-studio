@@ -4,6 +4,11 @@ import { loadProject, saveProject } from '../../files/project';
 
 let connection: Promise<IDBDatabase> | undefined;
 
+export interface Draft {
+  doc: RouteDocument;
+  backedUp: boolean;
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   if (connection) return connection;
   connection = new Promise<IDBDatabase>((resolve, reject) => {
@@ -43,14 +48,24 @@ async function draftRequest(mode: IDBTransactionMode, run: (store: IDBObjectStor
   }
 }
 
-export async function saveDraft(doc: RouteDocument): Promise<void> {
-  const text = saveProject(doc);
-  await draftRequest('readwrite', (store) => store.put(text, 'current'));
+export async function saveDraft({ doc, backedUp }: Draft): Promise<void> {
+  const project = saveProject(doc);
+  await draftRequest('readwrite', (store) => store.put({ project, backedUp }, 'current'));
 }
 
-export async function loadDraft(): Promise<RouteDocument | null> {
-  const text = await draftRequest('readonly', (store) => store.get('current'));
-  if (text === undefined) return null;
-  if (typeof text !== 'string') throw new RouteFileError('invalid-project');
-  return loadProject(text);
+export async function loadDraft(): Promise<Draft | null> {
+  const stored = await draftRequest('readonly', (store) => store.get('current'));
+  if (stored === undefined) return null;
+  // Legacy drafts have no record of an independently saved project.
+  if (typeof stored === 'string') return { doc: loadProject(stored), backedUp: false };
+  if (
+    !stored ||
+    typeof stored !== 'object' ||
+    !('project' in stored) ||
+    typeof stored.project !== 'string' ||
+    !('backedUp' in stored) ||
+    typeof stored.backedUp !== 'boolean'
+  )
+    throw new RouteFileError('invalid-project');
+  return { doc: loadProject(stored.project), backedUp: stored.backedUp };
 }

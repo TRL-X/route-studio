@@ -630,6 +630,35 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   expect(await readFile(exported, 'utf8')).toContain('Saved desktop route');
 });
 
+test('keeps a recovered draft until its native save succeeds before starting a new route', async () => {
+  const page = await launch();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true, includeHidden: true });
+  await name.fill('Recovered desktop route');
+  await name.press('Enter');
+  await expect(page.getByText('Draft saved locally', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(name).toHaveValue('Recovered desktop route');
+
+  await nativeCommand('new');
+  const dialog = page.getByRole('dialog', { name: 'Start a new route?', exact: true });
+  const save = dialog.getByRole('button', { name: 'Save project and continue', exact: true });
+  await desktop.evaluate(({ dialog }) => {
+    dialog.showSaveDialog = async () => ({ canceled: true, filePath: '' });
+  });
+  await save.click();
+  await expect(dialog.getByRole('alert')).toContainText('Your draft is still open.');
+  await expect(name).toHaveValue('Recovered desktop route');
+
+  const target = path.join(directory, 'recovered.routeproj');
+  await desktop.evaluate(({ dialog }, filename) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
+  }, target);
+  await save.click();
+  await expect(dialog).not.toBeVisible();
+  await expect(name).toHaveValue('');
+  expect(loadProject(await readFile(target, 'utf8')).name).toBe('Recovered desktop route');
+});
+
 for (const [description, filename] of [
   ['POSIX punctuation', '鲲鹏径（第四段）-深圳远足径专区发布20260303更新?    .kml'],
   ['a name longer than the save suggestion limit', 'r'.repeat(181) + '.kml'],

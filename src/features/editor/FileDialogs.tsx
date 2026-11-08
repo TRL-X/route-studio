@@ -1,13 +1,71 @@
-import { Button, Card, Checkbox, Spinner } from '@radix-ui/themes';
+import { Button, Card, Checkbox, Flex, Spinner, Text } from '@radix-ui/themes';
 import { Check } from 'lucide-react';
+import { useState } from 'react';
 import { Choice } from '../../ui/Choice';
 import { Modal } from '../../ui/Modal';
-import { strings, type Lang } from '../../i18n';
+import { strings, type Copy, type Lang } from '../../i18n';
 import type { useRouteFiles } from './useRouteFiles';
+
+function ReplaceRouteDialog({
+  t,
+  title,
+  recovered,
+  saving,
+  onSave,
+  onContinue,
+  onClose,
+}: {
+  t: Copy;
+  title: string;
+  recovered: boolean;
+  saving: boolean;
+  onSave: () => Promise<boolean>;
+  onContinue: () => void;
+  onClose: () => void;
+}) {
+  const desktop = !!window.routeStudioDesktop;
+  const [status, setStatus] = useState<'downloadStarted' | 'unfinished' | null>(null);
+  async function save() {
+    setStatus(null);
+    if (!(await onSave())) setStatus('unfinished');
+    else if (desktop) onContinue();
+    else setStatus('downloadStarted');
+  }
+  return (
+    <Modal className="dialog" title={title} busy={saving} onClose={onClose}>
+      <p>{recovered ? t.replaceRecovered : t.replace}</p>
+      {status === 'downloadStarted' && <p role="status">{t.confirmDraftDownload}</p>}
+      {status === 'unfinished' && (
+        <Text as="p" color="red" role="alert">
+          {t.draftSaveUnfinished}
+        </Text>
+      )}
+      <Flex className="dialog-actions" wrap="wrap">
+        <Button variant="surface" color="gray" autoFocus disabled={saving} onClick={onClose}>
+          {t.cancel}
+        </Button>
+        {!recovered || status === 'downloadStarted' ? (
+          <Button disabled={saving} onClick={onContinue}>
+            {recovered ? t.continueDraftReplacement : t.confirm}
+          </Button>
+        ) : (
+          <>
+            <Button variant="soft" color="red" disabled={saving} onClick={onContinue}>
+              {t.discardRecovered}
+            </Button>
+            <Button disabled={saving} onClick={() => void save()}>
+              {desktop ? t.saveAndReplaceDraft : t.downloadDraft}
+            </Button>
+          </>
+        )}
+      </Flex>
+    </Modal>
+  );
+}
 
 export function FileDialogs({ files, lang }: { files: ReturnType<typeof useRouteFiles>; lang: Lang }) {
   const t = strings[lang];
-  const { busy, pending, setPending, replace, choices, setChoices, openFile } = files;
+  const { busy, pending, setPending, replace, choices, setChoices, openFile, save, savingFile } = files;
   return (
     <>
       {busy && (
@@ -21,23 +79,15 @@ export function FileDialogs({ files, lang }: { files: ReturnType<typeof useRoute
         </div>
       )}
       {pending && (
-        <Modal className="dialog" title={t.discardTitle} onClose={() => setPending(null)}>
-          <p>{t.replace}</p>
-          <div className="dialog-actions">
-            <Button
-              variant="surface"
-              color="gray"
-
-              autoFocus
-              onClick={() => setPending(null)}
-            >
-              {t.cancel}
-            </Button>
-            <Button variant="solid" color="blue" onClick={() => replace(pending)}>
-              {t.confirm}
-            </Button>
-          </div>
-        </Modal>
+        <ReplaceRouteDialog
+          t={t}
+          title={pending.recovered && !pending.next.source ? t.discardTitleNew : t.discardTitle}
+          recovered={pending.recovered}
+          saving={savingFile}
+          onSave={() => save({ showProblem: false })}
+          onContinue={() => replace(pending.next)}
+          onClose={() => setPending(null)}
+        />
       )}
       {choices && (
         <Modal className="dialog" title={t.selectTrack} onClose={() => setChoices(null)}>
