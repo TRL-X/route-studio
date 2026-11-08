@@ -1,6 +1,6 @@
 # Contributing
 
-[Project overview](README.md) · [Documentation](docs/README.md)
+[Project overview](README.md) / [Documentation](docs/README.md)
 
 For local setup and verification commands, see [development](docs/development.md). For module responsibilities, see [architecture](docs/architecture.md).
 

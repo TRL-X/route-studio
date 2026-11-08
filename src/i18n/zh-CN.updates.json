@@ -18,7 +18,7 @@
   "openDownload": "下载新版",
   "install": "重启并安装",
   "notice": "发现新版本 {version}",
-  "readyNotice": "更新已就绪 · {version}",
+  "readyNotice": "版本 {version} 已就绪",
   "autoCheck": "每天自动检查一次更新",
   "preferenceImmediate": "此选项立即保存。下载和安装始终需要你的确认。",
   "macInstructions": "下载适用于本机的 DMG。保存项目并退出 Route Studio，然后将新版拖入“应用程序”替换旧版。本地设置和草稿会保留。",

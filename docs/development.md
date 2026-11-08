@@ -1,6 +1,6 @@
 # Development and verification
 
-[Documentation](README.md) · [Project overview](../README.md)
+[Documentation](README.md) / [Project overview](../README.md)
 
 Set up the shared Web and Electron editor and run its checks. Read [architecture](architecture.md) for module responsibilities and [contributing](../CONTRIBUTING.md) for pull requests and CI policy.
 

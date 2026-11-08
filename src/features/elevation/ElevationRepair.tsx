@@ -7,7 +7,7 @@ import { RepairProfile } from './RepairProfile';
 import en from '../../i18n/en.repair.json' with { type: 'json' };
 import zh from '../../i18n/zh-CN.repair.json' with { type: 'json' };
 import { runIO } from '../../workers/io';
-import { strings, type Lang } from '../../i18n/index';
+import { parenthetical, strings, type Lang } from '../../i18n/index';
 import { TerrainCredit } from './TerrainCredit';
 import { workflowStrings } from './ElevationTools';
 
@@ -85,8 +85,8 @@ export function ElevationRepair({
                   {copy.originalDatum} {[t.unknown, t.msl, t.wgs][doc.elevationReference]} →{' '}
                 </>
               )}
-              <Text weight="medium">GLO-30 · EGM2008</Text>
-              {hasOriginal && <> · {copy.datumHint}</>}
+              <Text weight="medium">GLO-30{parenthetical(lang, 'EGM2008')}</Text>
+              {hasOriginal && (lang === 'zh' ? '。' : '. ') + copy.datumHint}
             </Text>
             <RepairProfile
               original={plan.original}

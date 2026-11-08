@@ -1,6 +1,6 @@
 import { Button } from '@radix-ui/themes';
 import { useEffect, useState } from 'react';
-import type { Lang } from '../../i18n';
+import { parenthetical, type Lang } from '../../i18n';
 import type { DeviceControls } from './useDeviceRoutes';
 import type { FirmwareControls } from './useFirmware';
 import type { ConnectionControls } from './useDevices';
@@ -119,7 +119,8 @@ export function DeviceTaskStatus({
       onClick={() => onOpen(task)}
       title={task === 'firmware' ? fw.filename : task === 'routes' ? route.progress?.name : undefined}
     >
-      {label} · {detail}
+      {label}
+      {parenthetical(lang, detail)}
     </Button>
   );
 }

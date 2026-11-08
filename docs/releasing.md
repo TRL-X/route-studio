@@ -1,6 +1,6 @@
 # Desktop packaging and releases
 
-[Documentation](README.md) · [Project overview](../README.md)
+[Documentation](README.md) / [Project overview](../README.md)
 
 Build desktop installers, configure signing, and publish compatible update artifacts. Complete [development setup](development.md#local-development) first. End-user update steps are in the [user guide](user-guide.md#software-updates).
 

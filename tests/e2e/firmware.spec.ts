@@ -58,7 +58,7 @@ test('uploads a local binary over Bluetooth, tests it, reconnects and confirms t
   const choosing = page.waitForEvent('filechooser');
   await dialog.getByRole('button', { name: 'Choose firmware file…', exact: true }).click();
   await (await choosing).setFiles(peer.target.file);
-  await expect(dialog.getByText(/firmware.bin · Version 2.1.0\+3/)).toBeVisible();
+  await expect(dialog.getByText(/firmware\.bin, version 2.1.0\+3/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Connect Bluetooth', exact: true }).click();
   await expect(dialog.getByText('Running version: 1.0.0', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Start update', exact: true }).click();
@@ -132,7 +132,7 @@ test('can explicitly end an unconfirmed update before opening USB recovery', asy
   await page.keyboard.press('Escape');
   await page
     .locator('.statusbar')
-    .getByRole('button', { name: /^Firmware update · / })
+    .getByRole('button', { name: /^Firmware update \(/ })
     .click();
   await dialog.getByRole('button', { name: 'End task…', exact: true }).click();
   await expect(dialog.getByText(/An unconfirmed version may revert/)).toBeVisible();

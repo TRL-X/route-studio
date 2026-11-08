@@ -18,7 +18,7 @@
   "openDownload": "Download new version",
   "install": "Restart and install",
   "notice": "New version {version}",
-  "readyNotice": "Update ready · {version}",
+  "readyNotice": "Update {version} ready",
   "autoCheck": "Automatically check for updates once a day",
   "preferenceImmediate": "This preference is saved immediately. Downloads and installation always require your confirmation.",
   "macInstructions": "Download the DMG for this Mac. Save your project, quit Route Studio, then drag the new app into Applications to replace the old version. Your local settings and drafts are kept.",

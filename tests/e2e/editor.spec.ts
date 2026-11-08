@@ -221,7 +221,7 @@ test('fills gaps in one edit and resolves device-distance collisions in the prev
   await page.getByRole('button', { name: 'Elevation tools…', exact: true }).click();
   const fill = page.getByRole('button', { name: 'Fill elevation gaps', exact: true });
   await fill.click();
-  await expect(page.getByRole('dialog').getByText('Filled 1 · 0 remaining', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('Filled 1, 0 remaining', { exact: true })).toBeVisible();
   await expect(fill).toBeDisabled();
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Undo', exact: true }).click();

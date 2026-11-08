@@ -1,6 +1,6 @@
 import { Button, Checkbox, Flex, Text } from '@radix-ui/themes';
 import { useState } from 'react';
-import type { Lang } from '../../i18n/index';
+import { parenthetical, type Lang } from '../../i18n/index';
 import type { UpdateControls } from './useUpdates';
 import en from '../../i18n/en.updates.json';
 import zh from '../../i18n/zh-CN.updates.json';
@@ -52,7 +52,7 @@ export function UpdatesPanel({
       </Text>
       <Text size="2" role="status" aria-live="polite">
         {disabled ? t.disabled : t[state.status]}
-        {state?.release ? ` · ${state.release.version}` : ''}
+        {state?.release && parenthetical(lang, state.release.version)}
       </Text>
       {state?.status === 'downloading' && (
         <Flex direction="column" gap="1">

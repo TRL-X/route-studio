@@ -5,6 +5,15 @@ export type Lang = 'en' | 'zh';
 export type Copy = typeof en;
 export const strings = { en, zh } satisfies Record<Lang, Copy>;
 
+export const punctuation = {
+  en: { comma: ', ', colon: ': ' },
+  zh: { comma: '，', colon: '：' },
+};
+
+export function parenthetical(lang: Lang, detail: string) {
+  return lang === 'zh' ? `（${detail}）` : ` (${detail})`;
+}
+
 export type Localized = Record<Lang, string>;
 export const both = (key: keyof Omit<Copy, 'fileErrors'>): Localized => ({
   en: strings.en[key],

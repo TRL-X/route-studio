@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { strings, type Lang } from '../../i18n/index';
+import { parenthetical, strings, type Lang } from '../../i18n/index';
 
 export function RouteTitle({
   name,
@@ -58,7 +58,7 @@ export function RouteTitle({
           ref={button}
           type="button"
           aria-label={t.renameRoute}
-          title={`${title} · ${t.renameRoute}`}
+          title={title + parenthetical(lang, t.renameRoute)}
           disabled={locked}
           onClick={() => setEditing(true)}
         >

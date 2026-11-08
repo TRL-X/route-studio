@@ -6,7 +6,7 @@ import { Modal } from '../../ui/Modal';
 import { DeviceError } from '../../device/mcumgr';
 import type { DeviceControls } from './useDeviceRoutes';
 import type { DeviceRoute } from '../../device/routes';
-import type { Lang } from '../../i18n/index';
+import { parenthetical, punctuation, type Lang } from '../../i18n/index';
 import { deviceError, deviceStrings } from './deviceStrings';
 import './device-routes.css';
 import './device-dialog.css';
@@ -76,8 +76,9 @@ export function DeviceConnectionControls({ device, lang }: { device: DeviceContr
             .replace(
               '{free}',
               (Number(state.status.freeBytes) / 1048576).toLocaleString(lang, { maximumFractionDigits: 1 }),
-            )}{' '}
-          · {t.maxSize.replace('{size}', String(state.status.maxFileSize / 1048576))}
+            )}
+          {punctuation[lang].comma}
+          {t.maxSize.replace('{size}', String(state.status.maxFileSize / 1048576))}
         </Text>
       )}
     </Flex>
@@ -216,7 +217,8 @@ export function DeviceRoutes({
                       <Table.RowHeaderCell>
                         <span className="device-route-name">
                           {item.name ||
-                            `${t.unnamed} · ${item.id.toString(16).toUpperCase().padStart(8, '0')}`}
+                            t.unnamed +
+                              parenthetical(lang, item.id.toString(16).toUpperCase().padStart(8, '0'))}
                         </span>
                       </Table.RowHeaderCell>
                       <Table.Cell>

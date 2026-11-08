@@ -71,7 +71,7 @@ test('automatic lookup refreshes on date changes, retries a failure, and reopens
   await name.press('Enter');
   await openMagnetics(page);
   await expect(page.getByLabel('Declination mode')).toHaveAttribute('data-value', 'auto');
-  await expect(page.getByText('-3.46° · BGS WMM2025')).toBeVisible();
+  await expect(page.getByText('-3.46° (BGS WMM2025)')).toBeVisible();
   const referenceDate = page.getByLabel('Reference date (UTC)');
   await referenceDate.fill('2027-03-01');
   await referenceDate.press('Enter');
@@ -84,7 +84,7 @@ test('automatic lookup refreshes on date changes, retries a failure, and reopens
   await expect(failedExport.getByLabel('Declination mode')).toHaveCount(0);
   await failedExport.getByRole('button', { name: 'Show in inspector' }).click();
   await page.getByRole('button', { name: 'Repeat lookup' }).click();
-  await expect(page.getByText('0.00° · BGS WMM2025')).toBeVisible();
+  await expect(page.getByText('0.00° (BGS WMM2025)')).toBeVisible();
   await page.locator('.magnetic-properties summary').click();
   const saved = loadProject((await download(page, 'Save project')).bytes.toString('utf8'));
   expect(saved.declination).toMatchObject({
@@ -96,7 +96,7 @@ test('automatic lookup refreshes on date changes, retries a failure, and reopens
   await expect(page.getByText('Draft saved locally', { exact: true })).toBeVisible();
   await page.reload();
   await openMagnetics(page);
-  await expect(page.getByText('0.00° · BGS WMM2025')).toBeVisible();
+  await expect(page.getByText('0.00° (BGS WMM2025)')).toBeVisible();
   const actual = readRte((await download(page, 'Download RTE')).bytes).rte?.magneticDeclination;
   expect(actual).toEqual({
     declinationCdeg: 0,
@@ -171,7 +171,7 @@ test('moving a vertex replaces the pending midpoint request and preserves interv
   await expect.poll(() => requests.length).toBe(2);
   expect(new URL(requests[1].request().url()).searchParams.get('longitude')).toBe('179');
   await answerBgs(requests[1], 1.25);
-  await expect(page.getByText('1.25° · BGS WMM2025')).toBeVisible();
+  await expect(page.getByText('1.25° (BGS WMM2025)')).toBeVisible();
   await answerBgs(requests[0], 99);
   const doc = readRte((await download(page, 'Download RTE')).bytes);
   expect(doc.name).toBe('Moved route');

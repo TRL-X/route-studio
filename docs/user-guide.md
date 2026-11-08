@@ -1,6 +1,6 @@
 # User guide
 
-[Documentation](README.md) · [Project overview](../README.md)
+[Documentation](README.md) / [Project overview](../README.md)
 
 Edit routes, preserve work in project files, and send routes to a TRL-X device. See [format support](formats.md) for import and export limits.
 

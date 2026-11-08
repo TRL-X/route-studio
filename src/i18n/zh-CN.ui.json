@@ -219,7 +219,7 @@
   "downloadFormat": "下载 {format}",
   "formatDone": "已开始下载 {format} 文件。",
   "trackExportFailed": "无法生成路线文件。",
-  "trackCounts": "{points} 个轨迹点 · {stations} 个站点",
+  "trackCounts": "{points} 个轨迹点，{stations} 个站点",
   "xmlWaypoints": "站点将保存为带名称的地标。{count} 个站点的路线里程不会写入文件，折返时无法按里程区分经过次数。",
   "fitCourseTime": "此 FIT 路线使用生成的时间戳排列轨迹点，时间戳不代表实际运动用时。",
   "kmlAbsolute": "路线将写入相对于平均海平面的绝对海拔，单位为米。",

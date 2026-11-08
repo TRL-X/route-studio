@@ -10,7 +10,7 @@ import {
   Waypoints,
 } from 'lucide-react';
 import type { RouteDocument } from '../../domain/model';
-import { strings, type Lang, type Localized } from '../../i18n';
+import { parenthetical, punctuation, strings, type Lang, type Localized } from '../../i18n';
 import type { BasemapPreferences } from '../../maps/basemap';
 import type { ColorScheme } from '../../ui/theme';
 import { MapView } from '../../views/MapView';
@@ -122,7 +122,7 @@ export function EditorWorkspace({
             {selectionTitle}
             {focusedMeters != null &&
               Number.isFinite(focusedMeters) &&
-              ' · ' + (focusedMeters / 1000).toFixed(2) + ' km'}
+              parenthetical(lang, `${(focusedMeters / 1000).toFixed(2)} km`)}
           </span>
           <Button
             variant={panel === 'inspector' ? 'soft' : 'ghost'}
@@ -191,11 +191,15 @@ export function EditorWorkspace({
                   </strong>
                   {activeStation &&
                     (tool === 'stationAnchor' || tool === 'stationLocation') &&
-                    ` · ${selectionTitle}`}
-                  <span className="mode-hint"> · {toolHelp}</span>
+                    parenthetical(lang, selectionTitle)}
+                  <span className="mode-hint">
+                    {punctuation[lang].colon}
+                    {toolHelp}
+                  </span>
                 </span>
                 <Button size="1" variant="soft" color="gray" onClick={cancelTool}>
-                  {t.cancel} · Esc
+                  {t.cancel}
+                  {parenthetical(lang, 'Esc')}
                 </Button>
               </div>
             )}
