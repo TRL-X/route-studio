@@ -5,6 +5,28 @@ import { deviceCommand, download, open, openExport, openSend } from './files';
 import { Firmware } from '../device/firmware';
 import { devicePeer } from './device-peer';
 
+test('sends a route using the previous normal transport after closing USB recovery', async ({ page }) => {
+  const firmware = new Firmware();
+  await devicePeer(page, firmware);
+  await page.goto('/');
+  await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
+  await deviceCommand(page, 'Device connection…');
+  const connection = page.getByRole('dialog', { name: 'Device connection', exact: true });
+  await selectOption(connection.getByLabel('Connection method', { exact: true }), 'usb');
+  await connection.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await deviceCommand(page, 'USB recovery…');
+  const recovery = page.getByRole('dialog', { name: 'USB recovery', exact: true });
+  await expect(recovery.getByLabel('Protocol version', { exact: true })).toHaveAttribute('data-value', '1');
+  await recovery.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const send = await openSend(page);
+  await expect(send.getByLabel('Connection method', { exact: true })).toHaveAttribute('data-value', 'usb');
+  await expect(send.getByLabel('Protocol version', { exact: true })).toHaveAttribute('data-value', '2');
+  await send.getByRole('button', { name: 'Connect and send…', exact: true }).click();
+  await expect(send.getByText('Route added to device · Device route')).toBeVisible();
+});
+
 test('uploads through Group 64, resumes lost ACKs, and shares the connection with device routes', async ({
   page,
 }) => {

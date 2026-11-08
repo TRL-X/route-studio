@@ -15,6 +15,7 @@ import { DeviceRoutes } from '../features/device/DeviceRoutes';
 import { FirmwareDialog } from '../features/device/FirmwareDialog';
 import { DesktopSerial } from '../features/device/DesktopSerial';
 import { ExportDialog } from '../features/export/ExportDialog';
+import { RteError } from '../rte/check';
 import { defaultExportOptions } from '../rte/processing';
 import { EditorToolbar } from '../features/editor/EditorToolbar';
 import { ElevationRepair } from '../features/elevation/ElevationRepair';
@@ -22,6 +23,7 @@ import type { Selection } from '../features/editor/types';
 import { useEditorSelection } from '../features/editor/useEditorSelection';
 import { both, initialLanguage, strings, type Lang, type Localized } from '../i18n';
 import { useDocumentSession } from '../features/editor/useDocumentSession';
+import type { Draft } from '../platform/storage/draft';
 import { useRouteFiles, routeFilename, type Replacement } from '../features/editor/useRouteFiles';
 import { FileDialogs } from '../features/editor/FileDialogs';
 import { EditorWorkspace } from '../features/editor/EditorWorkspace';
@@ -38,15 +40,10 @@ import { ResampleDialog, resampleStrings } from '../features/resample/ResampleDi
 
 type Problem = Localized & { target?: Selection };
 type DevicePanel = 'connection' | 'send' | 'routes' | 'firmware' | 'recovery';
-export function Editor({
-  restored,
-  recoveryError,
-}: {
-  restored: RouteDocument | null;
-  recoveryError: boolean;
-}) {
+export function Editor({ restored, recoveryError }: { restored: Draft | null; recoveryError: boolean }) {
   const documentSession = useDocumentSession(restored, recoveryError);
-  const { history, dispatch, doc, currentDoc, dirty, source, session, draftState } = documentSession;
+  const { history, dispatch, doc, currentDoc, dirty, protectRecovered, source, session, draftState } =
+    documentSession;
   const updates = useUpdates();
   const { device, firmware, connection } = useDevices();
   const [devicePanel, setDevicePanel] = useState<DevicePanel | null>(null);
@@ -65,6 +62,8 @@ export function Editor({
   const [resampleSource, setResampleSource] = useState<RouteDocument | null>(null);
   const [importElevation, setImportElevation] = useState<ImportElevationAssessment | null>(null);
   const [elevationSummary, setElevationSummary] = useState<Localized | null>(null);
+  const [elevationFillError, setElevationFillError] = useState<'fillLimit' | 'fillFailed' | null>(null);
+  const fillError = elevationFillError ? workflowStrings[lang][elevationFillError] : undefined;
   const [settingsTab, setSettingsTab] = useState<'general' | 'map' | 'updates' | null>(null);
   const [basemap, setBasemap] = useState(loadBasemapPreferences);
   const [preferencesFailed, setPreferencesFailed] = useState(false);
@@ -75,8 +74,9 @@ export function Editor({
     doc,
     currentDoc,
     dirty,
+    protectRecovered,
     onReplace: replace,
-    onSaved: documentSession.markSaved,
+    onSaved: documentSession.markProjectSaved,
     onNotice: setNotice,
     onProblem: setProblem,
   });
@@ -160,6 +160,7 @@ export function Editor({
     try {
       const { document, filled, remaining } = fillShortElevationGaps(doc);
       if (filled) change(document);
+      setElevationFillError(null);
       const message = (language: Lang) =>
         strings[language].interpolationResult
           .replace('{filled}', String(filled))
@@ -171,8 +172,9 @@ export function Editor({
         setImportElevation(null);
         setElevationPanel(remaining.length ? 'tools' : null);
       }
-    } catch {
-      setProblem(both('terrainLimit'));
+    } catch (error) {
+      setElevationSummary(null);
+      setElevationFillError(error instanceof RteError && error.code === 'limit' ? 'fillLimit' : 'fillFailed');
     }
   }
   function historyAction(type: 'undo' | 'redo') {
@@ -199,6 +201,7 @@ export function Editor({
     setElevationPanel(next.elevationAssessment ? 'import' : null);
     setImportElevation(next.elevationAssessment ?? null);
     setElevationSummary(null);
+    setElevationFillError(null);
     setMagneticExpanded(false);
     setResampleSource(null);
     setIssue(null);
@@ -245,10 +248,15 @@ export function Editor({
   }
   function openElevationTools() {
     setElevationSummary(null);
+    setElevationFillError(null);
     setElevationPanel('tools');
   }
   const deviceOccupied = !!connection.state.task || !!connection.state.busy;
   const firmwarePanel = firmware.state.mode === 'recovery' ? 'recovery' : 'firmware';
+  function openNormalDevicePanel(panel: 'connection' | 'send' | 'routes') {
+    if (connection.session.snapshot().mode === 'application' || connection.session.setMode('application'))
+      setDevicePanel(panel);
+  }
   async function openFirmware(mode: 'application' | 'recovery') {
     await firmware.session.setMode(mode);
     if (firmware.session.snapshot().mode === mode)
@@ -288,7 +296,7 @@ export function Editor({
       checked: !profileCollapsed,
     },
     deviceConnect: {
-      run: () => setDevicePanel('connection'),
+      run: () => openNormalDevicePanel('connection'),
       disabled: deviceOccupied,
     },
     deviceSend: {
@@ -296,7 +304,7 @@ export function Editor({
         if (!device.state.busy && !device.state.pending) {
           setSendSnapshot(null);
         }
-        setDevicePanel('send');
+        openNormalDevicePanel('send');
       },
       disabled:
         connection.state.task === 'firmware' ||
@@ -304,7 +312,7 @@ export function Editor({
         (!device.state.pending && doc.vertices.length < 2),
     },
     deviceRoutes: {
-      run: () => setDevicePanel('routes'),
+      run: () => openNormalDevicePanel('routes'),
       disabled: connection.state.task === 'firmware' || !!connection.state.busy,
     },
     deviceFirmware: {
@@ -401,17 +409,10 @@ export function Editor({
             firmware={firmware}
             connection={connection}
             lang={lang}
-            onOpen={(task) =>
-              setDevicePanel(
-                task === 'firmware'
-                  ? firmwarePanel
-                  : task === 'routes'
-                    ? sendSnapshot
-                      ? 'send'
-                      : 'routes'
-                    : 'connection',
-              )
-            }
+            onOpen={(task) => {
+              if (task === 'routes') openNormalDevicePanel(sendSnapshot ? 'send' : 'routes');
+              else setDevicePanel(task === 'firmware' ? firmwarePanel : 'connection');
+            }}
           />
           <span className="coord-system">WGS 84</span>
         </footer>
@@ -517,6 +518,7 @@ export function Editor({
         <ImportElevationDialog
           lang={lang}
           assessment={importElevation}
+          fillError={fillError}
           onFill={fillElevationGaps}
           onOnline={() => setElevationPanel('online')}
           onClose={() => {
@@ -531,6 +533,7 @@ export function Editor({
           canFill={missingHeights < doc.elevation.length && (missingHeights > 0 || gain === null)}
           hasKnownHeights={missingHeights < doc.elevation.length}
           summary={elevationSummary?.[lang]}
+          fillError={fillError}
           onFill={fillElevationGaps}
           onOnline={() => setElevationPanel('online')}
           onClose={() => setElevationPanel(null)}

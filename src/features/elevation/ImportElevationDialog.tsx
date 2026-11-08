@@ -8,12 +8,14 @@ import { workflowStrings } from './ElevationTools';
 export function ImportElevationDialog({
   lang,
   assessment,
+  fillError,
   onFill,
   onOnline,
   onClose,
 }: {
   lang: Lang;
   assessment: ImportElevationAssessment;
+  fillError?: string;
   onFill: () => void;
   onOnline: () => void;
   onClose: () => void;
@@ -57,6 +59,11 @@ export function ImportElevationDialog({
             {copy.importLaterHelp}
           </Text>
         </Flex>
+        {fillError && (
+          <Callout.Root color="red" role="alert">
+            <Callout.Text>{fillError}</Callout.Text>
+          </Callout.Root>
+        )}
         <Flex justify="end" wrap="wrap" gap="2">
           <Button variant="soft" color="gray" onClick={onClose}>
             {copy.importLater}

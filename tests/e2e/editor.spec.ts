@@ -67,6 +67,7 @@ test('imports, edits, undoes, recovers a draft and downloads project and device 
   expect(decoded.stations.map((s) => s.name)).toEqual(['Start', 'Water', 'Finish']);
   expect(decoded.stations[1]).toMatchObject({ kind: 'cp', boundary: true });
   await open(page, device.name, device.bytes);
+  await page.getByRole('button', { name: strings.en.discardRecovered, exact: true }).click();
   await expect(page.getByText(device.name, { exact: true })).toBeVisible();
   await expect(name).toHaveValue('Ridge checkpoint');
   await name.fill('Discarded edit');
@@ -75,6 +76,41 @@ test('imports, edits, undoes, recovers a draft and downloads project and device 
   await page.getByRole('dialog').getByRole('button', { name: 'Replace' }).click();
   await expect(page.getByText(project.name, { exact: true })).toBeVisible();
   await expect(name).toHaveValue('Ridge checkpoint');
+});
+
+test('protects a recovered draft from New and Open until the user explicitly continues', async ({ page }) => {
+  const t = strings.en;
+  await page.goto('/');
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Local draft only');
+  await name.press('Enter');
+  await expect(page.getByText(t.saved, { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(name).toHaveValue('Local draft only');
+
+  await page.keyboard.press('ControlOrMeta+n');
+  const newRoute = page.getByRole('dialog', { name: t.discardTitleNew });
+  await expect(newRoute.getByText(t.replaceRecovered)).toBeVisible();
+  await newRoute.getByRole('button', { name: t.cancel, exact: true }).click();
+  await expect(name).toHaveValue('Local draft only');
+
+  await open(page, 'another.gpx', Buffer.from(gpx));
+  const replacement = page.getByRole('dialog', { name: t.discardTitle });
+  await expect(replacement.getByText(t.replaceRecovered)).toBeVisible();
+  const project = await download(page, t.downloadDraft);
+  expect(loadProject(project.bytes.toString('utf8')).name).toBe('Local draft only');
+  await expect(replacement.getByText(t.confirmDraftDownload)).toBeVisible();
+  await replacement.getByRole('button', { name: t.continueDraftReplacement, exact: true }).click();
+  await expect(name).toHaveValue('North ridge');
+
+  await open(page, project.name, project.bytes);
+  await expect(name).toHaveValue('Local draft only');
+  await expect(page.getByText(t.saved, { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(name).toHaveValue('Local draft only');
+  await page.keyboard.press('ControlOrMeta+n');
+  await expect(name).toHaveValue('');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 test('cancelled imports preserve edits and history while replacement starts a new document session', async ({

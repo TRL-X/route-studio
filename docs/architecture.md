@@ -118,7 +118,7 @@ Native imports validate the selected file's extension, regular-file status and 6
 
 The document session compares the current document object with its saved baseline to determine unsaved changes. Saving a project updates that baseline only after a successful save. Exporting a route does not mark the project saved.
 
-[draft.ts](../src/platform/storage/draft.ts) stores the serialized current project in IndexedDB (`route-studio`, store `drafts`, key `current`). It resolves writes after transaction completion. Once autosave is active, the document session saves document changes and reports failures. Startup attempts draft recovery before mounting the editor; a recovery failure opens an empty editor with an error state. Drafts preserve the document, not undo history, active dialogs or device upload recovery state.
+[draft.ts](../src/platform/storage/draft.ts) stores the serialized current project in IndexedDB (`route-studio`, store `drafts`, key `current`) together with whether that snapshot has a known `.routeproj` copy. It resolves writes after transaction completion. Once autosave is active, the document session saves document changes and reports failures. Startup attempts draft recovery before mounting the editor; a recovery failure opens an empty editor with an error state. Legacy drafts load without a known project copy, so starting or opening a route requires confirmation. Drafts preserve the document, not undo history, active dialogs or device upload recovery state.
 
 ### Preview and export
 

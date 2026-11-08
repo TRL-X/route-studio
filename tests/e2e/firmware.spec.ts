@@ -167,6 +167,12 @@ test('requires serial recovery acknowledgement and writes firmware over USB with
   await dialog.getByRole('button', { name: 'Restart device', exact: true }).click();
   await expect(dialog.getByRole('status')).toContainText('Check that the device starts normally');
   expect(peer.calls.filter(({ group, command }) => group === 0 && command === 5)).toHaveLength(1);
+
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await deviceCommand(page, 'Manage device routes…');
+  const routes = page.getByRole('dialog', { name: 'Device routes', exact: true });
+  await expect(routes.getByLabel('Connection method', { exact: true })).toHaveAttribute('data-value', 'ble');
+  await expect(routes.getByLabel('Protocol version', { exact: true })).toHaveAttribute('data-value', '2');
 });
 
 test('normal USB uses v2 and the full test/reconnect/confirm workflow', async ({ page }) => {

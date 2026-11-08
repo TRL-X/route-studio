@@ -11,6 +11,7 @@ export function ElevationTools({
   canFill,
   hasKnownHeights,
   summary,
+  fillError,
   onFill,
   onOnline,
   onClose,
@@ -19,12 +20,14 @@ export function ElevationTools({
   canFill: boolean;
   hasKnownHeights: boolean;
   summary?: string;
+  fillError?: string;
   onFill: () => void;
   onOnline: () => void;
   onClose: () => void;
 }) {
   const t = strings[lang];
   const copy = workflowStrings[lang];
+  const feedback = fillError ?? summary;
   return (
     <Modal title={copy.elevationTools} onClose={onClose} maxWidth="480px">
       <Flex direction="column" gap="4">
@@ -36,9 +39,9 @@ export function ElevationTools({
             {hasKnownHeights ? copy.fillHelp : copy.noKnownHeights}
           </Text>
         </Flex>
-        {summary && (
-          <Callout.Root role="status">
-            <Callout.Text>{summary}</Callout.Text>
+        {feedback && (
+          <Callout.Root color={fillError ? 'red' : undefined} role={fillError ? 'alert' : 'status'}>
+            <Callout.Text>{feedback}</Callout.Text>
           </Callout.Root>
         )}
         <Flex direction="column" align="start" gap="2">

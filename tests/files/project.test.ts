@@ -78,7 +78,29 @@ describe('versioned route projects', () => {
 describe('browser draft recovery', () => {
   it('recovers the last committed edit even for overlapping writes', async () => {
     expect(await loadDraft()).toBeNull();
-    await Promise.all([saveDraft(doc), saveDraft({ ...doc, name: 'Latest' })]);
-    expect(await loadDraft()).toEqual({ ...doc, name: 'Latest' });
+    const latest = { doc: { ...doc, name: 'Latest' }, backedUp: false };
+    await Promise.all([saveDraft({ doc, backedUp: true }), saveDraft(latest)]);
+    expect(await loadDraft()).toEqual(latest);
+    await saveDraft({ ...latest, backedUp: true });
+    expect(await loadDraft()).toEqual({ ...latest, backedUp: true });
+  });
+
+  it('recovers an older draft without assuming that a project file was saved', async () => {
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('route-studio', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('drafts');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const transaction = db.transaction('drafts', 'readwrite');
+        transaction.objectStore('drafts').put(saveProject(doc), 'current');
+        transaction.onabort = () => reject(transaction.error);
+        transaction.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+      };
+    });
+    expect(await loadDraft()).toEqual({ doc, backedUp: false });
   });
 });

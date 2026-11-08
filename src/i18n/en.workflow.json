@@ -1,6 +1,8 @@
 {
   "elevationTools": "Elevation tools",
   "fillHelp": "Interpolate gaps up to 1,000 m using existing heights. Existing values are kept. You can undo the change.",
+  "fillLimit": "There are too many route points or elevation samples to fill the gaps. Open a route with fewer points and try again.",
+  "fillFailed": "Couldn’t fill the elevation gaps. Try again or close this window to continue editing.",
   "onlineHelp": "Get terrain heights and compare them with the current profile before replacing it.",
   "noKnownHeights": "At least one known height is needed for interpolation. Use online terrain data instead.",
   "importElevationTitle": "Complete the imported elevations",
