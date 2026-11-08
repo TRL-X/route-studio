@@ -241,3 +241,26 @@ test('uses image-state commands for test and confirm, and the standard OS reset 
     { group: 0, command: 5, op: 'write', fields: {} },
   ]);
 });
+
+test('fits every firmware request to the peer buffer, including first-packet metadata', async () => {
+  const { defaultProfile } = await import('../../src/device/config');
+  const { packetBytes } = await import('../../src/device/smp');
+  const image = await parseFirmware(await imageBytes());
+  const request = vi.fn<SmpRequest>(async (_group, _command, _op, fields) => {
+    expect(packetBytes(fields)).toBeLessThanOrEqual(128);
+    return { off: (fields.off as number) + (fields.data as Uint8Array).length };
+  });
+  const profile = { ...defaultProfile('application-usb'), imageIndex: 1, firmwareChunkBytes: 1024 };
+  await new FirmwareClient(request, profile.firmwareChunkBytes, profile, 128).upload(image, () => {});
+  expect(request.mock.calls[0][3]).toMatchObject({
+    image: 1,
+    off: 0,
+    len: image.size,
+    sha: image.uploadHash,
+  });
+  expect(request.mock.calls[0][5]?.timeoutMs).toBe(120000);
+  expect(request.mock.calls[1][5]?.timeoutMs).toBe(60000);
+  expect((request.mock.calls[0][3].data as Uint8Array).length).toBeLessThan(
+    (request.mock.calls[1][3].data as Uint8Array).length,
+  );
+});

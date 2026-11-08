@@ -94,7 +94,7 @@ export function DeviceTaskStatus({
         : undefined;
   const label =
     task === 'firmware'
-      ? fw.mode === 'usb'
+      ? fw.mode === 'recovery'
         ? t.recoveryTask
         : t.firmwareTask
       : task === 'routes'

@@ -20,9 +20,7 @@ test('uploads through Group 64, resumes lost ACKs, and shares the connection wit
   await expect(dialog.getByRole('button', { name: 'Connect device', exact: true })).toHaveCount(0);
   await expect(dialog.getByRole('button', { name: 'Refresh routes' })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
-  await expect(
-    dialog.getByText('Transfer paused. Continue with the same device and route data.'),
-  ).toBeVisible();
+  await expect(dialog.getByText('Transfer paused. Reconnect if needed, then continue.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Reconnect and continue' }).click();
   await expect(
     dialog.getByRole('button', { name: 'Device is validating the route…', exact: true }),
@@ -123,11 +121,11 @@ test('keeps file export separate, shares Bluetooth across tasks, and preserves s
   await expect(
     page.locator('.statusbar').getByRole('button', { name: /Route transfer|Firmware update|USB recovery/ }),
   ).toHaveCount(0);
-  await deviceCommand(page, 'Bluetooth connection…');
-  const connection = page.getByRole('dialog', { name: 'Bluetooth connection', exact: true });
+  await deviceCommand(page, 'Device connection…');
+  const connection = page.getByRole('dialog', { name: 'Device connection', exact: true });
   await connection.getByRole('button', { name: 'Connect device', exact: true }).click();
-  await expect(connection.getByText('Connected · AR Cap', { exact: true })).toBeVisible();
-  expect(firmware.calls).toHaveLength(0);
+  await expect(connection.getByText('Connected · AR Cap · Bluetooth', { exact: true })).toBeVisible();
+  expect(firmware.calls).toHaveLength(1);
   await connection.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(
     page.locator('.statusbar').getByRole('button', { name: /Route transfer|Firmware update|USB recovery/ }),
@@ -230,7 +228,7 @@ test('hides an active route transfer without cancelling it or showing a stale fi
     mimeType: 'application/octet-stream',
     buffer: Buffer.from('not firmware'),
   });
-  await expect(firmwareDialog.getByRole('alert')).toContainText('Select a valid MCUboot .bin file');
+  await expect(firmwareDialog.getByRole('alert')).toContainText('Choose a valid firmware .bin file');
   await firmwareDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
   const dialog = await openSend(page);
@@ -266,6 +264,15 @@ test('keeps the send action visible at narrow widths without device toolbar cont
   await expect(dialog.getByRole('button', { name: 'Connect and send…', exact: true })).toBeInViewport({
     ratio: 1,
   });
+  await dialog.getByText('Advanced connection settings', { exact: true }).click();
+  await expect(dialog).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole('button', { name: 'Connect and send…', exact: true })).toBeInViewport({
+    ratio: 1,
+  });
+  await dialog.getByLabel('Device profile (JSON)', { exact: true }).scrollIntoViewIfNeeded();
+  await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeInViewport({ ratio: 1 });
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await dialog.getByText('Advanced connection settings', { exact: true }).click();
   await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Sent to AR Cap', exact: true })).toBeDisabled();
   await expect(dialog.getByRole('button', { name: 'View device routes' })).toBeInViewport({ ratio: 1 });
@@ -300,7 +307,7 @@ test('can end a disconnected route validation task to open USB recovery without 
     .getByRole('button', { name: /^Route transfer · / })
     .click();
   await dialog.getByRole('button', { name: 'End task…', exact: true }).click();
-  await expect(dialog.getByText(/does not cancel processing or remove data/)).toBeVisible();
+  await expect(dialog.getByText(/Data already sent stays on the device/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Keep task', exact: true }).click();
   await expect(dialog.getByRole('button', { name: 'Reconnect and continue', exact: true })).toBeEnabled();
   await dialog.getByRole('button', { name: 'End task…', exact: true }).click();
@@ -312,4 +319,25 @@ test('can end a disconnected route validation task to open USB recovery without 
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await deviceCommand(page, 'USB recovery…');
   await expect(page.getByRole('dialog', { name: 'USB recovery', exact: true })).toBeVisible();
+});
+
+test('sends, resumes and deletes a route through normal USB', async ({ page }) => {
+  const firmware = new Firmware();
+  firmware.lose = 'write';
+  await devicePeer(page, firmware);
+  await page.goto('/');
+  await open(page, 'test.rte', await readFile(new URL('../rte/vectors/a.rte', import.meta.url)));
+  const dialog = await openSend(page);
+  await selectOption(dialog.getByLabel('Connection method', { exact: true }), 'usb');
+  await expect(dialog.getByLabel('Protocol version', { exact: true })).toHaveAttribute('data-value', '2');
+  await dialog.getByRole('button', { name: 'Connect and send…', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Reconnect and continue', exact: true })).toBeEnabled();
+  await dialog.getByRole('button', { name: 'Reconnect and continue', exact: true }).click();
+  await expect(dialog.getByText('Route added to device · Device route')).toBeVisible();
+  await dialog.getByRole('button', { name: 'View device routes', exact: true }).click();
+  const manager = page.getByRole('dialog', { name: 'Device routes', exact: true });
+  await manager.getByRole('button', { name: 'Delete Device route', exact: true }).click();
+  await manager.getByRole('button', { name: 'Delete route', exact: true }).click();
+  await expect(manager.getByRole('rowheader', { name: 'Device route', exact: true })).toHaveCount(0);
+  expect(firmware.calls.filter((call) => call.group === 64 && call.cmd === 2)).toHaveLength(1);
 });

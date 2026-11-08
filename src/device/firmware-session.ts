@@ -1,17 +1,16 @@
-import { DeviceError, type SmpRequest } from './mcumgr';
-import { BluetoothSession } from './bluetooth-session';
-import { connectSerial, type SerialConnection } from './serial';
+import { DeviceError, abortable, delay, type SmpRequest } from './smp';
+import { DeviceConnectionSession } from './connection-session';
+import { transportSupported, type TransportKind, type DeviceMode } from './config';
 import {
   FirmwareClient,
   FirmwareError,
-  MAX_FIRMWARE_SIZE,
   parseFirmware,
   sameHash,
   type FirmwareImage,
   type ImageState,
 } from './firmware';
 
-export type FirmwareMode = 'ble' | 'usb';
+export type FirmwareMode = DeviceMode;
 export type FirmwarePhase =
   | 'ready'
   | 'paused'
@@ -24,6 +23,7 @@ export type FirmwarePhase =
   | 'unknown';
 export interface FirmwareSnapshot {
   mode: FirmwareMode;
+  transport: TransportKind;
   busy: 'file' | 'connecting' | 'uploading' | 'checking' | 'restarting' | 'confirming' | null;
   connected: boolean;
   remembered: boolean;
@@ -41,7 +41,8 @@ export interface FirmwareSnapshot {
 
 export class FirmwareSession {
   private state: FirmwareSnapshot = {
-    mode: 'ble',
+    mode: 'application',
+    transport: 'ble',
     busy: null,
     connected: false,
     remembered: false,
@@ -55,28 +56,29 @@ export class FirmwareSession {
     pending: false,
   };
   private listeners = new Set<() => void>();
-  private connection?: { request: SmpRequest; close: () => void | Promise<void> };
-  private readonly bluetooth: BluetoothSession;
-  private readonly ownsBluetooth: boolean;
+  readonly connectionSession: DeviceConnectionSession;
+  private readonly ownsConnection: boolean;
   private readonly unsubscribe: () => void;
-  private bluetoothTarget?: string;
-  constructor(bluetooth?: BluetoothSession) {
-    this.ownsBluetooth = !bluetooth;
-    this.bluetooth = bluetooth ?? new BluetoothSession();
-    this.unsubscribe = this.bluetooth.subscribe(() => this.syncBluetooth());
-    this.syncBluetooth();
+  private connectionTarget?: string;
+  constructor(connectionSession?: DeviceConnectionSession) {
+    this.ownsConnection = !connectionSession;
+    this.connectionSession = connectionSession ?? new DeviceConnectionSession();
+    this.unsubscribe = this.connectionSession.subscribe(() => this.syncConnection());
+    this.syncConnection();
   }
-  private syncBluetooth() {
-    if (this.state.mode !== 'ble') return;
-    const connection = this.bluetooth.snapshot();
-    const target = this.bluetooth.rememberedDevice()?.id;
-    const changed = connection.connected && target !== this.bluetoothTarget;
+  private syncConnection() {
+    const connection = this.connectionSession.snapshot();
+    const target = connection.target;
+    const changed =
+      connection.mode !== this.state.mode || (connection.connected && target !== this.connectionTarget);
     if (changed) {
-      this.bluetoothTarget = target;
+      this.connectionTarget = target;
       this.attemptedBoot = false;
       this.originalHash = undefined;
     }
     this.publish({
+      mode: connection.mode,
+      transport: connection.transport,
       connected: connection.connected,
       remembered: connection.remembered,
       deviceName: connection.deviceName,
@@ -84,15 +86,12 @@ export class FirmwareSession {
       ...(changed && { phase: 'ready', off: 0, images: [], recoveryRestarted: false, error: undefined }),
     });
   }
-  private previousSerial?: SerialConnection['port'];
-  private lifetime = new AbortController();
   private stopRequested = false;
-  private expectedReset = false;
   private attemptedBoot = false;
   private originalHash?: Uint8Array;
   private disposed = false;
-  private closing: Promise<void> = Promise.resolve();
   private reconnect?: AbortController;
+  private bootStartedAt?: number;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -109,7 +108,7 @@ export class FirmwareSession {
     this.listeners.forEach((listener) => listener());
   }
   private async run(busy: NonNullable<FirmwareSnapshot['busy']>, action: () => Promise<void>) {
-    if (this.state.busy || this.disposed || !this.bluetooth.claim('firmware')) return;
+    if (this.state.busy || this.disposed || !this.connectionSession.claim('firmware')) return;
     this.publish({ busy, error: undefined });
     try {
       await action();
@@ -117,37 +116,20 @@ export class FirmwareSession {
       if (!(error instanceof DOMException && error.name === 'AbortError')) this.publish({ error });
     } finally {
       this.publish({ busy: null, stopping: false });
-      if (!this.state.pending) this.bluetooth.release('firmware');
+      if (!this.state.pending) this.connectionSession.release('firmware');
     }
   }
   setMode = async (mode: FirmwareMode) => {
-    if (this.state.mode === mode || this.state.pending) return;
-    await this.run('checking', async () => {
-      if (this.state.mode === 'usb') await this.closeSerial();
-      this.attemptedBoot = false;
-      this.originalHash = undefined;
-      this.publish({
-        mode,
-        connected: false,
-        deviceName: '',
-        images: [],
-        phase: 'ready',
-        off: 0,
-        error: undefined,
-        recoveryRestarted: false,
-        remembered: !!this.previousSerial,
-      });
-      this.syncBluetooth();
-    });
+    if (this.state.mode === mode || this.state.pending || this.state.busy) return;
+    if (!this.connectionSession.setMode(mode)) return;
+    this.attemptedBoot = false;
+    this.originalHash = undefined;
+    this.publish({ images: [], phase: 'ready', off: 0, error: undefined, recoveryRestarted: false });
   };
   chooseAnother = () =>
     this.run('checking', async () => {
       if (this.state.pending) return;
-      if (this.state.mode === 'ble') this.bluetooth.forget('firmware');
-      else {
-        await this.closeSerial();
-        this.previousSerial = undefined;
-      }
+      this.connectionSession.forget('firmware');
       this.attemptedBoot = false;
       this.originalHash = undefined;
       this.publish({
@@ -171,7 +153,7 @@ export class FirmwareSession {
       recoveryRestarted: false,
       error: undefined,
     });
-    this.bluetooth.release('firmware');
+    this.connectionSession.release('firmware');
   };
   selectFile = (file: Pick<File, 'name' | 'size' | 'arrayBuffer'>) =>
     this.run('file', async () => {
@@ -180,94 +162,83 @@ export class FirmwareSession {
       this.publish({ image: undefined, filename: '', off: 0, phase: 'ready', recoveryRestarted: false });
       this.attemptedBoot = false;
       this.originalHash = undefined;
-      if (!/\.bin$/i.test(file.name) || file.size > MAX_FIRMWARE_SIZE) throw new FirmwareError('invalidFile');
-      const image = await parseFirmware(new Uint8Array(await file.arrayBuffer()));
+      if (
+        !/\.bin$/i.test(file.name) ||
+        file.size > this.connectionSession.snapshot().profile.maxFirmwareBytes
+      )
+        throw new FirmwareError('invalidFile');
+      const image = await parseFirmware(
+        new Uint8Array(await file.arrayBuffer()),
+        this.connectionSession.snapshot().profile.maxFirmwareBytes,
+      );
       this.publish({ image, filename: file.name });
-      if (this.state.connected && this.state.mode === 'ble') await this.readImages();
+      if (this.state.connected && this.state.mode === 'application') await this.readImages();
     });
-  private client() {
-    if (this.state.mode === 'ble') return new FirmwareClient(this.bluetooth.request('firmware', 1));
-    if (!this.connection) throw new DeviceError('disconnected');
-    return new FirmwareClient(this.connection.request);
+  private client(signal?: AbortSignal) {
+    const profile = this.connectionSession.snapshot().profile;
+    const request = this.connectionSession.request('firmware');
+    const bounded: SmpRequest = (group, command, op, fields, _version, options) =>
+      request(group, command, op, fields, undefined, { ...options, ...(signal && { signal }) });
+    return new FirmwareClient(
+      bounded,
+      profile.firmwareChunkBytes,
+      profile,
+      this.connectionSession.packetLimit(),
+      this.state.mode === 'recovery',
+    );
   }
-  private async open() {
-    if (this.state.mode === 'ble') {
-      await this.bluetooth.ensure('firmware');
-      return;
-    }
-    this.lifetime = new AbortController();
-    const signal = this.lifetime.signal;
-    const lost = () => {
-      if (signal.aborted || signal !== this.lifetime.signal) return;
-      const link = this.connection;
-      this.connection = undefined;
-      if (link) this.closing = Promise.resolve(link.close()).catch(() => {});
-      this.publish({
-        connected: false,
-        ...(!this.expectedReset && { error: new DeviceError('disconnected') }),
-      });
-    };
-    if (this.previousSerial) await this.closing;
-    const link = await connectSerial(signal, lost, this.previousSerial);
-    if (signal.aborted || this.disposed) {
-      await link.close();
-      signal.throwIfAborted();
-      return;
-    }
-    this.previousSerial = link.port;
-    this.connection = link;
-    this.publish({ connected: true, remembered: true, deviceName: link.name });
+  private open(signal?: AbortSignal) {
+    return this.connectionSession.ensure('firmware', false, signal);
   }
+  supported = () => transportSupported(this.state.transport);
   connect = () =>
     this.run('connecting', async () => {
       if (!this.state.connected) await this.open();
-      if (this.state.mode === 'ble') await this.readImages();
+      if (this.state.mode === 'application') await this.readImages();
     });
   cancelConnection = () => {
     this.reconnect?.abort();
-    if (this.reconnect) this.bluetooth.disconnect('firmware');
-    if (this.state.mode === 'ble') this.bluetooth.cancelConnection();
-    else this.lifetime.abort();
-  };
-  private closeSerial = async () => {
-    const link = this.connection;
-    this.connection = undefined;
-    this.lifetime.abort();
-    if (this.state.mode === 'usb') this.publish({ connected: false });
-    if (link) this.closing = Promise.resolve(link.close()).catch(() => {});
-    await this.closing;
+    this.connectionSession.cancelConnection();
+    if (this.reconnect) this.connectionSession.disconnect('firmware');
   };
   disconnect = async () => {
-    if (this.state.busy || this.state.pending) return;
-    if (this.state.mode === 'ble') this.bluetooth.disconnect();
-    else await this.closeSerial();
+    if (!this.state.busy && !this.state.pending) this.connectionSession.disconnect();
   };
   dispose = () => {
     this.disposed = true;
     this.stopRequested = true;
     this.reconnect?.abort();
     this.unsubscribe();
-    this.bluetooth.release('firmware');
-    if (this.ownsBluetooth) this.bluetooth.dispose();
-    void this.closeSerial();
+    this.connectionSession.release('firmware');
+    if (this.ownsConnection) this.connectionSession.dispose();
     this.listeners.clear();
   };
-  private async readImages(settling = false) {
-    const images = await this.client().list();
+  private async readImages(settling = false, signal?: AbortSignal) {
+    const images = await this.client(signal).list();
+    signal?.throwIfAborted();
     const image = this.state.image;
     this.publish({ images });
     if (!image) return;
     const target = images.find(
-      (item) => item.image === 0 && item.active && sameHash(item.hash, image.imageHash),
+      (item) =>
+        item.image === this.connectionSession.snapshot().profile.imageIndex &&
+        item.active &&
+        sameHash(item.hash, image.imageHash),
     );
     if (target) {
       this.publish({ phase: target.confirmed ? 'complete' : 'unconfirmed' });
     } else if (this.attemptedBoot) {
       const pending = images.some(
-        (item) => item.image === 0 && item.pending && sameHash(item.hash, image.imageHash),
+        (item) =>
+          item.image === this.connectionSession.snapshot().profile.imageIndex &&
+          item.pending &&
+          sameHash(item.hash, image.imageHash),
       );
       const original = images.some(
-        (item) => item.image === 0 && item.active && sameHash(item.hash, this.originalHash),
+        (item) =>
+          item.image === this.connectionSession.snapshot().profile.imageIndex &&
+          item.active &&
+          sameHash(item.hash, this.originalHash),
       );
       this.publish({ phase: pending || settling ? 'awaitingReconnect' : original ? 'reverted' : 'unknown' });
     } else if (['complete', 'unconfirmed'].includes(this.state.phase)) {
@@ -283,11 +254,15 @@ export class FirmwareSession {
   private async uploadImage() {
     const image = this.state.image;
     if (!image || !this.state.connected || this.attemptedBoot) return;
+    if (image.size > this.connectionSession.snapshot().profile.maxFirmwareBytes)
+      throw new FirmwareError('invalidFile');
     this.stopRequested = false;
-    if (this.state.mode === 'ble') {
+    if (this.state.mode === 'application') {
       await this.readImages();
       if (this.state.phase === 'complete' || this.state.phase === 'unconfirmed') return;
-      const active = this.state.images.find((item) => item.image === 0 && item.active);
+      const active = this.state.images.find(
+        (item) => item.image === this.connectionSession.snapshot().profile.imageIndex && item.active,
+      );
       this.originalHash = active?.hash?.slice();
       if (active && !active.confirmed) throw new FirmwareError('unconfirmedImage');
     }
@@ -298,12 +273,19 @@ export class FirmwareSession {
       () => this.stopRequested,
     );
     if (!complete) return;
-    if (this.state.mode === 'usb') {
+    if (this.state.mode === 'recovery') {
       this.publish({ phase: 'recovered' });
     } else {
       const images = await this.client().list();
       this.publish({ images });
-      if (!images.some((item) => item.image === 0 && !item.active && sameHash(item.hash, image.imageHash))) {
+      if (
+        !images.some(
+          (item) =>
+            item.image === this.connectionSession.snapshot().profile.imageIndex &&
+            !item.active &&
+            sameHash(item.hash, image.imageHash),
+        )
+      ) {
         throw new FirmwareError('uploadMismatch');
       }
       this.publish({ phase: 'uploaded' });
@@ -311,95 +293,121 @@ export class FirmwareSession {
   }
   update = () =>
     this.run('connecting', async () => {
-      if (this.state.mode !== 'ble' || !this.state.image) return;
+      if (this.state.mode !== 'application' || !this.state.image) return;
       if (!this.state.connected) await this.open();
       if (['ready', 'paused', 'reverted'].includes(this.state.phase)) {
         this.publish({ busy: 'uploading' });
         await this.uploadImage();
       }
       if (this.state.phase !== 'uploaded') return;
+      if (this.connectionSession.snapshot().profile.activation === 'upload-only') return;
       this.publish({ busy: 'restarting' });
       await this.startTrial();
-      this.publish({ busy: 'connecting' });
-      const retries = new AbortController();
-      this.reconnect = retries;
-      try {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          retries.signal.throwIfAborted();
-          await new Promise<void>((resolve, reject) => {
-            const aborted = () => {
-              clearTimeout(timer);
-              reject(retries.signal.reason);
-            };
-            const timer = setTimeout(() => {
-              retries.signal.removeEventListener('abort', aborted);
-              resolve();
-            }, 750);
-            retries.signal.addEventListener('abort', aborted, { once: true });
-          });
-          if (this.disposed) return;
-          try {
-            if (!this.state.connected) await this.open();
-            await this.readImages(true);
-            if (this.snapshot().phase !== 'awaitingReconnect') return;
-          } catch (error) {
-            if (attempt === 2 || retries.signal.aborted) throw error;
-          }
-        }
-      } finally {
-        this.reconnect = undefined;
-      }
+      await this.waitForBoot();
     });
+  activate = () =>
+    this.run('restarting', async () => {
+      if (this.state.mode !== 'application' || this.state.phase !== 'uploaded') return;
+      await this.startTrial();
+      await this.waitForBoot();
+    });
+  continueWaiting = () =>
+    this.run('connecting', async () => {
+      if (this.state.mode !== 'application' || this.state.phase !== 'awaitingReconnect') return;
+      this.bootStartedAt = Date.now();
+      await this.waitForBoot();
+    });
+  private async waitForBoot() {
+    this.publish({ busy: 'connecting' });
+    const profile = this.connectionSession.snapshot().profile;
+    const deadline = (this.bootStartedAt ?? Date.now()) + profile.bootWaitMs;
+    const retries = new AbortController();
+    this.reconnect = retries;
+    try {
+      await delay(Math.min(profile.bootInitialDelayMs, Math.max(0, deadline - Date.now())), retries.signal);
+      while (Date.now() < deadline) {
+        retries.signal.throwIfAborted();
+        const attempt = new AbortController();
+        const active = AbortSignal.any([retries.signal, attempt.signal]);
+        const timer = setTimeout(
+          () => attempt.abort(new DeviceError('timeout')),
+          Math.min(profile.bootAttemptTimeoutMs, deadline - Date.now()),
+        );
+        try {
+          if (!this.state.connected) await this.open(active);
+          await abortable(this.readImages(true, active), active);
+          if (this.snapshot().phase !== 'awaitingReconnect') return;
+        } catch (error) {
+          this.connectionSession.disconnect('firmware');
+          retries.signal.throwIfAborted();
+          // Unreachable endpoints are expected during the swap. Protocol and device errors are not.
+          if (error instanceof DeviceError && !['timeout', 'disconnected'].includes(error.kind)) throw error;
+        } finally {
+          clearTimeout(timer);
+        }
+        await delay(Math.min(profile.bootRetryDelayMs, Math.max(0, deadline - Date.now())), retries.signal);
+      }
+      throw new FirmwareError('bootTimeout');
+    } finally {
+      this.reconnect = undefined;
+    }
+  }
   pause = () => {
     if (this.state.busy !== 'uploading') return;
     this.stopRequested = true;
     this.publish({ stopping: true });
   };
   private async reset() {
-    this.expectedReset = true;
     try {
       await this.client().reset();
     } catch (error) {
       // A reboot can close the transport before its response is delivered.
       if (!(error instanceof DeviceError && ['disconnected', 'timeout'].includes(error.kind))) throw error;
     } finally {
-      if (this.state.mode === 'ble') this.bluetooth.disconnect('firmware');
-      else await this.closeSerial();
-      this.expectedReset = false;
+      this.connectionSession.disconnect('firmware');
     }
   }
   testAndRestart = () => this.run('restarting', () => this.startTrial());
   private async startTrial() {
-    if (!this.state.image || this.state.mode !== 'ble' || this.state.phase !== 'uploaded') return;
+    if (!this.state.image || this.state.mode !== 'application' || this.state.phase !== 'uploaded') return;
     const images = await this.client().markTest(this.state.image.imageHash);
     if (
       !images.some(
-        (item) => item.image === 0 && item.pending && sameHash(item.hash, this.state.image!.imageHash),
+        (item) =>
+          item.image === this.connectionSession.snapshot().profile.imageIndex &&
+          item.pending &&
+          sameHash(item.hash, this.state.image!.imageHash),
       )
     ) {
       throw new FirmwareError('uploadMismatch');
     }
     this.attemptedBoot = true;
     this.publish({ phase: 'awaitingReconnect' });
+    this.bootStartedAt = Date.now();
     await this.reset();
   }
   confirm = () =>
     this.run('confirming', async () => {
-      if (this.state.mode !== 'ble' || !this.state.image) return;
+      if (this.state.mode !== 'application' || !this.state.image) return;
       await this.readImages();
-      const active = this.state.images.find((item) => item.image === 0 && item.active);
+      const active = this.state.images.find(
+        (item) => item.image === this.connectionSession.snapshot().profile.imageIndex && item.active,
+      );
       if (!active || !sameHash(active.hash, this.state.image.imageHash) || active.confirmed) return;
-      await this.client().confirm();
+      await this.client().confirm(this.state.image.imageHash);
       await this.readImages();
       if (this.snapshot().phase !== 'complete') throw new FirmwareError('uploadMismatch');
     });
   restartPending = () =>
     this.run('restarting', async () => {
-      if (this.state.mode !== 'ble' || !this.state.image) return;
+      if (this.state.mode !== 'application' || !this.state.image) return;
       await this.readImages();
       if (
         !this.state.images.some(
-          (item) => item.image === 0 && item.pending && sameHash(item.hash, this.state.image!.imageHash),
+          (item) =>
+            item.image === this.connectionSession.snapshot().profile.imageIndex &&
+            item.pending &&
+            sameHash(item.hash, this.state.image!.imageHash),
         )
       )
         return;
@@ -409,7 +417,7 @@ export class FirmwareSession {
     });
   restartRecovery = () =>
     this.run('restarting', async () => {
-      if (this.state.mode !== 'usb' || this.state.phase !== 'recovered') return;
+      if (this.state.mode !== 'recovery' || this.state.phase !== 'recovered') return;
       await this.reset();
       this.publish({ recoveryRestarted: true });
     });

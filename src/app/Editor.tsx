@@ -9,7 +9,7 @@ import { emptyRoute, type RouteDocument } from '../domain/model';
 import { ascent } from '../domain/summary';
 import type { ExportFormat } from '../files/export';
 import { useDevices } from '../features/device/useDevices';
-import { BluetoothConnection } from '../features/device/BluetoothConnection';
+import { DeviceConnection } from '../features/device/DeviceConnection';
 import { DeviceTaskStatus } from '../features/device/DeviceTaskStatus';
 import { DeviceRoutes } from '../features/device/DeviceRoutes';
 import { FirmwareDialog } from '../features/device/FirmwareDialog';
@@ -248,10 +248,11 @@ export function Editor({
     setElevationPanel('tools');
   }
   const deviceOccupied = !!connection.state.task || !!connection.state.busy;
-  const firmwarePanel = firmware.state.mode === 'usb' ? 'recovery' : 'firmware';
-  async function openFirmware(mode: 'ble' | 'usb') {
+  const firmwarePanel = firmware.state.mode === 'recovery' ? 'recovery' : 'firmware';
+  async function openFirmware(mode: 'application' | 'recovery') {
     await firmware.session.setMode(mode);
-    if (firmware.session.snapshot().mode === mode) setDevicePanel(mode === 'usb' ? 'recovery' : 'firmware');
+    if (firmware.session.snapshot().mode === mode)
+      setDevicePanel(mode === 'recovery' ? 'recovery' : 'firmware');
   }
   const commands: EditorCommands = {
     new: { run: () => requestReplace({ doc: emptyRoute(), source: '' }) },
@@ -307,12 +308,14 @@ export function Editor({
       disabled: connection.state.task === 'firmware' || !!connection.state.busy,
     },
     deviceFirmware: {
-      run: () => void openFirmware('ble'),
-      disabled: deviceOccupied && (connection.state.task !== 'firmware' || firmware.state.mode !== 'ble'),
+      run: () => void openFirmware('application'),
+      disabled:
+        deviceOccupied && (connection.state.task !== 'firmware' || firmware.state.mode !== 'application'),
     },
     deviceRecovery: {
-      run: () => void openFirmware('usb'),
-      disabled: deviceOccupied && (connection.state.task !== 'firmware' || firmware.state.mode !== 'usb'),
+      run: () => void openFirmware('recovery'),
+      disabled:
+        deviceOccupied && (connection.state.task !== 'firmware' || firmware.state.mode !== 'recovery'),
     },
     settings: { run: () => setSettingsTab('general') },
     checkUpdates: {
@@ -553,7 +556,7 @@ export function Editor({
       )}
       <FileDialogs files={files} lang={lang} />
       {devicePanel === 'connection' && (
-        <BluetoothConnection connection={connection} lang={lang} onClose={() => setDevicePanel(null)} />
+        <DeviceConnection connection={connection} lang={lang} onClose={() => setDevicePanel(null)} />
       )}
       {devicePanel === 'routes' && (
         <DeviceRoutes device={device} lang={lang} onClose={() => setDevicePanel(null)} />

@@ -44,6 +44,7 @@ export class FirmwarePeer {
 
   request(group: number, command: number, op: number, fields: Fields, transport: string): Fields | null {
     this.calls.push({ group, command, op, fields, transport });
+    if (group === 0 && command === 6 && op === 0) return { buf_size: 1024, buf_count: 4 };
     if (group === 1 && command === 0 && op === 0) return { images: this.images() };
     if (group === 1 && command === 1 && op === 2) {
       const off = fields.off as number;
@@ -64,7 +65,6 @@ export class FirmwarePeer {
       return { off: this.received.length };
     }
     if (group === 1 && command === 0 && op === 2) {
-      expect(transport).toBe('ble');
       if (fields.confirm === true) {
         expect(this.booted).toBe(true);
         if (fields.hash) expect(Buffer.from(fields.hash as Uint8Array)).toEqual(this.target.hash);

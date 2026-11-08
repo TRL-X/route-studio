@@ -1,5 +1,5 @@
-import { decode, encode } from 'cborg';
-import { DeviceError, record, type Fields, type SmpRequest } from './mcumgr';
+import { DeviceError, PacketDecoder, smpRequest, delay, type SmpRequest } from './smp';
+import { DEFAULT_PROFILE, type ConnectionProfile } from './config';
 import type { SerialPort } from './serial-types';
 
 const maxPacketBytes = 65533;
@@ -32,6 +32,7 @@ export function encodeSerialPacket(packet: Uint8Array): Uint8Array[] {
 }
 
 export class SerialDecoder {
+  constructor(private readonly maximum = maxPacketBytes) {}
   private line: number[] = [];
   private packet?: Uint8Array;
   private received = 0;
@@ -70,7 +71,7 @@ export class SerialDecoder {
       if (initial) {
         if (this.packet || data.length < 2) throw new DeviceError('protocol');
         const length = (data[0] << 8) | data[1];
-        if (length < 10) throw new DeviceError('protocol');
+        if (length < 10 || length - 2 > this.maximum) throw new DeviceError('protocol');
         this.packet = new Uint8Array(length);
         this.received = 0;
         data = data.subarray(2);
@@ -100,6 +101,7 @@ export async function connectSerial(
   signal: AbortSignal,
   onLost: () => void,
   previous?: SerialPort,
+  profile: Readonly<ConnectionProfile> = DEFAULT_PROFILE,
 ): Promise<SerialConnection> {
   signal.throwIfAborted();
   if (!navigator.serial) throw new Error('Web Serial is unavailable');
@@ -107,23 +109,27 @@ export async function connectSerial(
   signal.addEventListener('abort', cancelSelection, { once: true });
   let port: SerialPort;
   try {
-    port = previous ?? (await navigator.serial.requestPort());
+    port = previous ?? (await navigator.serial.requestPort({ filters: profile.usbFilters }));
   } finally {
     signal.removeEventListener('abort', cancelSelection);
   }
   signal.throwIfAborted();
   await closingPorts.get(port);
   signal.throwIfAborted();
-  await port.open({ baudRate: 115200, bufferSize: 4096, flowControl: 'none' });
+  await port.open({
+    baudRate: profile.baudRate,
+    bufferSize: profile.serialBufferBytes,
+    flowControl: profile.flowControl,
+    dataBits: profile.dataBits,
+    stopBits: profile.stopBits,
+    parity: profile.parity,
+  });
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
   const lifetime = new AbortController();
-  let pending:
-    { frame: Uint8Array; resolve: (fields: Fields) => void; reject: (error: unknown) => void } | undefined;
+  let pending: { resolve: (frame: Uint8Array) => void; reject: (error: unknown) => void } | undefined;
   let closing: Promise<void> | undefined;
   let readTask: Promise<void> | undefined;
-  let sequence = 0;
-  let tail: Promise<unknown> = Promise.resolve();
   const close = () => {
     if (closing) return closing;
     lifetime.abort(new DeviceError('disconnected'));
@@ -160,14 +166,22 @@ export async function connectSerial(
   };
   try {
     signal.throwIfAborted();
-    await port.setSignals?.({ dataTerminalReady: true });
+    const signals = {
+      ...(profile.dtr !== 'preserve' && { dataTerminalReady: profile.dtr === 'assert' }),
+      ...(profile.flowControl !== 'hardware' &&
+        profile.rts !== 'preserve' && { requestToSend: profile.rts === 'assert' }),
+    };
+    if (Object.keys(signals).length) await port.setSignals?.(signals);
     signal.throwIfAborted();
     if (!port.readable || !port.writable) throw new DeviceError('disconnected');
     reader = port.readable.getReader();
     writer = port.writable.getWriter();
     signal.addEventListener('abort', aborted, { once: true });
     port.addEventListener('disconnect', lost);
-    const parser = new SerialDecoder();
+    const parser =
+      profile.serialFraming === 'raw'
+        ? new PacketDecoder(profile.maxRxPacketBytes)
+        : new SerialDecoder(profile.maxRxPacketBytes);
     readTask = (async () => {
       try {
         while (!lifetime.signal.aborted) {
@@ -178,21 +192,7 @@ export async function connectSerial(
           }
           for (const frame of parser.push(value)) {
             if (!pending) throw new DeviceError('protocol');
-            const expected = pending.frame;
-            const header = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
-            if (
-              frame.length < 8 ||
-              frame[0] !== expected[0] + 1 ||
-              frame[1] !== 0 ||
-              header.getUint16(2) !== frame.length - 8 ||
-              frame[4] !== expected[4] ||
-              frame[5] !== expected[5] ||
-              frame[6] !== expected[6] ||
-              frame[7] !== expected[7]
-            )
-              throw new DeviceError('protocol');
-            const reply = record(decode(frame.subarray(8), { allowBigInt: true }));
-            pending.resolve(reply);
+            pending.resolve(frame);
             pending = undefined;
           }
         }
@@ -200,50 +200,26 @@ export async function connectSerial(
         fail(error instanceof DeviceError ? error : new DeviceError('protocol'));
       }
     })();
-    const request: SmpRequest = (group, command, operation, fields) => {
-      const execute = async () => {
-        signal.throwIfAborted();
-        lifetime.signal.throwIfAborted();
-        const body = encode(fields);
-        if (body.length + 8 > 1024) throw new DeviceError('protocol');
-        const frame = new Uint8Array(body.length + 8);
-        // SMP v1 is supported by serial recovery implementations as well as applications.
-        frame.set([
-          operation === 'write' ? 2 : 0,
-          0,
-          body.length >>> 8,
-          body.length & 255,
-          group >>> 8,
-          group & 255,
-          sequence,
-          command,
-        ]);
-        sequence = (sequence + 1) & 255;
-        frame.set(body, 8);
-        const response = new Promise<Fields>((resolve, reject) => {
-          pending = { frame, resolve, reject };
+    const request = smpRequest(
+      async (frame, active) => {
+        const response = new Promise<Uint8Array>((resolve, reject) => {
+          pending = { resolve, reject };
+          active.addEventListener('abort', () => reject(active.reason), { once: true });
         });
-        const timeout = setTimeout(() => fail(new DeviceError('timeout')), 60000);
-        try {
-          const write = async () => {
-            for (const line of encodeSerialPacket(frame)) {
-              lifetime.signal.throwIfAborted();
-              await writer!.write(line);
-            }
-          };
-          const [reply] = await Promise.all([response, write()]);
-          return reply;
-        } catch (error) {
-          fail(error);
-          throw error;
-        } finally {
-          clearTimeout(timeout);
-        }
-      };
-      const next = tail.then(execute);
-      tail = next.catch(() => {});
-      return next;
-    };
+        const write = async () => {
+          for (const line of profile.serialFraming === 'raw' ? [frame] : encodeSerialPacket(frame)) {
+            active.throwIfAborted();
+            await writer!.write(line);
+            if (profile.fragmentDelayMs) await delay(profile.fragmentDelayMs, active);
+          }
+        };
+        const [reply] = await Promise.all([response, write()]);
+        return reply;
+      },
+      AbortSignal.any([signal, lifetime.signal]),
+      fail,
+      profile,
+    );
     const info = port.getInfo();
     const name =
       info.usbVendorId !== undefined && info.usbProductId !== undefined

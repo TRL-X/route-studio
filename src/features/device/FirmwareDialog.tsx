@@ -1,5 +1,7 @@
 import { Button, Callout, Checkbox, Flex, Progress, Text } from '@radix-ui/themes';
+import { ConnectionSettings } from './ConnectionSettings';
 import { useRef, useState } from 'react';
+import { Bluetooth, Cable } from 'lucide-react';
 import { FirmwareError } from '../../device/firmware';
 import { DeviceError } from '../../device/mcumgr';
 import { Modal } from '../../ui/Modal';
@@ -7,6 +9,7 @@ import type { Lang } from '../../i18n';
 import type { FirmwareControls } from './useFirmware';
 import en from '../../i18n/en.firmware.json';
 import zh from '../../i18n/zh-CN.firmware.json';
+import './device-dialog.css';
 
 export const firmwareStrings = { en, zh } satisfies Record<Lang, typeof en>;
 function errorMessage(error: unknown, lang: Lang) {
@@ -35,11 +38,12 @@ export function FirmwareDialog({
   const [recoveryReady, setRecoveryReady] = useState(state.connected || state.pending);
   const [endingTask, setEndingTask] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
-  const usb = state.mode === 'usb';
-  const supported =
-    window.isSecureContext && (usb ? !!navigator.serial?.requestPort : !!navigator.bluetooth?.requestDevice);
+  const usb = state.mode === 'recovery';
+  const supported = session.supported();
   const percent = Math.floor((state.off * 100) / Math.max(1, state.image?.size ?? 0));
-  const current = state.images.find((image) => image.image === 0 && image.active);
+  const current = state.images.find(
+    (image) => image.image === session.connectionSession.snapshot().profile.imageIndex && image.active,
+  );
   const canUpload = ['ready', 'paused'].includes(state.phase);
   const afterRestart = ['awaitingReconnect', 'unconfirmed', 'reverted', 'unknown', 'complete'].includes(
     state.phase,
@@ -51,7 +55,9 @@ export function FirmwareDialog({
       : state.busy === 'uploading'
         ? t.uploading.replace('{percent}', String(percent))
         : state.busy === 'connecting'
-          ? t.connecting
+          ? state.phase === 'awaitingReconnect'
+            ? t.waitingBoot
+            : t.connecting
           : state.busy === 'checking'
             ? t.checking
             : state.busy === 'restarting'
@@ -62,7 +68,7 @@ export function FirmwareDialog({
                   ? t.recoveryRestarted
                   : t[state.phase];
   return (
-    <Modal title={usb ? t.usb : t.title} maxWidth="640px" onClose={onClose}>
+    <Modal className="device-dialog" title={usb ? t.usb : t.title} maxWidth="640px" onClose={onClose}>
       <Flex direction="column" gap="4">
         <Text size="2" color="gray">
           {t.intro}
@@ -109,6 +115,7 @@ export function FirmwareDialog({
             <Text as="label" size="2">
               <Flex gap="2" align="start">
                 <Checkbox
+                  mt="1"
                   checked={recoveryReady}
                   disabled={!!state.busy}
                   onCheckedChange={(value) => setRecoveryReady(value === true)}
@@ -120,9 +127,10 @@ export function FirmwareDialog({
         )}
         {!supported && (
           <Text size="2" color="gray">
-            {usb ? t.usbUnsupported : t.bleUnsupported}
+            {state.transport === 'usb' ? t.usbUnsupported : t.bleUnsupported}
           </Text>
         )}
+        <ConnectionSettings session={session.connectionSession} lang={lang} recovery={usb} />
         <Text size="2">
           {state.connected ? t.connected.replace('{name}', state.deviceName) : t.disconnected}
         </Text>
@@ -141,7 +149,12 @@ export function FirmwareDialog({
               disabled={!!state.busy || !supported || (usb && !recoveryReady)}
               onClick={() => void (afterRestart && !usb ? session.check() : session.connect())}
             >
-              {afterRestart && !usb ? t.reconnectCheck : usb ? t.connectUsb : t.connectBle}
+              {state.transport === 'usb' ? <Cable size={16} /> : <Bluetooth size={16} />}
+              {afterRestart && !usb
+                ? t.reconnectCheck
+                : state.transport === 'usb'
+                  ? t.connectUsb
+                  : t.connectBle}
             </Button>
           ) : (
             <Button
@@ -207,8 +220,13 @@ export function FirmwareDialog({
             )
           )}
           {!usb && state.phase === 'uploaded' && (
-            <Button disabled={!!state.busy || !state.connected} onClick={() => void session.update()}>
+            <Button disabled={!!state.busy || !state.connected} onClick={() => void session.activate()}>
               {t.testRestart}
+            </Button>
+          )}
+          {!usb && state.phase === 'awaitingReconnect' && !state.busy && (
+            <Button variant="surface" onClick={() => void session.continueWaiting()}>
+              {t.continueWaiting}
             </Button>
           )}
           {!usb && state.phase === 'awaitingReconnect' && state.connected && (
@@ -246,9 +264,9 @@ export function FirmwareDialog({
             </Flex>
           </Callout.Root>
         )}
-        <Flex justify="between" gap="2" wrap="wrap">
+        <Flex justify="end" gap="2" wrap="wrap">
           {state.pending && !state.busy && !endingTask && (
-            <Button color="gray" variant="surface" onClick={() => setEndingTask(true)}>
+            <Button color="gray" variant="surface" mr="auto" onClick={() => setEndingTask(true)}>
               {t.endTask}…
             </Button>
           )}

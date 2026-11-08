@@ -1,11 +1,14 @@
 import { Button, Callout, Flex, Text } from '@radix-ui/themes';
-import { Bluetooth } from 'lucide-react';
+import { Bluetooth, Cable } from 'lucide-react';
+import { ConnectionSettings } from './ConnectionSettings';
+import { transportSupported } from '../../device/config';
 import { Modal } from '../../ui/Modal';
 import type { Lang } from '../../i18n';
 import type { ConnectionControls } from './useDevices';
 import { deviceError, deviceStrings } from './deviceStrings';
+import './device-dialog.css';
 
-export function BluetoothConnection({
+export function DeviceConnection({
   connection,
   lang,
   onClose,
@@ -16,21 +19,25 @@ export function BluetoothConnection({
 }) {
   const { session, state } = connection;
   const t = deviceStrings[lang];
-  const supported = window.isSecureContext && !!navigator.bluetooth?.requestDevice;
+  const supported = transportSupported(state.transport);
   return (
-    <Modal title={t.connectionTitle} maxWidth="480px" onClose={onClose}>
+    <Modal className="device-dialog" title={t.connectionTitle} maxWidth="480px" onClose={onClose}>
       <Flex direction="column" gap="4">
         <Text size="2" color="gray">
           {t.connectionHelp}
         </Text>
+        <ConnectionSettings session={session} lang={lang} />
         <Text size="2" role="status">
           {state.busy
             ? t.connecting
             : state.connected
-              ? t.connected.replace('{name}', state.deviceName)
+              ? t.connected.replace(
+                  '{name}',
+                  `${state.deviceName} · ${state.transport === 'usb' ? 'USB' : t.bluetooth}`,
+                )
               : state.remembered
                 ? t.disconnected
-                : t.connect}
+                : t.notConnected}
         </Text>
         {!supported && (
           <Text size="2" color="gray">
@@ -43,12 +50,12 @@ export function BluetoothConnection({
               {t.cancelConnection}
             </Button>
           ) : state.connected ? (
-            <Button variant="surface" disabled={!!state.task} onClick={() => session.disconnect()}>
+            <Button variant="soft" color="gray" disabled={!!state.task} onClick={() => session.disconnect()}>
               {t.disconnect}
             </Button>
           ) : (
             <Button disabled={!supported || !!state.task} onClick={() => void session.connect()}>
-              <Bluetooth size={16} />
+              {state.transport === 'usb' ? <Cable size={16} /> : <Bluetooth size={16} />}
               {state.remembered ? t.reconnect : t.connect}
             </Button>
           )}

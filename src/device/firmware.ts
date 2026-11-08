@@ -1,10 +1,13 @@
+import { DEFAULT_PROFILE, type ConnectionProfile } from './config';
+import { fitData } from './smp';
 import { checked, DeviceError, record, type Fields, type SmpRequest } from './mcumgr';
 
-export const MAX_FIRMWARE_SIZE = 64 * 1024 * 1024;
+export const MAX_FIRMWARE_SIZE = DEFAULT_PROFILE.maxFirmwareBytes;
 
 export class FirmwareError extends Error {
   constructor(
     readonly code:
+      | 'bootTimeout'
       | 'invalidFile'
       | 'unsupportedImage'
       | 'hashMismatch'
@@ -29,8 +32,8 @@ export function sameHash(a: Uint8Array | undefined, b: Uint8Array | undefined): 
 }
 
 /** Checks the MCUboot container and digest; the bootloader verifies its signature. */
-export async function parseFirmware(input: Uint8Array): Promise<FirmwareImage> {
-  if (input.length < 32 || input.length > MAX_FIRMWARE_SIZE) throw new FirmwareError('invalidFile');
+export async function parseFirmware(input: Uint8Array, maxBytes = MAX_FIRMWARE_SIZE): Promise<FirmwareImage> {
+  if (input.length < 32 || input.length > maxBytes) throw new FirmwareError('invalidFile');
   const bytes = Uint8Array.from(input);
   const view = new DataView(bytes.buffer);
   if (view.getUint32(0, true) !== 0x96f3b83d) throw new FirmwareError('invalidFile');
@@ -146,9 +149,12 @@ function imageStates(reply: Fields): ImageState[] {
 export class FirmwareClient {
   constructor(
     readonly request: SmpRequest,
-    private readonly chunkSize = 256,
+    private readonly chunkSize = DEFAULT_PROFILE.firmwareChunkBytes,
+    private readonly profile: Readonly<ConnectionProfile> = DEFAULT_PROFILE,
+    private readonly packetLimit = profile.maxTxPacketBytes,
+    private readonly recovery = false,
   ) {
-    if (!Number.isInteger(chunkSize) || chunkSize < 32 || chunkSize > 768) throw new DeviceError('protocol');
+    if (!Number.isInteger(chunkSize) || chunkSize < 1 || chunkSize > 65525) throw new DeviceError('protocol');
   }
 
   async list(): Promise<ImageState[]> {
@@ -168,11 +174,20 @@ export class FirmwareClient {
     onProgress(0);
     while (offset < bytes.length) {
       if (shouldStop()) return false;
+      const target = this.recovery ? this.profile.recoveryUploadImage : this.profile.imageIndex;
+      const fields = {
+        off: offset,
+        ...(offset === 0 && {
+          len: bytes.length,
+          sha,
+          ...(target !== null && (this.recovery || target !== 0) && { image: target }),
+          ...(this.profile.upgradeOnly && { upgrade: true }),
+        }),
+      };
+      const data = fitData(fields, bytes.subarray(offset, offset + this.chunkSize), this.packetLimit);
       const reply = checked(
-        await this.request(1, 1, 'write', {
-          off: offset,
-          data: bytes.slice(offset, offset + this.chunkSize),
-          ...(offset === 0 && { len: bytes.length, sha }),
+        await this.request(1, 1, 'write', { ...fields, data }, undefined, {
+          timeoutMs: offset === 0 ? this.profile.firstUploadTimeoutMs : this.profile.requestTimeoutMs,
         }),
       );
       const next = uint(reply.off, bytes.length);
@@ -184,7 +199,7 @@ export class FirmwareClient {
       if (next > highWater) {
         highWater = next;
         stalled = 0;
-      } else if (++stalled > 8) {
+      } else if (++stalled > this.profile.stalledUploadLimit) {
         throw new FirmwareError('uploadStalled');
       }
       offset = next;

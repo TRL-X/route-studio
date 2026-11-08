@@ -1,3 +1,4 @@
+import { fitData } from './smp';
 import { checked, DeviceError } from './mcumgr';
 import { RouteClient, routeFailure, uint, type UploadStatus } from './routes';
 
@@ -23,7 +24,7 @@ export async function transferRoute(
   client: RouteClient,
   job: UploadJob,
   progress: (value: UploadProgress) => void,
-  wait = () => new Promise<void>((resolve) => setTimeout(resolve, 750)),
+  wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
 ) {
   const accept = (reply: UploadStatus) => {
     if (reply.size !== job.bytes.length || (job.uploadId !== undefined && reply.uploadId !== job.uploadId))
@@ -68,31 +69,34 @@ export async function transferRoute(
       let off = uint(stat.len, job.bytes.length);
       progress({ state: 'receiving', off });
       while (off < job.bytes.length && !job.cancelRequested) {
-        const data = job.bytes.subarray(off, off + Math.min(remote.maxChunk!, 512));
-        const ack = checked(
-          await client.request(8, 0, 'write', {
-            name: remote.path,
-            off,
-            data,
-            ...(off === 0 && { len: job.bytes.length }),
-          }),
+        const fields = { name: remote.path, off, ...(off === 0 && { len: job.bytes.length }) };
+        const data = fitData(
+          fields,
+          job.bytes.subarray(off, off + Math.min(remote.maxChunk!, client.profile.routeChunkBytes)),
+          client.packetLimit,
         );
+        const ack = checked(await client.request(8, 0, 'write', { ...fields, data }));
         if (ack.off !== off + data.length) throw new DeviceError('protocol');
         off += data.length;
         progress({ state: 'receiving', off });
       }
-      // Cancel only between complete SMP requests, never halfway through a BLE frame.
+      // Cancel only between complete SMP requests, never halfway through an SMP packet.
       remote = accept(
         job.cancelRequested ? await client.cancel(remote.uploadId) : await client.commit(remote.uploadId),
       );
     }
   }
   // Poll for at most two minutes per invocation; continuing later uses the same transaction.
-  for (let poll = 0; remote.state === 'verifying'; poll++) {
+  const deadline = Date.now() + client.profile.routeVerifyTimeoutMs;
+  while (remote.state === 'verifying') {
     progress({ state: 'verifying', off: job.bytes.length });
-    if (poll === 160) throw new DeviceError('timeout');
-    await wait();
-    remote = accept(await client.uploadStatus(remote.uploadId));
+    if (Date.now() >= deadline) throw new DeviceError('timeout');
+    await wait(Math.min(client.profile.routePollIntervalMs, deadline - Date.now()));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new DeviceError('timeout');
+    remote = accept(
+      await client.uploadStatus(remote.uploadId, Math.min(client.profile.requestTimeoutMs, remaining)),
+    );
   }
   if (remote.state === 'ready') progress({ state: 'ready', off: job.bytes.length, name: remote.name });
   else if (remote.state === 'cancelled') progress({ state: 'cancelled', off: 0 });

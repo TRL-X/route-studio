@@ -26,7 +26,7 @@
   "settings": "Settings…",
   "checkUpdates": "Check for updates…",
   "help": "Help",
-  "deviceConnect": "Bluetooth connection…",
+  "deviceConnect": "Device connection…",
   "deviceSend": "Send current route…",
   "deviceRoutes": "Manage device routes…",
   "deviceFirmware": "Update device firmware…",

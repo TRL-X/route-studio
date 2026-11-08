@@ -125,3 +125,27 @@ test('rejects impossible resume sizes and ACK offsets', async () => {
     });
   }
 });
+
+test('route verification respects its total deadline and keeps the remote transaction resumable', async () => {
+  vi.useFakeTimers();
+  try {
+    const { defaultProfile } = await import('../../src/device/config');
+    const firmware = new Firmware();
+    const profile = {
+      ...defaultProfile('application-usb'),
+      routeVerifyTimeoutMs: 1000,
+      routePollIntervalMs: 750,
+    };
+    const job = createUpload(new Uint8Array(20));
+    const transfer = transferRoute(new RouteClient(firmware.request, profile), job, () => {});
+    const rejected = expect(transfer).rejects.toMatchObject({ kind: 'timeout' });
+    await vi.advanceTimersByTimeAsync(1000);
+    await rejected;
+    expect(job.remote?.state).toBe('verifying');
+    expect(firmware.calls.filter((call) => call.group === 64 && call.cmd === 3)).toHaveLength(1);
+    await transferRoute(new RouteClient(firmware.request, profile), job, () => {}, noWait);
+    expect(job.remote?.state).toBe('ready');
+  } finally {
+    vi.useRealTimers();
+  }
+});

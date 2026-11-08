@@ -1,11 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { BluetoothSession } from '../../device/bluetooth-session';
+import { DeviceConnectionSession } from '../../device/connection-session';
 import { DeviceSession } from '../../device/session';
 import { FirmwareSession } from '../../device/firmware-session';
 
 export function useDevices() {
   const [sessions] = useState(() => {
-    const connection = new BluetoothSession();
+    const connection = new DeviceConnectionSession();
     return { connection, device: new DeviceSession(connection), firmware: new FirmwareSession(connection) };
   });
   const connection = useSyncExternalStore(sessions.connection.subscribe, sessions.connection.snapshot);

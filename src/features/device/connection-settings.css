@@ -1,0 +1,35 @@
+.connection-settings {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connection-settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.connection-settings-fields .rt-SelectTrigger {
+  width: 100%;
+}
+
+.connection-settings-advanced > summary {
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
+  cursor: pointer;
+}
+
+.connection-settings-advanced > summary:focus-visible {
+  outline: 2px solid var(--focus-8);
+  outline-offset: 2px;
+  border-radius: var(--radius-1);
+}
+
+.connection-settings-json textarea {
+  min-height: 120px;
+  font-family: var(--code-font-family);
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-2);
+}

@@ -1,3 +1,4 @@
+import { DEFAULT_PROFILE, type ConnectionProfile } from './config';
 import { checked, DeviceError, record, type Fields, type SmpRequest } from './mcumgr';
 
 export const routeGroup = 64;
@@ -55,7 +56,7 @@ export interface UploadStatus {
   rev?: bigint;
 }
 function chunk(value: unknown) {
-  const size = uint(value, 1024);
+  const size = uint(value, 65525);
   if (!size) throw new DeviceError('protocol');
   return size;
 }
@@ -90,9 +91,27 @@ function upload(reply: Fields): UploadStatus {
 }
 
 export class RouteClient {
-  constructor(readonly request: SmpRequest) {}
-  private async call(command: number, op: 'read' | 'write', fields: Fields) {
-    return checked(await this.request(routeGroup, command, op, fields));
+  readonly request: SmpRequest;
+  constructor(
+    request: SmpRequest,
+    readonly profile: Readonly<ConnectionProfile> = DEFAULT_PROFILE,
+    readonly packetLimit = profile.maxTxPacketBytes,
+  ) {
+    this.request = async (...args) => {
+      const reply = await request(...args);
+      const mapped =
+        profile.protocolVersion === 1 && args[0] === routeGroup && typeof reply.rc === 'number'
+          ? profile.routeV1Errors[String(reply.rc)]
+          : undefined;
+      return mapped === undefined ? reply : { ...reply, rc: 0, err: { group: routeGroup, rc: mapped } };
+    };
+  }
+  private async call(command: number, op: 'read' | 'write', fields: Fields, timeoutMs?: number) {
+    const reply =
+      timeoutMs === undefined
+        ? await this.request(routeGroup, command, op, fields)
+        : await this.request(routeGroup, command, op, fields, undefined, { timeoutMs });
+    return checked(reply);
   }
   async status(): Promise<RouteStatus> {
     const r = await this.call(0, 'read', {});
@@ -110,7 +129,7 @@ export class RouteClient {
   }
   async list(): Promise<Catalog> {
     // Device preview/navigation changes also invalidate a catalog snapshot.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < this.profile.routeCatalogAttempts; attempt++) {
       const items: DeviceRoute[] = [];
       let cursor = 0;
       let rev: bigint | undefined;
@@ -118,13 +137,14 @@ export class RouteClient {
         for (let page = 0; page < 256; page++) {
           const r = await this.call(1, 'read', {
             cursor,
-            limit: 4,
+            limit: this.profile.routePageSize,
             ...(rev !== undefined && { if_rev: rev }),
           });
           const nextRev = revision(r.rev);
           if (rev !== undefined && rev !== nextRev) throw new DeviceError('protocol');
           rev = nextRev;
-          if (!Array.isArray(r.items) || r.items.length > 4) throw new DeviceError('protocol');
+          if (!Array.isArray(r.items) || r.items.length > this.profile.routePageSize)
+            throw new DeviceError('protocol');
           for (const value of r.items) {
             const item = record(value);
             const id = uint(item.id);
@@ -155,8 +175,8 @@ export class RouteClient {
   async prepare(reqId: Uint8Array, size: number) {
     return upload(await this.call(2, 'write', { req_id: reqId, size }));
   }
-  async uploadStatus(id: number) {
-    return upload(await this.call(0, 'read', { upload_id: id }));
+  async uploadStatus(id: number, timeoutMs?: number) {
+    return upload(await this.call(0, 'read', { upload_id: id }, timeoutMs));
   }
   async commit(id: number) {
     return upload(await this.call(3, 'write', { upload_id: id }));
