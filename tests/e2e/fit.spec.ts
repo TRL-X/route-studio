@@ -36,6 +36,6 @@ test('drops a multisport FIT and opens just the selected session', async ({ page
   await selectOption(dialog.getByRole('combobox'), '1');
   await dialog.getByRole('button', { name: 'Open', exact: true }).click();
   await dismissImportElevation(page);
-  await expect(page.getByRole('heading', { name: 'race · 2 · cycling', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'race (2, cycling)', exact: true })).toBeVisible();
   await expect(page.getByText('2 vertices', { exact: true })).toBeVisible();
 });

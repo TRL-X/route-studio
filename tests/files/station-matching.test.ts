@@ -53,14 +53,14 @@ describe('imported endpoint landmarks', () => {
     expect(exported.stations).toMatchObject([
       {
         kind: 'start',
-        name: 'Start · Finish hill',
+        name: 'Start - Finish hill',
         boundary: true,
         location: { lon: 0, lat: 0.0001 },
         anchor: { vertexId: exported.vertices[0].id, fraction: 0 },
       },
       {
         kind: 'finish',
-        name: 'Finish · Start plaza',
+        name: 'Finish - Start plaza',
         boundary: true,
         location: { lon: 0.0007, lat: 0 },
         anchor: { vertexId: exported.vertices.at(-1)!.id, fraction: 0 },
