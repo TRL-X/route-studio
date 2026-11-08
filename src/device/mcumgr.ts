@@ -69,6 +69,11 @@ export async function connectBluetooth(
     device =
       previous ??
       (await navigator.bluetooth.requestDevice({ filters: [{ services: [profile.bleServiceUuid] }] }));
+  } catch (error) {
+    // Only chooser dismissal is cancellation; GATT NotFoundError failures must still surface.
+    if (error instanceof DOMException && error.name === 'NotFoundError')
+      throw new DOMException(error.message, 'AbortError');
+    throw error;
   } finally {
     signal.removeEventListener('abort', cancelSelection);
   }
