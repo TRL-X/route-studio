@@ -41,7 +41,7 @@ for (const transport of ['ble', 'usb'] as const) {
 
     await connect.click();
     await expect(dialog.getByRole('status')).toHaveText(
-      transport === 'ble' ? 'Connected · AR Cap · Bluetooth' : 'Connected · Serial · USB',
+      transport === 'ble' ? 'Connected to AR Cap (Bluetooth)' : 'Connected to Serial (USB)',
     );
     await expect(dialog.getByRole('alert')).toHaveCount(0);
   });
