@@ -34,19 +34,16 @@
 
 !macro UnregisterRouteFile EXT
   ; An older uninstaller must not remove a newer installation's registration.
+  ; Keep shared parent keys: the bundled NSIS 3.0.4 /ifempty ignores values.
   Push $0
   ReadRegStr $0 SHCTX "Software\Classes\RouteStudio.${EXT}" "RouteStudioOwner"
   ${If} $0 == "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
     DeleteRegValue SHCTX "Software\Classes\.${EXT}\OpenWithProgids" "RouteStudio.${EXT}"
-    DeleteRegKey /ifempty SHCTX "Software\Classes\.${EXT}\OpenWithProgids"
-    DeleteRegKey /ifempty SHCTX "Software\Classes\.${EXT}"
     DeleteRegKey SHCTX "Software\Classes\RouteStudio.${EXT}"
   ${EndIf}
   ReadRegStr $0 SHCTX "Software\Classes\SystemFileAssociations\.${EXT}\shell\RouteStudio.Open" "RouteStudioOwner"
   ${If} $0 == "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
     DeleteRegKey SHCTX "Software\Classes\SystemFileAssociations\.${EXT}\shell\RouteStudio.Open"
-    DeleteRegKey /ifempty SHCTX "Software\Classes\SystemFileAssociations\.${EXT}\shell"
-    DeleteRegKey /ifempty SHCTX "Software\Classes\SystemFileAssociations\.${EXT}"
   ${EndIf}
   Pop $0
 !macroend

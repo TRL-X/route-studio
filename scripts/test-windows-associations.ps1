@@ -92,6 +92,7 @@ try {
         }
         Set-ClassValue ".$ext\OpenWithProgids" 'RouteStudio.AssociationTest.Other' ''
     }
+    Write-Host 'Verifying initial installation preserves defaults and other handlers.'
     Run-Installer
     Assert-Handlers
     Assert-Defaults 'RouteStudio.AssociationTest.First'
@@ -100,10 +101,12 @@ try {
     foreach ($ext in $extensions) {
         Set-ClassValue ".$ext" '' "RouteStudio.AssociationTest.Second.$ext"
     }
+    Write-Host 'Verifying upgrade preserves the later default-app choices.'
     Run-Installer
     Assert-Handlers
     Assert-Defaults 'RouteStudio.AssociationTest.Second'
 
+    Write-Host 'Verifying uninstall removes only application-owned handlers.'
     $uninstaller = Join-Path $installDir 'Uninstall Route Studio.exe'
     $process = Start-Process -FilePath $uninstaller -ArgumentList "/S _?=$installDir" -PassThru -Wait
     Assert-Equal $process.ExitCode 0 'Uninstall failed'
