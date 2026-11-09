@@ -14,6 +14,7 @@ import { exportTrack } from '../../src/files/export';
 import { writeRte } from '../../src/rte';
 import { ridgeRoute } from '../fixtures/ridge';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
@@ -1100,19 +1101,25 @@ test('a second process forwards files to the existing window and exits', async (
   await writeFile(source, gpx);
   await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize());
   const executable = await desktop.evaluate(() => process.execPath);
+  const noSandbox = await desktop.evaluate(({ app }) => app.commandLine.hasSwitch('no-sandbox'));
   const second = spawn(
     executable,
     [
+      // Match Playwright's sandbox setting on Linux CI for this separately spawned test process.
+      ...(noSandbox ? ['--no-sandbox'] : []),
       ...(process.env.DESKTOP_EXECUTABLE ? [] : [root]),
       `--user-data-dir=${path.join(directory, 'profile')}`,
       '--disable-updates',
       source,
     ],
-    { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }, stdio: 'ignore' },
+    { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }, stdio: ['ignore', 'ignore', 'pipe'] },
   );
+  let stderr = '';
+  second.stderr!.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
   try {
+    const [code, signal] = await once(second, 'close');
+    expect(code, `Second process exited with signal ${signal}:\n${stderr}`).toBe(0);
     await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
-    await expect.poll(() => second.exitCode).toBe(0);
     expect(
       await desktop.evaluate(({ BrowserWindow }) => ({
         count: BrowserWindow.getAllWindows().length,

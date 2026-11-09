@@ -23,6 +23,24 @@ function Read-Value($key, $name) {
     if (Test-Path $key) { return (Get-Item $key).GetValue($name) }
     return $null
 }
+function Set-ClassValue($subkey, $name, $value, $kind = [Microsoft.Win32.RegistryValueKind]::String) {
+    # Get-Item returns read-only RegistryKey handles. Open writable handles for fixture changes.
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey("Software\Classes\$subkey")
+    try {
+        $key.SetValue($name, $value, $kind)
+    } finally {
+        $key.Dispose()
+    }
+}
+function Remove-ClassValue($subkey, $name) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\Classes\$subkey", $true)
+    if (!$key) { return }
+    try {
+        $key.DeleteValue($name, $false)
+    } finally {
+        $key.Dispose()
+    }
+}
 function User-Choice($ext) {
     $key = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.$ext\UserChoice"
     if (!(Test-Path $key)) { return '' }
@@ -67,14 +85,12 @@ try {
             kind = if ($item -and ($item.GetValueNames() -contains '')) { $item.GetValueKind('') } else { $null }
         }
         $choices[$ext] = User-Choice $ext
-        if (!(Test-Path $key)) { New-Item $key -Force | Out-Null }
         if ($ext -eq 'rte') {
-            (Get-Item $key).DeleteValue('', $false)
+            Remove-ClassValue ".$ext" ''
         } else {
-            (Get-Item $key).SetValue('', "RouteStudio.AssociationTest.First.$ext")
+            Set-ClassValue ".$ext" '' "RouteStudio.AssociationTest.First.$ext"
         }
-        if (!(Test-Path "$key\OpenWithProgids")) { New-Item "$key\OpenWithProgids" -Force | Out-Null }
-        (Get-Item "$key\OpenWithProgids").SetValue('RouteStudio.AssociationTest.Other', '')
+        Set-ClassValue ".$ext\OpenWithProgids" 'RouteStudio.AssociationTest.Other' ''
     }
     Run-Installer
     Assert-Handlers
@@ -82,7 +98,7 @@ try {
 
     # A user's later choice must survive an upgrade as well as removal.
     foreach ($ext in $extensions) {
-        (Get-Item "$classes\.$ext").SetValue('', "RouteStudio.AssociationTest.Second.$ext")
+        Set-ClassValue ".$ext" '' "RouteStudio.AssociationTest.Second.$ext"
     }
     Run-Installer
     Assert-Handlers
@@ -100,13 +116,11 @@ try {
     Write-Host 'Installed, upgraded and removed all four handlers without changing default-app choices.'
 } finally {
     foreach ($ext in $backup.Keys) {
-        $key = Get-Item "$classes\.$ext"
         if ($backup[$ext].present) {
-            $key.SetValue('', $backup[$ext].value, $backup[$ext].kind)
+            Set-ClassValue ".$ext" '' $backup[$ext].value $backup[$ext].kind
         } else {
-            $key.DeleteValue('', $false)
+            Remove-ClassValue ".$ext" ''
         }
-        $other = Get-Item "$classes\.$ext\OpenWithProgids" -ErrorAction SilentlyContinue
-        if ($other) { $other.DeleteValue('RouteStudio.AssociationTest.Other', $false) }
+        Remove-ClassValue ".$ext\OpenWithProgids" 'RouteStudio.AssociationTest.Other'
     }
 }
