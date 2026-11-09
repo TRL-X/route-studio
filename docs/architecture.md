@@ -84,9 +84,13 @@ The shared save lock covers both project and export writes. Native cancellation 
 
 The renderer uses context isolation, sandboxing, disabled Node integration and a restricted `app://route-studio/` protocol with CSP. Only the main frame can use the file bridge, and it cannot supply filesystem paths. HTTP/HTTPS links open in the system browser.
 
-[security.ts](../electron/security.ts) contains URL, resource-path and filename checks. The main process checks the sender and arguments for desktop requests and chooses filesystem paths through native dialogs. Update state and platform decisions are separated into [update-service.ts](../electron/update-service.ts), [update-release.ts](../electron/update-release.ts) and [updates.cts](../electron/updates.cts).
+[security.ts](../electron/security.ts) contains URL, resource-path and filename checks. The main process checks the sender and arguments for desktop requests and obtains filesystem paths from native dialogs or OS file-open requests. Update state and platform decisions are separated into [update-service.ts](../electron/update-service.ts), [update-release.ts](../electron/update-release.ts) and [updates.cts](../electron/updates.cts).
 
 Native imports validate the selected file's extension, regular-file status and 64 MiB size limit. Existing filenames may contain any characters supported by the host filesystem. Portable filename restrictions and the 180-character limit apply only to save-name suggestions supplied by the renderer.
+
+[open-files.ts](../electron/open-files.ts) owns the OS file inbox and shared native reader. Early macOS `open-file` events, startup arguments and single-instance forwarding enter this inbox. [useDesktopOpenFiles.ts](../src/features/editor/useDesktopOpenFiles.ts) subscribes after draft recovery and pulls when the editor is available. Claims contain opaque IDs and filenames; the renderer can read only a claimed file by index. Claims survive renderer reloads until acknowledged. Batches use [DesktopOpenDialog](../src/features/editor/DesktopOpenDialog.tsx) to select one file. Parsing, track selection and replacement protection remain in `useRouteFiles`.
+
+File-manager registration is platform-specific in [electron-builder.yml](../electron-builder.yml). macOS declares alternate document handlers; Linux declares specific MIME types. Windows uses [installer.nsh](../build/installer.nsh) to add application-owned ProgIDs, Open With candidates and classic context-menu verbs in the selected installation scope. It never writes extension default values or UserChoice; uninstall removes only entries owned by that installation.
 
 ## Route document model
 
@@ -106,7 +110,7 @@ Native imports validate the selected file's extension, regular-file status and 6
 
 ### Import and replacement
 
-1. A browser file input, drop event or desktop file dialog supplies a `File` to the editor. Desktop reads cross the bridge as a filename and bytes.
+1. A browser file input, drop event, desktop file dialog or OS open request supplies a `File` to the editor. Desktop reads cross the bridge as a filename and bytes.
 2. `runIO({ type: 'read', ... })` dispatches by extension to the project loader, RTE reader, FIT parser or GPX/KML parser.
 3. Multiple routes or unconfirmed heights return `choices`. The editor obtains a selection/confirmation and submits the file again with those choices.
 4. The Worker returns a `RouteDocument` and, when assessment succeeds, an elevation assessment. The editor requests confirmation before replacing a document with unsaved edits.

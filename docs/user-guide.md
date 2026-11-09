@@ -14,6 +14,14 @@ Edit routes, preserve work in project files, and send routes to a TRL-X device. 
 
 The toolbar keeps **Menu**, **Undo**, **Redo**, the route name, **Save project** and **Export…** close to the editor. **Menu** groups file operations, editing, route tools and view options, followed by **Device** and **Settings…**. The **View** menu shows whether the elevation profile is visible. Device actions are available through the **Device** submenu.
 
+### Open from the file manager
+
+The installed desktop app registers GPX, KML, FIT and TRL-X RTE as supported formats without setting itself as the default app. Right-click a file and choose **Open with → Route Studio**. Windows also provides **Open with Route Studio** in the classic context menu (under **Show more options** on Windows 11). On macOS, install the app in Applications. Linux DEB packages install the desktop/MIME entries; an AppImage needs desktop integration before it appears in the file manager.
+
+Files open in the existing window, or start the app if needed. Requests wait for draft recovery, dialogs and active device operations. Unsaved edits and unbacked-up recovery drafts still require confirmation before replacement. If several files arrive together, choose one to edit; the others are not imported. Opening a file does not write back to it.
+
+Installation, upgrades and removal leave existing default-app choices alone. If no default exists, the operating system may select an available handler as a fallback. RTE support is limited to the TRL-X format; other formats sharing that extension are rejected by the importer.
+
 ## Resampling
 
 Use **Menu → Route → Resample route points…** after drawing or editing a route to redistribute its geometry points. Defaults are 2–20 m spacing and at most 0.5 m shape deviation. The preview overlays the original and resampled routes, reports point counts, length changes and actual spacing, and locates short segments retained for stations, turns or endpoints. Minimum spacing is a target; preserving these features takes priority. Station details and existing elevation samples (including missing heights) are retained. Parameter changes always start from the original route; **Apply resampling** changes the project in one undoable edit. Calculations can be cancelled and are limited to 100,000 output points plus a bounded processing budget.

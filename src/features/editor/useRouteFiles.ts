@@ -57,6 +57,7 @@ export function useRouteFiles({
   onProblem: (problem: Localized) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [pickingFile, setPickingFile] = useState(false);
   const [savingFile, setSavingFile] = useState(false);
   const [fileSaveError, setFileSaveError] = useState<Localized | null>(null);
   const [pending, setPending] = useState<{ next: Replacement; recovered: boolean } | null>(null);
@@ -98,11 +99,14 @@ export function useRouteFiles({
   }
 
   async function pickDesktopFile() {
+    setPickingFile(true);
     try {
       const file = await window.routeStudioDesktop!.openFile();
       if (file) await openFile(new File([file.bytes], file.name));
     } catch {
       onProblem(both('readFailed'));
+    } finally {
+      setPickingFile(false);
     }
   }
 
@@ -156,6 +160,7 @@ export function useRouteFiles({
 
   return {
     busy,
+    pickingFile,
     savingFile,
     fileSaveError,
     setFileSaveError,

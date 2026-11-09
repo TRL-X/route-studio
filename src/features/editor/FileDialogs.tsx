@@ -63,12 +63,20 @@ function ReplaceRouteDialog({
   );
 }
 
-export function FileDialogs({ files, lang }: { files: ReturnType<typeof useRouteFiles>; lang: Lang }) {
+export function FileDialogs({
+  files,
+  lang,
+  reading = false,
+}: {
+  files: ReturnType<typeof useRouteFiles>;
+  lang: Lang;
+  reading?: boolean;
+}) {
   const t = strings[lang];
   const { busy, pending, setPending, replace, choices, setChoices, openFile, save, savingFile } = files;
   return (
     <>
-      {busy && (
+      {(busy || reading) && (
         <div className="overlay">
           <Card>
             <div className="processing" role="status">

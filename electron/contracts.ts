@@ -3,6 +3,11 @@ export interface DesktopFile {
   bytes: Uint8Array<ArrayBuffer>;
 }
 
+export interface OpenFileRequest {
+  id: string;
+  names: string[];
+}
+
 export interface BluetoothChoice {
   deviceId: string;
   deviceName: string;
@@ -25,6 +30,10 @@ export interface DesktopAPI {
   getZoomFactor: () => number;
   setTheme: (theme: 'system' | 'light' | 'dark') => void;
   openFile: () => Promise<DesktopFile | null>;
+  getOpenFiles: () => Promise<OpenFileRequest | null>;
+  readOpenFile: (id: string, index: number) => Promise<DesktopFile>;
+  finishOpenFiles: (id: string) => void;
+  onOpenFiles: (listener: () => void) => () => void;
   saveFile: (file: DesktopFile) => Promise<boolean>;
   setDocumentState: (dirty: boolean, language: 'en' | 'zh', busy: boolean, transferBusy?: boolean) => void;
   getUpdateState: () => Promise<UpdateState>;

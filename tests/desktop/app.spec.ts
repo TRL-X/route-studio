@@ -10,6 +10,10 @@ import { strings } from '../../src/i18n/index';
 import { commandStrings, type CommandId } from '../../src/features/editor/commands';
 import type { Page } from '@playwright/test';
 import type { UpdateMode, UpdateState } from '../../electron/update-contracts';
+import { exportTrack } from '../../src/files/export';
+import { writeRte } from '../../src/rte';
+import { ridgeRoute } from '../fixtures/ridge';
+import { spawn } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 let desktop: ElectronApplication;
@@ -19,7 +23,7 @@ let child: ReturnType<ElectronApplication['process']> | undefined;
 const gpx =
   '<gpx><trk><name>Desktop ridge</name><trkseg><trkpt lat="30" lon="105"><ele>10</ele></trkpt><trkpt lat="30.01" lon="105.01"><ele>20</ele></trkpt></trkseg></trk></gpx>';
 
-async function launch({ disableWebGL = false, updates = false, appImage = '' } = {}) {
+async function launch({ disableWebGL = false, updates = false, appImage = '', files = [] as string[] } = {}) {
   if (updates) {
     await mkdir(path.join(directory, 'profile'), { recursive: true });
     await writeFile(path.join(directory, 'profile', 'updates.json'), JSON.stringify({ autoCheck: false }));
@@ -37,6 +41,7 @@ async function launch({ disableWebGL = false, updates = false, appImage = '' } =
       ...(process.env.DESKTOP_EXECUTABLE ? [] : [root]),
       `--user-data-dir=${path.join(directory, 'profile')}`,
       ...(updates ? [] : ['--disable-updates']),
+      ...files,
     ],
     env: { ...env, ...(appImage ? { APPIMAGE: appImage } : {}) },
   });
@@ -63,7 +68,8 @@ async function launch({ disableWebGL = false, updates = false, appImage = '' } =
     });
     await page.reload();
   }
-  await page.getByRole('button', { name: /^(Menu|菜单)$/ }).waitFor();
+  // Startup file requests can already have opened a modal, making the toolbar inert.
+  await page.getByRole('button', { name: /^(Menu|菜单)$/, includeHidden: true }).waitFor();
   if ((await page.locator('html').getAttribute('lang')) !== 'en') await setLanguage(page, 'en');
   return page;
 }
@@ -964,3 +970,170 @@ for (const disableWebGL of [false, true]) {
     await expect(panel.getByLabel('Show basemap')).toBeChecked();
   });
 }
+
+async function systemOpen(files: string[]) {
+  await desktop.evaluate(({ app }, files) => {
+    if (process.platform === 'darwin') {
+      for (const filename of files) app.emit('open-file', { preventDefault() {} }, filename);
+    } else {
+      app.emit('second-instance', {}, [], process.cwd(), { files });
+    }
+  }, files);
+}
+
+for (const format of ['gpx', 'kml', 'fit', 'rte'] as const) {
+  test(`opens an external ${format.toUpperCase()} file on cold start`, async () => {
+    const source = path.join(directory, `山脊 route.${format.toUpperCase()}`);
+    const doc = ridgeRoute();
+    await writeFile(source, format === 'rte' ? writeRte(doc) : exportTrack(doc, format).bytes);
+    const page = await launch({ files: [source] });
+    await expect(page.getByRole('heading', { name: doc.name, exact: true })).toBeVisible();
+    expect(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
+  });
+}
+
+test('external opens commit typed edits, preserve them on cancellation, and wait for dialogs', async () => {
+  const page = await launch();
+  const source = path.join(directory, 'next route.gpx');
+  await writeFile(source, gpx);
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Keep typed edits');
+  await systemOpen([source]);
+  const replacement = page.getByRole('dialog', { name: 'Open another route?', exact: true });
+  await expect(replacement).toBeVisible();
+  await replacement.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(name).toHaveValue('Keep typed edits');
+  await nativeCommand('settings');
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await systemOpen([source]);
+  await expect(settings).toBeVisible();
+  await expect(replacement).toHaveCount(0);
+  await settings.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(replacement).toBeVisible();
+  await replacement.getByRole('button', { name: 'Replace', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
+});
+
+test('external opens preserve a recovered draft until replacement is explicitly confirmed', async () => {
+  let page = await launch();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Recovered work');
+  await name.press('Enter');
+  await expect(page.getByText('Draft saved locally', { exact: true })).toBeVisible();
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].destroy());
+  await desktop.close();
+  const source = path.join(directory, 'recovery.gpx');
+  await writeFile(source, gpx);
+  page = await launch({ files: [source] });
+  const replacement = page.getByRole('dialog', { name: 'Open another route?', exact: true });
+  await expect(replacement).toBeVisible();
+  await replacement.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Recovered work');
+});
+
+test('external batches choose one file and do not replace it with the remaining files', async () => {
+  const first = path.join(directory, 'first.gpx');
+  const second = path.join(directory, 'second.gpx');
+  await writeFile(first, gpx.replace('Desktop ridge', 'First route'));
+  await writeFile(second, gpx.replace('Desktop ridge', 'Second route'));
+  const page = await launch({ files: [first, second] });
+  const chooser = page.getByRole('dialog', { name: 'Choose a route file', exact: true });
+  await expect(chooser).toBeVisible();
+  await page.reload();
+  await expect(chooser).toBeVisible();
+  await selectOption(chooser.getByRole('combobox'), '1');
+  await chooser.getByRole('button', { name: 'Open selected file', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Second route', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.routeStudioDesktop!.getOpenFiles())).toBeNull();
+  await systemOpen([first, second]);
+  await expect(chooser).toBeVisible();
+  await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Second route', exact: true })).toBeVisible();
+});
+
+test('external read and parse failures preserve the document and allow a later request', async () => {
+  const page = await launch();
+  const name = page.getByRole('textbox', { name: 'Name', exact: true });
+  await name.fill('Keep on error');
+  await name.press('Enter');
+  await systemOpen([path.join(directory, 'missing.gpx')]);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(name).toHaveValue('Keep on error');
+  await page.getByRole('alert').getByRole('button', { name: 'Close', exact: true }).click();
+  const corrupt = path.join(directory, 'corrupt.fit');
+  await writeFile(corrupt, 'not a FIT file');
+  await systemOpen([corrupt]);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(name).toHaveValue('Keep on error');
+  expect(
+    await page.evaluate(async () => {
+      try {
+        await window.routeStudioDesktop!.readOpenFile('/etc/passwd', 0);
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+  ).toBe(true);
+  await page.getByRole('alert').getByRole('button', { name: 'Close', exact: true }).click();
+  const valid = path.join(directory, 'valid.gpx');
+  await writeFile(valid, gpx);
+  await systemOpen([valid]);
+  await expect(page.getByRole('dialog', { name: 'Open another route?', exact: true })).toBeVisible();
+});
+
+test('external requests wait for a busy native operation and resume when it finishes', async () => {
+  const page = await launch();
+  const source = path.join(directory, 'queued.gpx');
+  await writeFile(source, gpx);
+  await page.evaluate(() => window.routeStudioDesktop!.setDocumentState(false, 'en', true, true));
+  await systemOpen([source]);
+  expect(await page.evaluate(() => window.routeStudioDesktop!.getOpenFiles())).toBeNull();
+  await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('');
+  await page.evaluate(() => window.routeStudioDesktop!.setDocumentState(false, 'en', false, false));
+  await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
+});
+
+test('a second process forwards files to the existing window and exits', async () => {
+  const page = await launch();
+  const source = path.join(directory, 'second process.gpx');
+  await writeFile(source, gpx);
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].minimize());
+  const executable = await desktop.evaluate(() => process.execPath);
+  const second = spawn(
+    executable,
+    [
+      ...(process.env.DESKTOP_EXECUTABLE ? [] : [root]),
+      `--user-data-dir=${path.join(directory, 'profile')}`,
+      '--disable-updates',
+      source,
+    ],
+    { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }, stdio: 'ignore' },
+  );
+  try {
+    await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
+    await expect.poll(() => second.exitCode).toBe(0);
+    expect(
+      await desktop.evaluate(({ BrowserWindow }) => ({
+        count: BrowserWindow.getAllWindows().length,
+        minimized: BrowserWindow.getAllWindows()[0].isMinimized(),
+      })),
+    ).toEqual({ count: 1, minimized: false });
+  } finally {
+    if (second.exitCode === null) second.kill();
+  }
+});
+
+test('macOS opens a file again after closing the last window', async () => {
+  test.skip(process.platform !== 'darwin');
+  await launch();
+  const source = path.join(directory, 'reopen.gpx');
+  await writeFile(source, gpx);
+  const nextWindow = desktop.waitForEvent('window');
+  await desktop.evaluate(({ app, BrowserWindow }, filename) => {
+    BrowserWindow.getAllWindows()[0].close();
+    app.emit('open-file', { preventDefault() {} }, filename);
+  }, source);
+  const page = await nextWindow;
+  await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
+});

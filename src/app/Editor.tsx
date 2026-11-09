@@ -26,6 +26,8 @@ import { useDocumentSession } from '../features/editor/useDocumentSession';
 import type { Draft } from '../platform/storage/draft';
 import { useRouteFiles, routeFilename, type Replacement } from '../features/editor/useRouteFiles';
 import { FileDialogs } from '../features/editor/FileDialogs';
+import { useDesktopOpenFiles } from '../features/editor/useDesktopOpenFiles';
+import { DesktopOpenDialog } from '../features/editor/DesktopOpenDialog';
 import { EditorWorkspace } from '../features/editor/EditorWorkspace';
 import './editor.css';
 import { DesktopBluetooth } from '../features/device/DesktopBluetooth';
@@ -82,6 +84,7 @@ export function Editor({ restored, recoveryError }: { restored: Draft | null; re
   });
   const {
     busy,
+    pickingFile,
     savingFile,
     fileSaveError,
     setFileSaveError,
@@ -92,9 +95,10 @@ export function Editor({ restored, recoveryError }: { restored: Draft | null; re
     pickDesktopFile,
     save,
   } = files;
-  const locked =
+  const editorBlocked =
     !!devicePanel ||
     busy ||
+    pickingFile ||
     savingFile ||
     !!pending ||
     !!choices ||
@@ -102,6 +106,18 @@ export function Editor({ restored, recoveryError }: { restored: Draft | null; re
     !!elevationPanel ||
     !!settingsTab ||
     !!resampleSource;
+  const externalFiles = useDesktopOpenFiles({
+    blocked:
+      editorBlocked ||
+      !!problem ||
+      !!firmware.state.busy ||
+      firmware.state.pending ||
+      !!device.state.busy ||
+      device.state.pending,
+    openFile,
+    onProblem: setProblem,
+  });
+  const locked = editorBlocked || externalFiles.reading || !!externalFiles.selection;
   const selection = useEditorSelection({ doc, lang, locked, change, setNotice });
   const {
     selected,
@@ -133,6 +149,9 @@ export function Editor({ restored, recoveryError }: { restored: Draft | null; re
     !!device.state.busy ||
     device.state.pending ||
     busy ||
+    pickingFile ||
+    externalFiles.reading ||
+    !!externalFiles.selection ||
     savingFile ||
     !!exportFormat ||
     !!elevationPanel ||
@@ -569,7 +588,16 @@ export function Editor({ restored, recoveryError }: { restored: Draft | null; re
           }}
         />
       )}
-      <FileDialogs files={files} lang={lang} />
+      <FileDialogs files={files} lang={lang} reading={externalFiles.reading} />
+      {externalFiles.selection && (
+        <DesktopOpenDialog
+          key={externalFiles.selection.id}
+          request={externalFiles.selection}
+          lang={lang}
+          onChoose={(index) => void externalFiles.choose(index)}
+          onClose={externalFiles.cancel}
+        />
+      )}
       {devicePanel === 'connection' && (
         <DeviceConnection connection={connection} lang={lang} onClose={() => setDevicePanel(null)} />
       )}
