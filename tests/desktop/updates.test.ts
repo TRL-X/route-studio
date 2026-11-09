@@ -1,20 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
-import { manualRelease } from '../../electron/update-release';
+import {
+  acceptsVersion,
+  automaticReleaseFeed,
+  manualRelease,
+  releaseBuildInfo,
+  selectManualRelease,
+} from '../../electron/update-release';
 import { checkInterval, UpdateService, type UpdateBackend } from '../../electron/update-service';
-import type { UpdateMode } from '../../electron/update-contracts';
+import type { UpdateChannel, UpdateMode } from '../../electron/update-contracts';
 
 const release = { version: '0.2.0', notes: 'New release' };
 function setup(mode: UpdateMode = 'automatic', backend: Partial<UpdateBackend> = {}) {
   const install = vi.fn();
   const open = vi.fn(async () => {});
-  const check = vi.fn(async () => release);
+  const check = vi.fn(async (_channel: UpdateChannel) => release);
   const persist = vi.fn(async () => {});
   const guard = { value: null as 'busy' | 'unsaved' | null };
   let now = checkInterval;
   const service = new UpdateService({
     currentVersion: '0.1.0',
     mode,
-    preferences: { autoCheck: true },
+    preferences: { autoCheck: true, channel: 'stable' },
     backend: {
       check,
       download: async (progress) => {
@@ -43,6 +49,66 @@ function setup(mode: UpdateMode = 'automatic', backend: Partial<UpdateBackend> =
 }
 
 describe('update lifecycle', () => {
+  it('switches channels, persists the selection and immediately checks even with automatic checks disabled', async () => {
+    const { service, check, persist } = setup();
+    await service.check();
+    await service.setAutoCheck(false);
+    await service.setChannel('beta');
+    expect(check.mock.calls.map((call) => call[0])).toEqual(['stable', 'beta']);
+    expect(persist).toHaveBeenLastCalledWith({
+      autoCheck: false,
+      channel: 'beta',
+      lastChecked: checkInterval,
+    });
+    expect(service.snapshot()).toMatchObject({ channel: 'beta', status: 'available' });
+  });
+
+  it('invalidates a downloaded preview before checking stable and cannot install the abandoned download', async () => {
+    const check = vi.fn().mockResolvedValueOnce(release).mockResolvedValueOnce(null);
+    const { service, install } = setup('automatic', { check });
+    await service.setChannel('beta');
+    await service.download();
+    expect(service.snapshot().status).toBe('downloaded');
+    await service.setChannel('stable');
+    await service.install(true);
+    expect(install).not.toHaveBeenCalled();
+    expect(service.snapshot()).toMatchObject({
+      channel: 'stable',
+      status: 'current',
+      release: undefined,
+      percent: undefined,
+    });
+  });
+
+  it('does not switch during an in-flight check or download', async () => {
+    let finish!: () => void;
+    const { service } = setup('automatic', {
+      download: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await service.check();
+    const downloading = service.download();
+    await service.setChannel('beta');
+    expect(service.snapshot()).toMatchObject({
+      channel: 'stable',
+      status: 'downloading',
+      error: 'channelBusy',
+    });
+    finish();
+    await downloading;
+  });
+
+  it('keeps the previous channel when saving fails and never checks the unpersisted channel', async () => {
+    const { service, persist, check } = setup();
+    persist.mockRejectedValueOnce(new Error('Disk full'));
+    await service.setChannel('beta');
+    expect(service.snapshot()).toMatchObject({ channel: 'stable', error: 'preferences', release: undefined });
+    expect(check).not.toHaveBeenCalled();
+    await expect(service.setChannel('nightly' as 'beta')).rejects.toThrow('Invalid update channel');
+  });
+
   it('throttles automatic attempts, respects opt-out and permits explicit checks', async () => {
     const { service, check, advance, persist } = setup();
     await service.check(false);
@@ -57,7 +123,11 @@ describe('update lifecycle', () => {
     await service.setAutoCheck(true);
     await service.check(false);
     expect(check).toHaveBeenCalledTimes(3);
-    expect(persist).toHaveBeenLastCalledWith({ autoCheck: true, lastChecked: checkInterval * 2 });
+    expect(persist).toHaveBeenLastCalledWith({
+      autoCheck: true,
+      channel: 'stable',
+      lastChecked: checkInterval * 2,
+    });
   });
 
   it('does not overlap checks or lose a downloaded update to a later check', async () => {
@@ -71,6 +141,8 @@ describe('update lifecycle', () => {
     const { service } = setup('automatic', { check });
     const first = service.check();
     await service.check();
+    await service.setChannel('beta');
+    expect(service.snapshot().channel).toBe('stable');
     expect(check).toHaveBeenCalledTimes(1);
     finish(release);
     await first;
@@ -185,7 +257,7 @@ describe('manual release selection', () => {
     return {
       tag_name: `v${version}`,
       draft: false,
-      prerelease: false,
+      prerelease: version.includes('-'),
       body: '<script>plain text</script>',
       assets: [
         {
@@ -196,6 +268,73 @@ describe('manual release selection', () => {
       ],
     };
   }
+  it('keeps stable isolated, orders previews numerically and accepts a newer stable after a preview', () => {
+    const releases = [
+      published('0.2.0-beta.9'),
+      published('0.1.3'),
+      published('0.2.0-beta.12'),
+      published('0.3.0-alpha.1'),
+      { ...published('0.3.0-beta.1'), draft: true },
+    ];
+    expect(selectManualRelease(releases, '0.1.2', 'darwin', 'arm64', 'stable')?.version).toBe('0.1.3');
+    expect(selectManualRelease(releases, '0.1.3', 'darwin', 'arm64', 'beta')?.version).toBe('0.2.0-beta.12');
+    expect(selectManualRelease(releases, '0.2.0-beta.12', 'darwin', 'arm64', 'stable')).toBeNull();
+    expect(
+      selectManualRelease([...releases, published('0.2.0')], '0.2.0-beta.12', 'darwin', 'arm64', 'beta')
+        ?.version,
+    ).toBe('0.2.0');
+    expect(
+      manualRelease(published('0.2.0-beta.12', 'linux', 'amd64'), '0.1.3', 'linux', 'x64', 'beta')
+        ?.downloadURL,
+    ).toContain('v0.2.0-beta.12/Route-Studio-0.2.0-beta.12-linux-amd64.deb');
+    expect(acceptsVersion('0.2.0-alpha.1', 'beta')).toBe(false);
+    expect(acceptsVersion('0.2.0-beta.1', 'stable')).toBe(false);
+  });
+
+  it('extracts validated build provenance without treating release notes as markup', () => {
+    const commit = 'a'.repeat(40);
+    const builtAt = '2026-11-09T08:00:00.000Z';
+    const value = { ...published('0.2.0-beta.1'), body: `Build commit: ${commit}\nBuild time: ${builtAt}` };
+    expect(manualRelease(value, '0.1.3', 'darwin', 'arm64', 'beta')?.build).toEqual({ commit, builtAt });
+    expect(releaseBuildInfo('Build commit: main\nBuild time: nonsense')).toBeUndefined();
+  });
+
+  it.each(['win32', 'linux'])(
+    'pins the newest eligible automatic feed on %s regardless of publication order',
+    (platform) => {
+      const metadata = (version: string) => {
+        const name = `${version.includes('-') ? 'beta' : 'latest'}${platform === 'linux' ? '-linux' : ''}.yml`;
+        return {
+          ...published(version),
+          assets: [
+            {
+              name,
+              size: 100,
+              browser_download_url: `https://github.com/TRL-X/route-studio/releases/download/v${version}/${name}`,
+            },
+          ],
+        };
+      };
+      const preview = metadata('0.2.0-beta.12');
+      const feed = automaticReleaseFeed(
+        [metadata('0.1.3'), preview, metadata('0.2.0-beta.9')],
+        '0.1.3',
+        platform,
+      );
+      expect(feed).toEqual({
+        version: '0.2.0-beta.12',
+        channel: 'beta',
+        url: 'https://github.com/TRL-X/route-studio/releases/download/v0.2.0-beta.12/',
+      });
+      expect(automaticReleaseFeed([metadata('0.2.0'), preview], '0.2.0-beta.12', platform)?.channel).toBe(
+        'latest',
+      );
+      expect(automaticReleaseFeed([metadata('0.1.3'), preview], '0.2.0-beta.12', platform)).toBeNull();
+      preview.assets[0].browser_download_url = 'https://evil.test/beta.yml';
+      expect(() => automaticReleaseFeed([preview], '0.1.3', platform)).toThrow();
+      expect(() => automaticReleaseFeed([{ ...preview, assets: [] }], '0.1.3', platform)).toThrow();
+    },
+  );
   it('compares semantic versions and selects the exact platform and architecture', () => {
     expect(manualRelease(published('0.10.0'), '0.9.0', 'darwin', 'arm64')).toMatchObject({
       version: '0.10.0',

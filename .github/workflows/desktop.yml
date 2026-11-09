@@ -2,6 +2,13 @@ name: Desktop packages
 
 on:
   workflow_call:
+    inputs:
+      preview:
+        type: boolean
+        default: false
+      build_time:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -33,6 +40,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Prepare mainline preview version
+        if: inputs.preview
+        run: node scripts/prepare-preview.mjs
+        env:
+          PREVIEW_BUILD_TIME: ${{ inputs.build_time }}
       - name: Install Electron runtime
         run: npx install-electron --no
       - name: Install Linux runtime dependencies
@@ -46,11 +58,12 @@ jobs:
       - name: Build platform installers
         shell: bash
         env:
-          CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/') && (matrix.platform == 'mac' && secrets.MAC_CSC_LINK || matrix.platform == 'win' && secrets.WIN_CSC_LINK) || '' }}
-          CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/') && (matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD) || '' }}
-          APPLE_API_KEY_BASE64: ${{ startsWith(github.ref, 'refs/tags/') && secrets.APPLE_API_KEY || '' }}
-          APPLE_API_KEY_ID: ${{ startsWith(github.ref, 'refs/tags/') && secrets.APPLE_API_KEY_ID || '' }}
-          APPLE_API_ISSUER: ${{ startsWith(github.ref, 'refs/tags/') && secrets.APPLE_API_ISSUER || '' }}
+          PREVIEW_BUILD: ${{ inputs.preview }}
+          CSC_LINK: ${{ (startsWith(github.ref, 'refs/tags/') || inputs.preview) && (matrix.platform == 'mac' && secrets.MAC_CSC_LINK || matrix.platform == 'win' && secrets.WIN_CSC_LINK) || '' }}
+          CSC_KEY_PASSWORD: ${{ (startsWith(github.ref, 'refs/tags/') || inputs.preview) && (matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD) || '' }}
+          APPLE_API_KEY_BASE64: ${{ (startsWith(github.ref, 'refs/tags/') || inputs.preview) && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ (startsWith(github.ref, 'refs/tags/') || inputs.preview) && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ (startsWith(github.ref, 'refs/tags/') || inputs.preview) && secrets.APPLE_API_ISSUER || '' }}
         run: |
           if [[ -z "${CSC_LINK:-}" ]]; then
             # electron-builder treats an empty CSC_LINK as a certificate path to the current directory.
@@ -58,6 +71,9 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
           args=(--${{ matrix.platform }} --${{ matrix.arch }} --publish never)
+          if [[ "$PREVIEW_BUILD" == "true" ]]; then
+            args+=(-c.publish.channel=beta -c.releaseInfo.releaseNotesFile=preview-release-notes.md)
+          fi
           if [[ -n "${CSC_LINK:-}" ]]; then args+=(-c.forceCodeSigning=true); fi
           if [[ "${{ matrix.platform }}" == "mac" && -z "${CSC_LINK:-}" ]]; then
             # Ad-hoc signing needs no secrets, including on pull requests.
@@ -104,6 +120,7 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/latest*.yml
+            release/beta*.yml
             release/*.blockmap
           if-no-files-found: error
       - uses: actions/upload-artifact@v4

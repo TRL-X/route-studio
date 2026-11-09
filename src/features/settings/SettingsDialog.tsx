@@ -10,6 +10,7 @@ import { strings, type Lang } from '../../i18n/index';
 import type { Theme } from '../../ui/theme';
 import { UpdatesPanel, updateStrings } from './UpdatesPanel';
 import type { UpdateControls } from './useUpdates';
+import './settings.css';
 
 export interface SettingsValues {
   lang: Lang;
@@ -53,7 +54,13 @@ export function SettingsDialog({
     if (missingKey) keyInput.current?.focus();
   }, [missingKey, tab]);
   return (
-    <Modal title={copy.title} maxWidth="480px" onClose={onClose} busy={installing}>
+    <Modal
+      title={copy.title}
+      className={tab === 'updates' ? 'settings-dialog' : undefined}
+      maxWidth="480px"
+      onClose={onClose}
+      busy={installing}
+    >
       <Flex asChild direction="column" gap="4">
         <form
           onSubmit={(event) => {
@@ -69,6 +76,7 @@ export function SettingsDialog({
           }}
         >
           <Tabs.Root
+            className="settings-tabs"
             value={tab}
             onValueChange={(value) => {
               if (!installing) setTab(value as typeof tab);

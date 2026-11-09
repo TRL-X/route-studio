@@ -142,7 +142,13 @@ test('starts with a blank route and no example command', async () => {
 
 async function simulateUpdates(mode: UpdateMode) {
   await desktop.evaluate(({ ipcMain, BrowserWindow }, mode) => {
-    let state: UpdateState = { currentVersion: '0.1.0', mode, status: 'idle', autoCheck: true };
+    let state: UpdateState = {
+      currentVersion: '0.1.0',
+      mode,
+      status: 'idle',
+      autoCheck: true,
+      channel: 'stable',
+    };
     const counters = { installed: 0, opened: 0 };
     Object.assign(globalThis, { updateTestCounters: counters });
     const publish = () => {
@@ -264,6 +270,16 @@ test('update IPC rejects malformed requests and development builds cannot instal
       }
     }),
   ).toBe(true);
+  expect(
+    await page.evaluate(async () => {
+      try {
+        await window.routeStudioDesktop!.setUpdateChannel('nightly' as 'beta');
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+  ).toBe(true);
 });
 
 test('packaged manual updater selects the matching asset and persists its preference', async ({}, testInfo) => {
@@ -276,22 +292,29 @@ test('packaged manual updater selects the matching asset and persists its prefer
     const arch = process.platform === 'darwin' && app.runningUnderARM64Translation ? 'arm64' : process.arch;
     const suffix =
       process.platform === 'darwin' ? `mac-${arch}.dmg` : `linux-${arch === 'x64' ? 'amd64' : arch}.deb`;
-    const name = `Route-Studio-99.0.0-${suffix}`;
-    const url = `https://github.com/TRL-X/route-studio/releases/download/v99.0.0/${name}`;
-    net.fetch = async () =>
+    const release = (version: string) => {
+      const name = `Route-Studio-${version}-${suffix}`;
+      const url = `https://github.com/TRL-X/route-studio/releases/download/v${version}/${name}`;
+      return {
+        tag_name: `v${version}`,
+        draft: false,
+        prerelease: version.includes('-'),
+        body: `Packaged update test\nBuild commit: ${'a'.repeat(40)}\nBuild time: 2026-11-09T08:00:00.000Z`,
+        assets: [{ name, size: 100, browser_download_url: url }],
+      };
+    };
+    net.fetch = async (url) =>
       new Response(
-        JSON.stringify({
-          tag_name: 'v99.0.0',
-          draft: false,
-          prerelease: false,
-          body: 'Packaged update test',
-          assets: [{ name, size: 100, browser_download_url: url }],
-        }),
+        JSON.stringify(
+          String(url).includes('?per_page=')
+            ? [release('99.0.1-beta.123'), release('99.0.0')]
+            : release('99.0.0'),
+        ),
       );
     shell.openExternal = async (url) => {
       Object.assign(globalThis, { openedUpdateURL: url });
     };
-    return url;
+    return release('99.0.0').assets[0].browser_download_url;
   });
   const panel = await softwareUpdates(page);
   await expect(panel.getByRole('status')).toContainText('99.0.0');
@@ -308,13 +331,41 @@ test('packaged manual updater selects the matching asset and persists its prefer
         JSON.parse(await readFile(path.join(directory, 'profile', 'updates.json'), 'utf8')).autoCheck,
     )
     .toBe(true);
+  await expect(panel.getByRole('combobox', { name: 'Update channel' })).toHaveAttribute(
+    'data-value',
+    'stable',
+  );
+  await selectOption(panel.getByRole('combobox', { name: 'Update channel' }), 'beta');
+  await expect(panel.getByRole('status')).toContainText('99.0.1-beta.123');
+  await expect(panel.getByText(/Commit: aaaaaaa/).last()).toBeVisible();
+  await panel.getByRole('button', { name: 'Download new version', exact: true }).click();
+  await expect
+    .poll(() =>
+      desktop.evaluate(() => (globalThis as unknown as { openedUpdateURL: string }).openedUpdateURL),
+    )
+    .toBe(expectedURL.replaceAll('99.0.0', '99.0.1-beta.123'));
+  await expect
+    .poll(
+      async () => JSON.parse(await readFile(path.join(directory, 'profile', 'updates.json'), 'utf8')).channel,
+    )
+    .toBe('beta');
   await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(800, 600));
+  await expect(panel.getByRole('button', { name: 'Apply', exact: true })).toBeInViewport();
+  const bounds = await panel.boundingBox();
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight));
   await panel.screenshot({ path: testInfo.outputPath('packaged-manual-update.png') });
   await desktop.close();
-  await launch();
+  const reopened = await launch();
   expect(await desktop.evaluate(({ app }) => app.getVersion())).not.toBe('99.0.0');
   expect(JSON.parse(await readFile(path.join(directory, 'profile', 'updates.json'), 'utf8')).autoCheck).toBe(
     true,
+  );
+  expect(
+    await reopened.evaluate(async () => (await window.routeStudioDesktop!.getUpdateState()).channel),
+  ).toBe('beta');
+  expect(JSON.parse(await readFile(path.join(directory, 'profile', 'updates.json'), 'utf8')).channel).toBe(
+    'beta',
   );
 });
 
@@ -346,18 +397,46 @@ test('packaged automatic updater preserves install guards and saves before invok
   }, source);
   await nativeCommand('open');
   await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
-  await desktop.evaluate(({ app }) => {
+  await desktop.evaluate(({ app, net }) => {
     // Playwright evaluates this callback without a dynamic-import hook.
     const { createRequire } = process.getBuiltinModule('node:module');
     const path = process.getBuiltinModule('node:path');
     const require = createRequire(path.join(app.getAppPath(), 'package.json'));
     const { NsisUpdater, AppImageUpdater } = require('electron-updater') as typeof import('electron-updater');
+    const release = (version: string) => {
+      const name = `${version.includes('-') ? 'beta' : 'latest'}${process.platform === 'linux' ? '-linux' : ''}.yml`;
+      return {
+        tag_name: `v${version}`,
+        draft: false,
+        prerelease: version.includes('-'),
+        assets: [
+          {
+            name,
+            size: 100,
+            browser_download_url: `https://github.com/TRL-X/route-studio/releases/download/v${version}/${name}`,
+          },
+        ],
+      };
+    };
+    net.fetch = async (url) =>
+      new Response(
+        JSON.stringify(
+          String(url).includes('?per_page=')
+            ? [release('99.0.0'), release('99.0.1-beta.123')]
+            : release('99.0.0'),
+        ),
+      );
     const prototype = process.platform === 'win32' ? NsisUpdater.prototype : AppImageUpdater.prototype;
     prototype.checkForUpdates = async function () {
-      if (this.autoDownload || this.autoInstallOnAppQuit || this.allowPrerelease || this.allowDowngrade)
+      if (
+        this.autoDownload ||
+        this.autoInstallOnAppQuit ||
+        this.allowPrerelease !== (this.channel === 'beta') ||
+        this.allowDowngrade
+      )
         throw new Error('Unsafe update defaults');
       const updateInfo = {
-        version: '99.0.0',
+        version: this.channel === 'beta' ? '99.0.1-beta.123' : '99.0.0',
         releaseNotes: 'Packaged automatic update',
         files: [],
         path: '',
@@ -384,6 +463,13 @@ test('packaged automatic updater preserves install guards and saves before invok
   await name.fill('Guarded update');
   await name.press('Enter');
   let panel = await softwareUpdates(page);
+  await selectOption(panel.getByRole('combobox', { name: 'Update channel' }), 'beta');
+  await expect(panel.getByRole('status')).toContainText('99.0.1-beta.123');
+  await panel.getByRole('button', { name: 'Download update', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Restart and install' })).toBeVisible();
+  await selectOption(panel.getByRole('combobox', { name: 'Update channel' }), 'stable');
+  await expect(panel.getByRole('status')).toContainText('99.0.0');
+  await expect(panel.getByRole('button', { name: 'Restart and install' })).toHaveCount(0);
   await panel.getByRole('button', { name: 'Download update', exact: true }).click();
   await expect(panel.getByRole('button', { name: 'Restart and install' })).toBeVisible();
   expect(await page.evaluate(async () => (await window.routeStudioDesktop!.installUpdate(false)).error)).toBe(

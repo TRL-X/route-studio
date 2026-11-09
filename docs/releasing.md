@@ -18,7 +18,7 @@ Outputs go to `release/`; `desktop:pack:dir` creates an unpacked app. `node scri
 
 ## Signing and CI builds
 
-The **Check editor** workflow calls **Desktop packages** for native builds when desktop validation is required (see [CI validation](../CONTRIBUTING.md#ci-validation)). Full builds produce installer artifacts; version tags create a GitHub Release draft after all checks pass. Publishing remains a maintainer action. Signing secrets:
+The **Check editor** workflow calls **Desktop packages** for native builds when desktop validation is required (see [CI validation](../CONTRIBUTING.md#ci-validation)). Full builds produce installer artifacts; version tags create a GitHub Release draft after all checks pass. Stable publishing remains a maintainer action; pushes to `main` automatically publish verified previews as described below. Release tags and mainline previews use the same signing secrets:
 
 | Platform           | Secrets                                                             |
 | ------------------ | ------------------------------------------------------------------- |
@@ -42,7 +42,15 @@ On both macOS CI runners, signature verification runs `codesign --verify --deep 
 
 ## Update artifacts
 
-The update source is the public `TRL-X/route-studio` GitHub repository. Keep `electron-builder.yml` and `electron/update-release.ts` in sync if moving releases. Windows and Linux packages include `electron-updater` and `app-update.yml`; publish their `latest*.yml`, installers and generated `.blockmap` files together. macOS intentionally sets `publish: null` in the builder and uses GitHub release assets instead of `latest-mac.yml`, avoiding dual-architecture manifest collisions. The existing CI still uses `--publish never`, collects all outputs, validates manifest versions, sizes and SHA-512 hashes, then uploads to a **draft** release. Maintainers publish only after all four platform/architecture builds pass. Never replace artifacts in an already-published version; issue a higher patch version for a fix.
+The update source is the public `TRL-X/route-studio` GitHub repository. Keep `electron-builder.yml` and `electron/update-release.ts` in sync if moving releases. Windows and Linux packages include `electron-updater` and `app-update.yml`; publish their `latest*.yml` (stable) or `beta*.yml` (preview), installers and generated `.blockmap` files together. macOS intentionally sets `publish: null` in the builder and uses GitHub release assets instead of `latest-mac.yml`, avoiding dual-architecture manifest collisions. CI uses `--publish never`, collects all outputs, validates manifest versions, sizes and SHA-512 hashes, then uploads to a **draft** release. Only expose the release after all four platform/architecture builds pass. Never replace artifacts in an already-published version; issue a new version for a fix.
+
+## Mainline previews
+
+Every push to `main` builds a preview in the existing four-platform matrix. `scripts/prepare-preview.mjs` derives `<next-patch>-beta.<workflow-run-number>` from the stable version in `package.json`, for example `0.1.3` → `0.1.4-beta.123`. It stamps the CI checkout's package and lockfile, embeds the commit and shared build time in `package.json`, and writes `build/preview-release-notes.md`. These generated changes are not committed. Retries of the same workflow use the same version, including retries of only failed jobs. New workflow runs have distinct versions. Keep the package version on main aligned with stable releases; prerelease bases are rejected.
+
+The packager explicitly selects the `beta` publish channel and embeds the preview notes in the update manifests. After `verify` succeeds, the `preview-release` job repeats the same version preparation, verifies the complete artifact set, creates a prerelease draft targeting the exact built SHA, uploads everything, then publishes it with `latest=false`. It skips a run whose commit is no longer the head of main. PR, merge queue and manual validation runs do not publish previews. Published releases cannot be overwritten by retries; only draft uploads may be replaced.
+
+The stable feed remains isolated from previews. Clients opt in through **Settings → Software update → Update channel**; Windows/AppImage use application updates, while macOS/DEB offer the matching manual installer. Preview checks compare semantic versions from the recent release list plus the latest stable release. Windows/AppImage then pin `electron-updater` to that release's verified GitHub asset directory and channel manifest, so a later-published stable version cannot hide a newer preview. To introduce this feature to installed stable-only clients, first publish a new stable version containing the channel selector. Switching back to stable never enables automatic downgrades. See the [user guide](user-guide.md#software-updates) for the manual return path.
 
 ## Release verification
 

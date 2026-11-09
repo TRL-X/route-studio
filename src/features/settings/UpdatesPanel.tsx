@@ -1,5 +1,7 @@
 import { Button, Checkbox, Flex, Text } from '@radix-ui/themes';
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { Choice } from '../../ui/Choice';
+import type { BuildInfo } from '../../../electron/update-contracts';
 import { parenthetical, type Lang } from '../../i18n/index';
 import type { UpdateControls } from './useUpdates';
 import en from '../../i18n/en.updates.json';
@@ -21,6 +23,7 @@ export function UpdatesPanel({
   onBusyChange: (busy: boolean) => void;
 }) {
   const t = updateStrings[lang];
+  const channelId = useId();
   const { state } = updates;
   const [confirm, setConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,6 +31,10 @@ export function UpdatesPanel({
   const [changingPreference, setChangingPreference] = useState(false);
   const disabled = !state || state.mode === 'disabled';
   const working = saving || state?.status === 'installing';
+  const channelBusy =
+    disabled || working || changingPreference || ['checking', 'downloading'].includes(state?.status ?? '');
+  const buildLabel = (build: BuildInfo) =>
+    `${t.buildTime} ${new Date(build.builtAt).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')} · ${t.commit} ${build.commit.slice(0, 7)}`;
   async function install(save: boolean, discard: boolean) {
     if (working) return;
     setSaving(true);
@@ -50,10 +57,65 @@ export function UpdatesPanel({
       <Text size="2">
         {t.currentVersion} {state?.currentVersion ?? '—'}
       </Text>
+      {state?.currentBuild && (
+        <Text size="1" color="gray">
+          {buildLabel(state.currentBuild)}
+        </Text>
+      )}
+      <Flex direction="column" gap="2">
+        <Text as="label" size="2" htmlFor={channelId}>
+          {t.channel}
+        </Text>
+        <Choice
+          id={channelId}
+          value={state?.channel ?? 'stable'}
+          disabled={channelBusy}
+          options={[
+            { value: 'stable', label: t.stableChannel },
+            { value: 'beta', label: t.betaChannel },
+          ]}
+          onValueChange={async (value) => {
+            if (value !== 'stable' && value !== 'beta') return;
+            setChangingPreference(true);
+            setConfirm(false);
+            try {
+              await updates.setChannel(value);
+            } finally {
+              setChangingPreference(false);
+            }
+          }}
+        />
+        {state?.channel === 'beta' && (
+          <Text size="2" color="gray">
+            {t.betaDescription}
+          </Text>
+        )}
+        {state?.currentVersion.includes('-') && (
+          <details>
+            <summary>{t.returnToStableTitle}</summary>
+            <Text as="p" size="2" color="gray" my="2">
+              {t.returnToStable}
+            </Text>
+            <Button
+              type="button"
+              variant="surface"
+              disabled={channelBusy}
+              onClick={() => void updates.openStable()}
+            >
+              {t.openStable}
+            </Button>
+          </details>
+        )}
+      </Flex>
       <Text size="2" role="status" aria-live="polite">
         {disabled ? t.disabled : t[state.status]}
         {state?.release && parenthetical(lang, state.release.version)}
       </Text>
+      {state?.release?.build && (
+        <Text size="1" color="gray">
+          {buildLabel(state.release.build)}
+        </Text>
+      )}
       {state?.status === 'downloading' && (
         <Flex direction="column" gap="1">
           <progress

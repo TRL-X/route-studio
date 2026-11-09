@@ -4,8 +4,12 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { load } from 'js-yaml';
+import semver from 'semver';
 
 export async function verifyRelease(directory, version, platform, arch) {
+  if (!semver.valid(version)) throw new Error('Invalid release version');
+  const prerelease = semver.prerelease(version);
+  if (prerelease && prerelease[0] !== 'beta') throw new Error('Unsupported release channel');
   const extensions = { mac: ['dmg', 'zip'], win: ['exe'], linux: ['AppImage', 'deb'] }[platform];
   if (!extensions || !['x64', 'arm64'].includes(arch)) throw new Error('Unsupported release target');
   const names = extensions.map((extension) => {
@@ -19,7 +23,8 @@ export async function verifyRelease(directory, version, platform, arch) {
     if (!file.isFile() || !file.size) throw new Error(`Empty or missing installer: ${name}`);
   }
   if (platform === 'mac') return;
-  const manifestName = platform === 'win' ? 'latest.yml' : 'latest-linux.yml';
+  const channel = prerelease ? 'beta' : 'latest';
+  const manifestName = `${channel}${platform === 'win' ? '' : '-linux'}.yml`;
   const manifest = load(await readFile(path.join(directory, manifestName), 'utf8'));
   if (!manifest || manifest.version !== version || !Array.isArray(manifest.files) || !manifest.files.length)
     throw new Error(`Invalid update manifest: ${manifestName}`);

@@ -39,6 +39,8 @@ export interface DesktopAPI {
   getUpdateState: () => Promise<UpdateState>;
   checkForUpdates: () => Promise<UpdateState>;
   setUpdateAutoCheck: (enabled: boolean) => Promise<UpdateState>;
+  setUpdateChannel: (channel: UpdateChannel) => Promise<UpdateState>;
+  openStableRelease: () => Promise<UpdateState>;
   downloadUpdate: () => Promise<UpdateState>;
   openUpdateDownload: () => Promise<UpdateState>;
   installUpdate: (discard: boolean) => Promise<UpdateState>;
@@ -55,4 +57,4 @@ export interface DesktopAPI {
   cancelSerial: () => void;
 }
 import type { CommandId, DesktopCommandState } from './commands.js';
-import type { UpdateState } from './update-contracts.js';
+import type { UpdateChannel, UpdateState } from './update-contracts.js';
