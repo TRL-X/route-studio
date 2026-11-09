@@ -1,8 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { type RouteDocument } from '../../src/domain/model';
 import { loadProject, saveProject } from '../../src/files/project';
 import { dismissImportElevation } from './elevation';
+import { download } from './files';
 
 const stationLocation = { lat: 0.00001, lon: 0.01 };
 function overlappingRoute(): RouteDocument {
@@ -33,10 +33,8 @@ function overlappingRoute(): RouteDocument {
   };
 }
 async function exportStation(page: Page) {
-  const downloading = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Save project', exact: true }).click();
-  const blob = await downloading;
-  return loadProject(await readFile((await blob.path())!, 'utf8')).stations.find((s) => s.id === 'cp')!;
+  const project = await download(page, 'Save project');
+  return loadProject(project.bytes.toString('utf8')).stations.find((s) => s.id === 'cp')!;
 }
 
 test('changes the route pass by distance while keeping the landmark and one-step history', async ({

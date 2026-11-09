@@ -25,7 +25,7 @@ const gpx = `<gpx version="1.1">
 test('desktop editor switches languages and retains the preference', async ({ page }) => {
   await page.goto('/');
   await setPreference(page, 'Interface language', 'zh');
-  await expect(page.getByRole('button', { name: strings.zh.save, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: commandStrings.zh.open, exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: commandStrings.zh.export, exact: true })).toBeVisible();
   await setPreference(page, strings.zh.lang, 'en');

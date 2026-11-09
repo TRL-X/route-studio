@@ -1,6 +1,6 @@
 import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { ArrowDownToLine, CircleArrowUp, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
+import { ArrowDownToLine, CircleArrowUp, FolderOpen, Menu, Redo2, Settings, Undo2 } from 'lucide-react';
 import type { Lang } from '../../i18n/index';
 import { RouteTitle } from './RouteTitle';
 import {
@@ -270,13 +270,13 @@ export function EditorToolbar({ title, onRename, lang, locked, commands, update 
             variant="surface"
             color="gray"
             className="file-action"
-            aria-label={t.save}
-            title={t.save}
-            disabled={locked || commands.save.disabled}
-            onClick={() => execute('save')}
+            aria-label={t.open}
+            title={t.open}
+            disabled={locked || commands.open.disabled}
+            onClick={() => execute('open')}
           >
-            <Save />
-            <span>{t.save}</span>
+            <FolderOpen />
+            <span>{t.open}</span>
           </Button>
           <Button
             aria-haspopup="dialog"

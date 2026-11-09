@@ -7,9 +7,7 @@ import { ridgeRoute } from '../fixtures/ridge';
 
 export async function open(page: Page, name: string, bytes: Buffer) {
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'File', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Open…', exact: true }).click();
+  await page.getByRole('button', { name: commandStrings.en.open, exact: true }).click();
   await (await chooser).setFiles({ name, buffer: bytes, mimeType: 'application/octet-stream' });
 }
 
@@ -73,7 +71,11 @@ export async function disableExportProcessing(page: Page) {
 export async function download(page: Page, button: string) {
   if (button === 'Download RTE') await openExport(page);
   const started = page.waitForEvent('download');
-  await page.getByRole('button', { name: button, exact: true }).click();
+  if (button === commandStrings.en.save) {
+    await page.getByRole('button', { name: commandStrings.en.menu, exact: true }).click();
+    await page.getByRole('menuitem', { name: commandStrings.en.file, exact: true }).click();
+    await page.getByRole('menuitem', { name: button, exact: true }).click();
+  } else await page.getByRole('button', { name: button, exact: true }).click();
   const file = await started;
   return {
     name: file.suggestedFilename(),

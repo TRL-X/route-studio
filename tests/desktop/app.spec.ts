@@ -595,7 +595,7 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   await desktop.evaluate(({ dialog }, filename) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filename] });
   }, source);
-  await nativeCommand('open');
+  await page.getByRole('button', { name: commandStrings.en.open, exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Desktop ridge', exact: true })).toBeVisible();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.fill('Saved desktop route');
@@ -609,7 +609,8 @@ test('loads secure bundled assets, uses the import worker, saves natively and re
   await desktop.evaluate(({ dialog }, filename) => {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
   }, target);
-  await page.getByRole('button', { name: 'Save project', exact: true }).click();
+  await fileMenu(page);
+  await page.getByRole('menuitem', { name: 'Save project', exact: true }).click();
   await expect(page.getByText('Project saved.', { exact: true })).toBeVisible();
   expect(loadProject(await readFile(target, 'utf8')).name).toBe('Saved desktop route');
   await expect(page.getByText('Draft saved locally', { exact: true })).toBeVisible();
@@ -688,7 +689,8 @@ test('cancelled or failed native saves retain unsaved edits and the close remind
   await desktop.evaluate(({ dialog }) => {
     dialog.showSaveDialog = async () => ({ canceled: true, filePath: '' });
   });
-  await page.getByRole('button', { name: 'Save project', exact: true }).click();
+  await fileMenu(page);
+  await page.getByRole('menuitem', { name: 'Save project', exact: true }).click();
   // A cancelled save also completes asynchronously; wait before requesting a close.
   await expect(page.locator('.shell')).not.toHaveAttribute('inert', '');
   await expect(page.getByText('Project saved.', { exact: true })).not.toBeVisible();
@@ -713,7 +715,8 @@ test('cancelled or failed native saves retain unsaved edits and the close remind
       throw new Error('Disk unavailable');
     };
   });
-  await page.getByRole('button', { name: 'Save project', exact: true }).click();
+  await fileMenu(page);
+  await page.getByRole('menuitem', { name: 'Save project', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Could not save the file.');
 });
 
@@ -952,7 +955,8 @@ for (const disableWebGL of [false, true]) {
     await desktop.evaluate(({ dialog }, filename) => {
       dialog.showSaveDialog = async () => ({ canceled: false, filePath: filename });
     }, project);
-    await page.getByRole('button', { name: 'Save project', exact: true }).click();
+    await fileMenu(page);
+    await page.getByRole('menuitem', { name: 'Save project', exact: true }).click();
     await expect(page.getByText('Project saved.', { exact: true })).toBeVisible();
     expect(await readFile(project, 'utf8')).not.toContain('desktop-personal-test-key');
     await desktop.close();
