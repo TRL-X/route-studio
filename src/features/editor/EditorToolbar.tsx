@@ -1,6 +1,6 @@
 import { Button, IconButton, DropdownMenu } from '@radix-ui/themes';
 import { Fragment, useEffect, useId, useRef, useState, type CSSProperties } from 'react';
-import { ArrowDownToLine, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
+import { ArrowDownToLine, CircleArrowUp, Menu, Redo2, Save, Settings, Undo2 } from 'lucide-react';
 import type { Lang } from '../../i18n/index';
 import { RouteTitle } from './RouteTitle';
 import {
@@ -19,6 +19,7 @@ interface ToolbarProps {
   lang: Lang;
   locked: boolean;
   commands: EditorCommands;
+  update?: { label: string; onOpen: () => void };
 }
 
 function editingText() {
@@ -31,7 +32,7 @@ function editingText() {
   );
 }
 
-export function EditorToolbar({ title, onRename, lang, locked, commands }: ToolbarProps) {
+export function EditorToolbar({ title, onRename, lang, locked, commands, update }: ToolbarProps) {
   const t = commandStrings[lang];
 
   const desktop = window.routeStudioDesktop;
@@ -252,6 +253,19 @@ export function EditorToolbar({ title, onRename, lang, locked, commands }: Toolb
           <RouteTitle name={title} lang={lang} locked={locked} onRename={onRename} />
         </div>
         <div className="top-actions">
+          {update && (
+            <IconButton
+              variant="soft"
+              color="green"
+              title={update.label}
+              aria-label={update.label}
+              aria-haspopup="dialog"
+              disabled={locked}
+              onClick={update.onOpen}
+            >
+              <CircleArrowUp aria-hidden="true" />
+            </IconButton>
+          )}
           <Button
             variant="surface"
             color="gray"
