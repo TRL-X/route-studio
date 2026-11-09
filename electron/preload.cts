@@ -12,6 +12,10 @@ const api: DesktopAPI = {
   getZoomFactor: () => webFrame.getZoomFactor(),
   setTheme: (theme) => ipcRenderer.send('desktop:theme', theme),
   openFile: () => ipcRenderer.invoke('desktop:open'),
+  getOpenFiles: () => ipcRenderer.invoke('desktop:open-files'),
+  readOpenFile: (id, index) => ipcRenderer.invoke('desktop:read-open-file', id, index),
+  finishOpenFiles: (id) => ipcRenderer.send('desktop:finish-open-files', id),
+  onOpenFiles: (listener) => subscribe('desktop:open-files', listener),
   saveFile: (file) => ipcRenderer.invoke('desktop:save', file),
   setDocumentState: (dirty, language, busy, transferBusy) =>
     ipcRenderer.send('desktop:state', { dirty, language, busy, transferBusy }),

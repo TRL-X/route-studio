@@ -1,15 +1,15 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, shell } from 'electron';
-import { readFile, open, writeFile, rename, rm } from 'node:fs/promises';
+import { readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createUpdates } from './updates.cjs';
 import type { UpdateService } from './update-service.js';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { OpenFileInbox, readDesktopFile, routePaths } from './open-files.js';
 import {
   appURL,
   developmentURL,
   extensions,
-  hasSupportedExtension,
   isAppURL,
   maxFileBytes,
   resourcePath,
@@ -49,6 +49,8 @@ let dirty = false;
 let language: 'en' | 'zh' = app.getPreferredSystemLanguages()[0]?.startsWith('zh') ? 'zh' : 'en';
 let fileDialogOpen = false;
 let closing = false;
+let windowIsClosing = false;
+let reopenAfterClose = false;
 let quitRequested = false;
 let documentStateKnown = false;
 let activityBusy = true;
@@ -67,6 +69,69 @@ let commandState: DesktopCommandState = {
   enabled: Object.fromEntries(commandIds.map((id) => [id, false])) as Record<CommandId, boolean>,
 };
 let menuVersion = 0;
+let desktopReady = false;
+let openFilesTimer: ReturnType<typeof setTimeout> | undefined;
+const openFiles = new OpenFileInbox();
+const initialFiles = routePaths(process.argv.slice(app.isPackaged ? 1 : 2), process.cwd());
+
+// Finder can send open-file before ready. Keep requests until the restored
+// editor subscribes and explicitly asks for them.
+app.on('open-file', (event, filename) => {
+  event.preventDefault();
+  receiveOpenFiles(routePaths([filename], process.cwd()));
+});
+const primaryInstance = app.requestSingleInstanceLock({ files: initialFiles });
+if (!primaryInstance) app.quit();
+else {
+  openFiles.enqueue(initialFiles);
+  app.on('second-instance', (_event, argv, cwd, data) => {
+    const files = (data as { files?: unknown } | undefined)?.files;
+    receiveOpenFiles(
+      routePaths(
+        Array.isArray(files) && files.every((file) => typeof file === 'string')
+          ? files
+          : argv.slice(app.isPackaged ? 1 : 2),
+        cwd,
+      ),
+    );
+  });
+}
+
+function notifyOpenFiles() {
+  if (
+    openFiles.hasFiles &&
+    !openFilesTimer &&
+    !windowIsClosing &&
+    window &&
+    !window.isDestroyed() &&
+    !window.webContents.isDestroyed() &&
+    trustedURL(window.webContents.getURL())
+  )
+    window.webContents.send('desktop:open-files');
+}
+
+function receiveOpenFiles(paths: string[]) {
+  openFiles.enqueue(paths);
+  if (paths.length) {
+    // Finder emits one event per file; Windows' Document verb may launch several
+    // processes. Coalesce a burst before offering a batch to the single editor.
+    clearTimeout(openFilesTimer);
+    openFilesTimer = setTimeout(() => {
+      openFilesTimer = undefined;
+      notifyOpenFiles();
+    }, 150);
+  }
+  if (windowIsClosing) {
+    reopenAfterClose = true;
+    return;
+  }
+  if (!desktopReady || closing) return;
+  if (!window || window.isDestroyed()) createWindow();
+  if (window!.isMinimized()) window!.restore();
+  window!.show();
+  window!.focus();
+  notifyOpenFiles();
+}
 
 async function updateCommandMenu() {
   const version = ++menuVersion;
@@ -226,6 +291,7 @@ function createWindow() {
   documentStateKnown = false;
   activityBusy = true;
   closing = false;
+  windowIsClosing = false;
   const current = new BrowserWindow({
     title: 'Route Studio',
     width: 1440,
@@ -266,7 +332,10 @@ function createWindow() {
       quitRequested = false;
       return;
     }
-    if (!dirty || closing) return;
+    if (!dirty || closing) {
+      windowIsClosing = true;
+      return;
+    }
     event.preventDefault();
     if (fileDialogOpen) return;
     fileDialogOpen = true;
@@ -292,6 +361,7 @@ function createWindow() {
       .catch(console.error)
       .finally(() => {
         fileDialogOpen = false;
+        notifyOpenFiles();
       });
   });
   current.on('closed', () => {
@@ -299,9 +369,15 @@ function createWindow() {
     nativeSession.off('serial-port-added', serialAdded);
     nativeSession.off('serial-port-removed', serialRemoved);
     window = null;
+    if (!quitRequested) closing = false;
     cancelBluetooth();
     cancelSerial();
     disableCommands();
+    windowIsClosing = false;
+    // An OS request can arrive after close was accepted but before closed fired.
+    // Reopen only for that request, not for a chooser the user deliberately closed.
+    if (reopenAfterClose && !quitRequested) createWindow();
+    reopenAfterClose = false;
   });
   current.webContents.on('will-navigate', (event, url) => {
     if (!trustedURL(url)) {
@@ -319,6 +395,8 @@ function createWindow() {
   current.webContents.on('will-attach-webview', (event) => event.preventDefault());
   current.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) {
+      documentStateKnown = false;
+      activityBusy = true;
       transferBusy = false;
       cancelBluetooth();
       cancelSerial();
@@ -419,28 +497,37 @@ ipcMain.handle('desktop:open', async (event): Promise<DesktopFile | null> => {
       filters: [{ name: t.routeFiles, extensions }],
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    const filename = result.filePaths[0];
     // The native picker supplies this path. Save-name restrictions would reject
     // existing files with valid platform-specific names (for example '?' on macOS).
-    if (!hasSupportedExtension(filename)) throw new Error('Unsupported file');
-    const file = await open(filename, 'r');
-    try {
-      const stat = await file.stat();
-      if (!stat.isFile() || stat.size > maxFileBytes) throw new Error('File exceeds 64 MiB');
-      const bytes = Buffer.alloc(stat.size);
-      let offset = 0;
-      while (offset < bytes.length) {
-        const { bytesRead } = await file.read(bytes, offset, bytes.length - offset, offset);
-        if (!bytesRead) throw new Error('File changed while reading');
-        offset += bytesRead;
-      }
-      return { name: path.basename(filename), bytes: new Uint8Array(bytes) };
-    } finally {
-      await file.close();
-    }
+    return await readDesktopFile(result.filePaths[0]);
   } finally {
     fileDialogOpen = false;
+    notifyOpenFiles();
   }
+});
+
+ipcMain.handle('desktop:open-files', (event) => {
+  if (!trustedSender(event)) throw new Error('Untrusted file request');
+  if (
+    !documentStateKnown ||
+    activityBusy ||
+    transferBusy ||
+    fileDialogOpen ||
+    closing ||
+    windowIsClosing ||
+    openFilesTimer
+  )
+    return null;
+  return openFiles.claim();
+});
+ipcMain.handle('desktop:read-open-file', async (event, id: unknown, index: unknown) => {
+  if (!trustedSender(event)) throw new Error('Untrusted file request');
+  return readDesktopFile(openFiles.filename(id, index));
+});
+ipcMain.on('desktop:finish-open-files', (event, id: unknown) => {
+  if (!trustedSender(event)) return;
+  openFiles.finish(id);
+  notifyOpenFiles();
 });
 
 ipcMain.handle('desktop:save', async (event, file: DesktopFile): Promise<boolean> => {
@@ -473,6 +560,7 @@ ipcMain.handle('desktop:save', async (event, file: DesktopFile): Promise<boolean
     return true;
   } finally {
     fileDialogOpen = false;
+    notifyOpenFiles();
   }
 });
 
@@ -510,6 +598,7 @@ ipcMain.on('desktop:state', (event, state) => {
   documentStateKnown = true;
   language = state.language;
   window!.setDocumentEdited(dirty);
+  if (!activityBusy && !transferBusy) notifyOpenFiles();
 });
 ipcMain.on('desktop:commands', (event, state: DesktopCommandState) => {
   if (
@@ -597,64 +686,66 @@ for (const action of ['state', 'check', 'auto-check', 'download', 'open', 'insta
   });
 }
 
-app
-  .whenReady()
-  .then(async () => {
-    protocol.handle('app', async (request) => {
-      const filename = resourcePath(path.join(app.getAppPath(), 'dist'), request.url);
-      if (!filename || !['GET', 'HEAD'].includes(request.method))
-        return new Response('Not found', { status: 404 });
-      try {
-        const response = await net.fetch(pathToFileURL(filename).href, { method: request.method });
-        const headers = new Headers(response.headers);
-        headers.set(
-          'Content-Security-Policy',
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'",
-        );
-        return new Response(response.body, { status: response.status, headers });
-      } catch {
-        return new Response('Not found', { status: 404 });
-      }
+if (primaryInstance)
+  app
+    .whenReady()
+    .then(async () => {
+      protocol.handle('app', async (request) => {
+        const filename = resourcePath(path.join(app.getAppPath(), 'dist'), request.url);
+        if (!filename || !['GET', 'HEAD'].includes(request.method))
+          return new Response('Not found', { status: 404 });
+        try {
+          const response = await net.fetch(pathToFileURL(filename).href, { method: request.method });
+          const headers = new Headers(response.headers);
+          headers.set(
+            'Content-Security-Policy',
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob:; font-src 'self' data: https:; object-src 'none'; base-uri 'none'; frame-src 'none'",
+          );
+          return new Response(response.body, { status: response.status, headers });
+        } catch {
+          return new Response('Not found', { status: 404 });
+        }
+      });
+      disableCommands();
+      updates = await createUpdates({
+        publish: (state) => {
+          if (
+            window &&
+            !window.isDestroyed() &&
+            !window.webContents.isDestroyed() &&
+            trustedURL(window.webContents.getURL())
+          )
+            window.webContents.send('desktop:update-state', state);
+        },
+        canInstall: (discard) => {
+          if (
+            !documentStateKnown ||
+            activityBusy ||
+            fileDialogOpen ||
+            bluetoothCallback ||
+            pairingCallback ||
+            serialCallback ||
+            !window ||
+            window.isDestroyed() ||
+            window.webContents.isDestroyed()
+          )
+            return 'busy';
+          return dirty && !discard ? 'unsaved' : null;
+        },
+        setInstalling: (installing) => {
+          closing = installing;
+        },
+      });
+      desktopReady = true;
+      createWindow();
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      });
+    })
+    .catch((error) => {
+      console.error(error);
+      app.exit(1);
     });
-    disableCommands();
-    updates = await createUpdates({
-      publish: (state) => {
-        if (
-          window &&
-          !window.isDestroyed() &&
-          !window.webContents.isDestroyed() &&
-          trustedURL(window.webContents.getURL())
-        )
-          window.webContents.send('desktop:update-state', state);
-      },
-      canInstall: (discard) => {
-        if (
-          !documentStateKnown ||
-          activityBusy ||
-          fileDialogOpen ||
-          bluetoothCallback ||
-          pairingCallback ||
-          serialCallback ||
-          !window ||
-          window.isDestroyed() ||
-          window.webContents.isDestroyed()
-        )
-          return 'busy';
-        return dirty && !discard ? 'unsaved' : null;
-      },
-      setInstalling: (installing) => {
-        closing = installing;
-      },
-    });
-    createWindow();
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
-  })
-  .catch((error) => {
-    console.error(error);
-    app.exit(1);
-  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

@@ -29,6 +29,23 @@ mac:
   target:
     - dmg
     - zip
+  fileAssociations:
+    - ext: gpx
+      name: GPX route
+      role: Editor
+      rank: Alternate
+    - ext: kml
+      name: KML route
+      role: Editor
+      rank: Alternate
+    - ext: fit
+      name: FIT route
+      role: Editor
+      rank: Alternate
+    - ext: rte
+      name: TRL-X route
+      role: Editor
+      rank: Alternate
   extendInfo:
     NSBluetoothAlwaysUsageDescription: Route Studio uses Bluetooth to upload route files to your device.
     NSBluetoothPeripheralUsageDescription: Route Studio uses Bluetooth to upload route files to your device.
@@ -37,6 +54,7 @@ win:
   target:
     - nsis
 nsis:
+  include: build/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
@@ -44,6 +62,15 @@ linux:
   icon: build/icons/icon.png
   category: Utility
   maintainer: TRL-X
+  fileAssociations:
+    - ext: gpx
+      mimeType: application/gpx+xml
+    - ext: kml
+      mimeType: application/vnd.google-earth.kml+xml
+    - ext: fit
+      mimeType: application/vnd.ant.fit
+    - ext: rte
+      mimeType: application/x-trlx-route
   target:
     - AppImage
     - deb
