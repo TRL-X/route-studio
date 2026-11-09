@@ -3,7 +3,18 @@ import { constants } from 'node:fs';
 import { access, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import semver from 'semver';
-import { latestReleaseAPI, manualRelease } from './update-release.js';
+import {
+  acceptsVersion,
+  automaticReleaseFeed,
+  latestReleaseAPI,
+  manualRelease,
+  parseBuildInfo,
+  releaseBuildInfo,
+  releaseRepository,
+  releasesAPI,
+  selectManualRelease,
+  stableReleaseURL,
+} from './update-release.js';
 import { UpdateService, type UpdateBackend } from './update-service.js';
 import type { UpdateMode, UpdatePreferences, UpdateState } from './update-contracts.js';
 
@@ -13,14 +24,23 @@ export async function createUpdates(options: {
   setInstalling: (installing: boolean) => void;
 }) {
   const preferencesPath = path.join(app.getPath('userData'), 'updates.json');
-  let preferences: UpdatePreferences = { autoCheck: true };
+  const preferences: UpdatePreferences = { autoCheck: true, channel: 'stable' };
   try {
     const value = JSON.parse(await readFile(preferencesPath, 'utf8'));
     if (typeof value.autoCheck === 'boolean') preferences.autoCheck = value.autoCheck;
+    if (value.channel === 'stable' || value.channel === 'beta') preferences.channel = value.channel;
     if (typeof value.lastChecked === 'number' && Number.isFinite(value.lastChecked) && value.lastChecked > 0)
       preferences.lastChecked = value.lastChecked;
   } catch {
     // Missing or damaged preferences must not prevent the editor from opening.
+  }
+  let currentBuild;
+  try {
+    currentBuild = parseBuildInfo(
+      JSON.parse(await readFile(path.join(app.getAppPath(), 'package.json'), 'utf8')).buildInfo,
+    );
+  } catch {
+    // Local and older builds may not contain provenance metadata.
   }
   let mode: UpdateMode =
     !app.isPackaged || app.commandLine.hasSwitch('disable-updates')
@@ -32,20 +52,40 @@ export async function createUpdates(options: {
           : 'disabled';
   let backend: UpdateBackend = { check: async () => null };
   let service: UpdateService;
+  const fetchRelease = async (url: string) => {
+    const response = await net.fetch(url, {
+      headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      signal: AbortSignal.timeout(15000),
+      redirect: 'error',
+    });
+    if (response.status === 404 && url === latestReleaseAPI) return null;
+    if (!response.ok) throw new Error('Release feed unavailable');
+    const body = await response.text();
+    if (body.length > (url === releasesAPI ? 5 : 1) * 1024 * 1024) throw new Error('Release feed too large');
+    return JSON.parse(body) as unknown;
+  };
+  const previewReleases = async () => {
+    // Query stable separately: frequent previews can push it out of the releases list.
+    const [releases, stable] = await Promise.all([fetchRelease(releasesAPI), fetchRelease(latestReleaseAPI)]);
+    if (!Array.isArray(releases)) throw new Error('Invalid release feed');
+    return [...releases, stable];
+  };
   if (mode === 'manual') {
     backend = {
-      check: async () => {
-        const response = await net.fetch(latestReleaseAPI, {
-          headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-          signal: AbortSignal.timeout(15000),
-          redirect: 'error',
-        });
-        if (!response.ok) throw new Error('Release feed unavailable');
-        const body = await response.text();
-        if (body.length > 1024 * 1024) throw new Error('Release feed too large');
+      check: async (channel) => {
         const arch =
           process.platform === 'darwin' && app.runningUnderARM64Translation ? 'arm64' : process.arch;
-        return manualRelease(JSON.parse(body), app.getVersion(), process.platform, arch);
+        if (channel === 'stable') {
+          const release = await fetchRelease(latestReleaseAPI);
+          return release ? manualRelease(release, app.getVersion(), process.platform, arch) : null;
+        }
+        return selectManualRelease(
+          await previewReleases(),
+          app.getVersion(),
+          process.platform,
+          arch,
+          channel,
+        );
       },
       open: async (release) => {
         if (!release.downloadURL) throw new Error('Installer unavailable');
@@ -71,18 +111,40 @@ export async function createUpdates(options: {
         }
       });
       backend = {
-        check: async () => {
+        check: async (channel) => {
+          let expectedVersion: string | undefined;
+          if (channel === 'beta') {
+            // GitHubProvider picks by publication order. Pin the greatest eligible version so a
+            // later-published stable release cannot hide an existing, newer mainline preview.
+            const feed = automaticReleaseFeed(await previewReleases(), app.getVersion(), process.platform);
+            if (!feed) return null;
+            expectedVersion = feed.version;
+            updater.setFeedURL({
+              provider: 'generic',
+              url: feed.url,
+              channel: feed.channel,
+              useMultipleRangeRequest: false,
+            });
+            updater.channel = feed.channel;
+          } else {
+            const [owner, repo] = releaseRepository.split('/');
+            updater.setFeedURL({ provider: 'github', owner, repo });
+            updater.channel = 'latest';
+          }
+          updater.allowPrerelease = channel === 'beta';
+          // The channel setter enables downgrades. Switching back only accepts a newer stable build.
+          updater.allowDowngrade = false;
           const result = await updater.checkForUpdates();
           if (!result) throw new Error('Update check unavailable');
           const info = result.updateInfo;
-          if (!semver.valid(info.version) || semver.prerelease(info.version))
-            throw new Error('Invalid stable version');
+          if (!acceptsVersion(info.version, channel) || (expectedVersion && info.version !== expectedVersion))
+            throw new Error('Invalid channel version');
           if (!result.isUpdateAvailable || !semver.gt(info.version, app.getVersion())) return null;
           const notes =
             typeof info.releaseNotes === 'string'
               ? info.releaseNotes
               : (info.releaseNotes?.map((item) => item.note).join('\n') ?? '');
-          return { version: info.version, notes: notes.slice(0, 20000) };
+          return { version: info.version, notes: notes.slice(0, 20000), build: releaseBuildInfo(notes) };
         },
         download: async (progress) => {
           const listener = (info: { percent: number }) => progress(info.percent);
@@ -115,10 +177,12 @@ export async function createUpdates(options: {
       mode = 'disabled';
     }
   }
+  backend.openStable = () => shell.openExternal(stableReleaseURL);
   service = new UpdateService({
     ...options,
     mode,
     currentVersion: app.getVersion(),
+    currentBuild,
     preferences,
     backend,
     persist: async (value) => {

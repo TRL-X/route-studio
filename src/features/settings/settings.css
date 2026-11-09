@@ -1,0 +1,35 @@
+.settings-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+}
+
+.settings-dialog > .rt-Heading {
+  flex: none;
+}
+
+.settings-dialog > form,
+.settings-dialog .settings-tabs {
+  min-height: 0;
+}
+
+.settings-dialog .settings-tabs {
+  overflow: auto;
+}
+
+.settings-dialog form > p,
+.settings-dialog form > .rt-Flex {
+  flex: none;
+}
+
+@media (max-height: 400px) {
+  .settings-dialog {
+    display: block;
+    overflow: auto;
+  }
+
+  .settings-dialog .settings-tabs {
+    overflow: visible;
+  }
+}

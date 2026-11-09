@@ -3,7 +3,7 @@
   "currentVersion": "Current version:",
   "idle": "Check for a new version of Route Studio.",
   "checking": "Checking for updates…",
-  "current": "You are up to date.",
+  "current": "No newer version is available on this channel.",
   "available": "A new version is available",
   "downloading": "Downloading update…",
   "downloaded": "Update ready to install",
@@ -35,6 +35,16 @@
     "open": "Could not open the download in your browser. Try again.",
     "preferences": "Could not save your update preference. Try changing it again.",
     "busy": "Finish saving, importing, exporting or transferring files before restarting.",
-    "unsaved": "Your project has unsaved changes. Save it or explicitly choose to update without saving."
-  }
+    "unsaved": "Your project has unsaved changes. Save it or explicitly choose to update without saving.",
+    "channelBusy": "Wait for the current update operation to finish before switching channels."
+  },
+  "channel": "Update channel",
+  "stableChannel": "Stable",
+  "betaChannel": "Mainline preview",
+  "betaDescription": "Receive builds from main after all checks pass. Preview builds may contain bugs. Save a copy of important projects before trying them.",
+  "returnToStable": "Switch to Stable to receive the next newer stable release. To return immediately, save your projects and install a stable version manually; older versions may not read newer project formats.",
+  "openStable": "Download stable version",
+  "buildTime": "Built:",
+  "commit": "Commit:",
+  "returnToStableTitle": "Return to stable"
 }

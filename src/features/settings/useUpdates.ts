@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { UpdateState } from '../../../electron/update-contracts';
+import type { UpdateChannel, UpdateState } from '../../../electron/update-contracts';
 
 export function useUpdates() {
   const desktop = window.routeStudioDesktop;
@@ -48,6 +48,8 @@ export function useUpdates() {
     check: () => run(() => desktop!.checkForUpdates()),
     download: () => run(() => desktop!.downloadUpdate()),
     open: () => run(() => desktop!.openUpdateDownload()),
+    openStable: () => run(() => desktop!.openStableRelease()),
+    setChannel: (channel: UpdateChannel) => run(() => desktop!.setUpdateChannel(channel)),
     install: (discard: boolean) => run(() => desktop!.installUpdate(discard)),
     setAutoCheck: (enabled: boolean) => {
       setState((value) => value && { ...value, autoCheck: enabled });

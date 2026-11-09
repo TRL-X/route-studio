@@ -666,7 +666,16 @@ ipcMain.on('desktop:serial-cancel', (event) => {
   if (trustedSender(event)) cancelSerial();
 });
 
-for (const action of ['state', 'check', 'auto-check', 'download', 'open', 'install'] as const) {
+for (const action of [
+  'state',
+  'check',
+  'auto-check',
+  'channel',
+  'stable',
+  'download',
+  'open',
+  'install',
+] as const) {
   ipcMain.handle(`desktop:update-${action}`, (event, value: unknown) => {
     if (!trustedSender(event) || !updates) throw new Error('Updates unavailable');
     switch (action) {
@@ -678,6 +687,11 @@ for (const action of ['state', 'check', 'auto-check', 'download', 'open', 'insta
         return updates.download();
       case 'open':
         return updates.open();
+      case 'stable':
+        return updates.openStable();
+      case 'channel':
+        if (value !== 'stable' && value !== 'beta') throw new Error('Invalid update channel');
+        return updates.setChannel(value);
       case 'auto-check':
       case 'install':
         if (typeof value !== 'boolean') throw new Error('Invalid update request');

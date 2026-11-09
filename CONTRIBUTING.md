@@ -17,6 +17,8 @@ CI runs once per PR revision and again for each merge group. A newer PR revision
 - Electron, updater/native integration (including `src/platform/` and shared editor commands), dependency, build, shared test helper, CI and other unclassified changes require all four native package/test jobs: macOS ARM64 and x64, Windows x64 and Linux x64. `scripts/ci-policy.mjs` defines the selection. Renames and deletions are included; merge groups inspect all combined changes.
 - Pushes to `main`, `v*` tags and manual **Check editor** runs always build and test all four packages. Newer `main` runs cancel older ones; release and merge-group runs are not cancelled by that policy.
 
+Successful pushes to `main` publish an opt-in preview after the complete verification gate. See [mainline previews](docs/releasing.md#mainline-previews) for versioning and publishing behavior. PR, merge-group and manual validation runs do not publish previews.
+
 Root-level documentation such as `CONTRIBUTING.md` currently follows the unclassified-path rule and requires all four native package/test jobs.
 
 ## Merge queue

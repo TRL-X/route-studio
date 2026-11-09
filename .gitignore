@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+build/preview-release-notes.md
 test-results/
 desktop-test-results/
 playwright-report/

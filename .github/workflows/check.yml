@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       full_desktop: ${{ steps.changes.outputs.full_desktop }}
+      build_time: ${{ steps.build-time.outputs.value }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +34,8 @@ jobs:
           node-version-file: .nvmrc
       - id: changes
         run: node scripts/ci-policy.mjs changes
+      - id: build-time
+        run: node --input-type=module -e 'import fs from "node:fs"; fs.appendFileSync(process.env.GITHUB_OUTPUT, `value=${new Date().toISOString()}\n`);'
 
   web:
     runs-on: ubuntu-latest
@@ -89,6 +92,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.full_desktop == 'true'
     uses: ./.github/workflows/desktop.yml
+    with:
+      preview: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      build_time: ${{ needs.changes.outputs.build_time }}
     secrets: inherit
 
   # Keep this check name stable in main's ruleset. An expected job that fails,
@@ -143,3 +149,53 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --draft --generate-notes
           fi
           gh release upload "$GITHUB_REF_NAME" installers/* --clobber
+
+  preview-release:
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.verify.result == 'success' }}
+    needs: [changes, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - id: preview
+        run: node scripts/prepare-preview.mjs
+        env:
+          PREVIEW_BUILD_TIME: ${{ needs.changes.outputs.build_time }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: installers
+      - name: Verify complete preview release
+        run: node scripts/verify-release.mjs installers
+      - name: Publish verified mainline preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PREVIEW_VERSION: ${{ steps.preview.outputs.version }}
+        shell: bash
+        run: |
+          # An old run retried after main has advanced must not become the newest release.
+          if [[ "$(gh api "repos/$GH_REPO/commits/main" --jq .sha)" != "$GITHUB_SHA" ]]; then
+            echo "Main has advanced; skipping superseded preview."
+            exit 0
+          fi
+          tag="v$PREVIEW_VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            test "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true
+            test "$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)" = "$GITHUB_SHA"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --draft --prerelease --latest=false \
+              --title "Mainline preview $PREVIEW_VERSION" --notes-file build/preview-release-notes.md --generate-notes
+          fi
+          gh release upload "$tag" installers/* --clobber
+          gh release edit "$tag" --draft=false --prerelease --latest=false
