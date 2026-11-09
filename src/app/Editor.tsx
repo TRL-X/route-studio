@@ -355,6 +355,18 @@ export function Editor({ restored, recoveryError }: { restored: Draft | null; re
           lang={lang}
           locked={locked}
           commands={commands}
+          update={
+            updates.state?.release &&
+            updates.state.mode !== 'disabled' &&
+            ['available', 'downloading', 'downloaded', 'error'].includes(updates.state.status)
+              ? {
+                  label: updateStrings[lang][
+                    updates.state.status === 'downloaded' ? 'readyNotice' : 'notice'
+                  ].replace('{version}', updates.state.release.version),
+                  onOpen: () => setSettingsTab('updates'),
+                }
+              : undefined
+          }
         />
         <input
           ref={picker}
